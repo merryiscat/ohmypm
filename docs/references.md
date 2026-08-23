@@ -28,6 +28,7 @@ derived_from: 레퍼런스 스윕 워크플로 2026-08-21 (원시 결과: [raw/r
 | [nogataka/ai-secretary](https://github.com/nogataka/ai-secretary) | code | JP | **🏛️ 기초 청사진(구조만, 코드 아님 — ★5·1커밋·AI 생성 템플릿)**. 가져올 골격: ①CLAUDE.md **태스크 라우팅 표**(트리거 문구→절차서) ②**protocol=경량 절차서**(실행순서+출력포맷+저장위치) ③아침 브리핑 포맷(오늘의 포인트/스케줄/요대응/태스크/판단 대기). 스코프 밖(버림): PARA 문서정리·email 트리아지·meeting 議事録(개인 오피스 비서, ohmyPM은 코드 메타-PM). **memory 세션-종료 학습 스윕**은 우리 '매듭 자발 기록'의 안전망 후보(→pending) — 매 턴 Stop훅 폐기와 다름(세션 종료 1회라 작업 저하 없음) | ★5, 2026-03 (검수 2026-08-22 코드 실사 keep) |
 | [Claude Code 정기 실행 수단 비교 (Zenn)](https://zenn.dev/linkedge/articles/claude-code-scheduled-execution) | post | JP | /loop(세션 내, 슬립에 끊김) vs scheduled tasks(로컬 정시 — PC 켜짐+슬립 방지 필요, 저자가 실제 실행 누락 경험) vs Routines(클라우드 — **로컬 파일 접근 불가**, repo·Issue·PR 기반 작업만). 설정 위치·생성 방법까지 표로 정리 — plan.md '실행 스케줄' 질문의 판단 자료 | 기업 블로그, 2026-05 (검증 2026-08-22) |
 | [Agent Skill로 주보 자동 생성 (博客园)](https://www.cnblogs.com/forzhaokang/p/19847939) | post | CN | `/weekly-report` 스킬 구현기 — **수집은 결정론적 스크립트(collect-commits.js, BASE_DIR 3단계 깊이 스캔), LLM은 요약만** 구조로 토큰 효율·안정성 확보. 부품 분리(SKILL.md 지시문/날짜 계산/수집/개인 설정 config.json)를 브리핑 수집기 설계에 그대로 차용 가능 | 2026-04 (검증 2026-08-22) |
+| [AI-Codereview-Gitlab](https://github.com/sunmh207/AI-Codereview-Gitlab) | code | CN | (drop 취소→브리핑 keep, 기능 참고) 본업은 webhook(GitLab/GitHub/Gitea, Push·MR)→LLM 코드리뷰→Note 회신+IM 푸시 봇 — **형태(webhook·MR)는 ohmyPM(로컬+텔레그램·정시)과 안 맞음**. 살릴 건 코드리뷰 '기능': ①**Review Style 4종**(전문/풍자/신사/유머) = 브리핑·리포트 톤 조절 ②**Agentic Review Mode**(로컬 클론→샌드박스 shell 자율 탐색→실패 시 diff_only 강등; shell allow/block·경로越界·30s 타임아웃) = 자율 에이전트에 코드베이스 탐색권을 안전하게 주는 실装(자율 경계 참조, 1순위 claude-code-telegram) ③일보(日报) 자동 생성은 부차. **'ohmyPM이 코드리뷰까지 하는가' 스코프 질문의 판단자료** → 2부 유즈케이스에서 결정 | ★1,818, push 2026-07 (검수 2026-08-23 리포 실사 keep·기능 참고로 재분류) |
 
 ## 문서·위키 건강 관리 (5)
 
@@ -55,7 +56,7 @@ derived_from: 레퍼런스 스윕 워크플로 2026-08-21 (원시 결과: [raw/r
 ## 드랍 (사유 기록 — 재검토 방지)
 
 <details markdown="1">
-<summary>검수에서 드랍한 15건 (2026-08-21~23)</summary>
+<summary>검수에서 드랍한 14건 (2026-08-21~23)</summary>
 
 | 이름 | 축 | 드랍 사유 |
 |------|-----|----------|
@@ -65,7 +66,6 @@ derived_from: 레퍼런스 스윕 워크플로 2026-08-21 (원시 결과: [raw/r
 | [/schedule·Routines·/loop 3방식 비교 (claudecode.xyz)](https://www.claudecode.xyz/articles/claude-code-scheduleroutines-loop-mox268ua) | 자율 실행 | Zenn 정기 실행 비교글(승격됨)과 완전 중복, 깊이는 더 얕음 — 실경험 없는 SEO성 공식 문서 요약, 예시 템플릿도 가상 사례 (2026-08-22 판정) |
 | [agentlint (akz4ol)](https://github.com/akz4ol/agentlint) | 하네스 | 코드 실사 결과: 룰 구현은 실재하나 **커밋 8개 전부 2026-01-11~14 사흘간 AI 생성**("viral launch kit" 커밋 포함) 후 7개월 방치, ★3 무채택 — 보안 도구로서 공급망 신뢰 없음. 8카테고리 위협 분류(실행·FS·네트워크·시크릿·훅·지시 인젝션·권한 확장·관찰성)만 외부 스킬 설치 전 점검 관점으로 참고 (2026-08-22 코드 실사 판정) |
 | [agents-md (ivawzh)](https://github.com/ivawzh/agents-md) | 하네스 | 정직한 소규모 도구지만(Ivan Wang 단독, 점진 개발) AGENTS.md 프래그먼트 합성이라 우리 llmwiki+docs 체계와 자리 겹침 + 2025-10 이후 10개월 정체. 설계 아이디어만 보존: ①`report --json`의 **토큰·크기 경고를 CI/훅에 물려 CLAUDE.md 비대 자동 판정** ②`annotateSources`(합성물에 `<!-- source -->` 주석)로 조각→합성물 추적성 (2026-08-22 코드 실사 판정) |
-| [AI-Codereview-Gitlab](https://github.com/sunmh207/AI-Codereview-Gitlab) | 브리핑→실은 리뷰봇 | 코드 실사(README) 정정: 본업은 **GitLab/GitHub/Gitea webhook(MR·Push)→LLM 코드리뷰→Note 회신+IM 푸시** 봇(日报는 부차). ohmyPM은 로컬+텔레그램·MR 워크플로 아님이라 형태 불일치 → drop. **보존할 알맹이**: Agentic Review Mode 샌드박스 가드레일(shell allowlist/blocklist·경로 越界 검사·30s 타임아웃·기본 읽기전용·실패 시 diff_only 자동 강등) = 자율 실행 경계 참조(1순위는 claude-code-telegram) (2026-08-23 코드 실사 판정) |
 | [gitstandup (MCP)](https://github.com/muba00/gitstandup) | 브리핑 | 코드 실사(git.ts ~180줄): git log 얇은 래퍼 — 실로직은 diff 앞뒤반 절단 + 하드코딩 생성파일 필터 4종뿐, Claude가 자명하게 재현 가능(bash git-standup 드랍 사유와 동일). **필터가 JS 전용(lock·min)이라 Python 환경엔 `__pycache__`·`.pyc`·`dist` 안 걸러 부적합**, `--all`은 브랜치 노이즈. '결정론적 수집→LLM 요약' 원칙은 博客园(keep)이 이미 커버, repo 레지스트리는 ohmyPM 관리 대상 목록과 충돌. ★5·6개월 정지 (2026-08-22 코드 실사 판정) |
 | [depromeet/daily-scrum-slack-bot](https://github.com/depromeet/daily-scrum-slack-bot) | 브리핑 | 2022년 2KB 스크립트, 크론+메시지 예시 이상의 참고 가치 없음 |
 | [yurencloud/daily](https://github.com/yurencloud/daily) | 브리핑 | 2019년 방치 ★5 — 일보/주보 컨셉은 다른 자료로 충분 |
