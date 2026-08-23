@@ -4,9 +4,9 @@ derived_from: 레퍼런스 스윕 워크플로 2026-08-21 (원시 결과: [raw/r
 
 스윕 매트릭스: 기능 4축(하네스 점검 / 진행 추적·브리핑 / 문서 건강 / 자율 실행) × 지역 4(한·미·중·일).
 알림·보고(텔레그램) 축은 Project Odin 기지 영역이라 제외.
-통계: 원시 128건 → 중복 제거 124건. 스윕 검증 30건(상한 잘림)을 3라운드 검수(08-21 드랍 7 / 08-22 재검토 미팅 — 미검증서 승격·추가 드랍 / 08-23 미확정 배치분 3건 리포 실사 재분류). **현재 실측: 표 등재 27 / 드랍 14 / 미검증 83** — 합 124로 정합(체크섬: 표+드랍+미검증=중복제거 총량).
+통계: 원시 128건 → 중복 제거 124건. 스윕 검증 30건(상한 잘림)을 3라운드 검수(08-21 드랍 7 / 08-22 재검토 미팅 — 미검증서 승격·추가 드랍 / 08-23 미확정 배치분 3건 리포 실사 재분류). **현재 실측: 표 등재 23 / 드랍 18 / 미검증 83** — 합 124로 정합(체크섬: 표+드랍+미검증=중복제거 총량).
 
-## 환경·하네스 점검 (9)
+## 환경·하네스 점검 (10)
 
 | 이름 | kind | 지역 | 요약 | 활성·신호 |
 |------|------|------|------|----------|
@@ -19,6 +19,7 @@ derived_from: 레퍼런스 스윕 워크플로 2026-08-21 (원시 결과: [raw/r
 | [CLAUDE.md 3층 구조로 83% 경량화 (Zenn, GMO Pepabo)](https://zenn.dev/pepabo/articles/claude-code-rules-skills-split) | post | JP | 2,000줄 CLAUDE.md → 3층(진입점 150줄 / rules 15개 / skills 지연 로드) 분할 실측: 114,847→19,232 토큰. **절감의 실체는 skills 지연 로드**(rules 분할은 총량 동일). 판정 3문항(전제?→CLAUDE.md / 일상 규칙?→rules / 명시 호출?→skills) — 비대 CLAUDE.md 리팩토링 목표 구조 | 기업 블로그, 2026-04, 2개월 실측 (검증 2026-08-22) |
 | [7가지 지시면과 컨텍스트 부채 (Zenn)](https://zenn.dev/suwash/articles/claude-code-steering-surfaces_20260622) | post | JP | 지시면 7종(CLAUDE.md/Rules/Skills/Subagents/Hooks/Output styles/system prompt)의 로드 시점 정리 + **컨텍스트 부채**(추가만 하고 삭제 안 함→무관 작업에 로드→준수율 저하) 정의 + 배치 판정 체크리스트 — '지시가 잘못된 자리에 있다' lint 룰로 변환 가능. pepabo 실측과 상호 보완 | 2026-06 (검증 2026-08-22) |
 | [Harness engineering (martinfowler.com)](https://martinfowler.com/articles/harness-engineering.html) | post | US | "Agent = Model + Harness"(하네스 = 모델 빼고 전부). 사전 가이드/사후 센서 × 계산형/추론형 분류 틀, 드리프트 감지 계층화, "빠른 계산형은 매번·느린 LLM 판사는 선별", **인간 개입은 제거가 아니라 중요 지점으로 유도** — 하네스 점검 축의 이론 베이스라인이자 개별 도구 배치 지도 | Thoughtworks Böckeler, 2026-04 (검증 2026-08-22) |
+| [claude-code-showcase](https://github.com/ChrisWiles/claude-code-showcase) | code | US | (자율→하네스 재분류) Claude Code **하네스 구성 템플릿 총망라** — .claude/ 전체 예제(CLAUDE.md·settings.json·MCP·LSP·skills·agents·commands·hooks). **핵심: hooks 게이트 실물 코드** — PreToolUse `block:true`+exit 2로 main 편집 차단 등 = **우리 '판정·반영 게이트'를 지침→훅 장치로 승격할 참조 구현**([[mistakes]] '다음 단계: commit=ask 장치화'). +skill-eval(프롬프트→스킬 자동 제안·신뢰도 점수), 정기 유지보수 워크플로(월 docs sync·주 품질·격주 의존성). 단 2026-01 일회성 스냅샷(정체), GitHub Actions 부분은 형태 참고만 | ★6,027 (검수 2026-08-23 리포 실사 keep·하네스 재분류) |
 
 ## 진행 추적·데일리 브리핑 (5)
 
@@ -30,33 +31,28 @@ derived_from: 레퍼런스 스윕 워크플로 2026-08-21 (원시 결과: [raw/r
 | [Agent Skill로 주보 자동 생성 (博客园)](https://www.cnblogs.com/forzhaokang/p/19847939) | post | CN | `/weekly-report` 스킬 구현기 — **수집은 결정론적 스크립트(collect-commits.js, BASE_DIR 3단계 깊이 스캔), LLM은 요약만** 구조로 토큰 효율·안정성 확보. 부품 분리(SKILL.md 지시문/날짜 계산/수집/개인 설정 config.json)를 브리핑 수집기 설계에 그대로 차용 가능 | 2026-04 (검증 2026-08-22) |
 | [AI-Codereview-Gitlab](https://github.com/sunmh207/AI-Codereview-Gitlab) | code | CN | (drop 취소→브리핑 keep, 기능 참고) 본업은 webhook(GitLab/GitHub/Gitea, Push·MR)→LLM 코드리뷰→Note 회신+IM 푸시 봇 — **형태(webhook·MR)는 ohmyPM(로컬+텔레그램·정시)과 안 맞음**. 살릴 건 코드리뷰 '기능': ①**Review Style 4종**(전문/풍자/신사/유머) = 브리핑·리포트 톤 조절 ②**Agentic Review Mode**(로컬 클론→샌드박스 shell 자율 탐색→실패 시 diff_only 강등; shell allow/block·경로越界·30s 타임아웃) = 자율 에이전트에 코드베이스 탐색권을 안전하게 주는 실装(자율 경계 참조, 1순위 claude-code-telegram) ③일보(日报) 자동 생성은 부차. **'ohmyPM이 코드리뷰까지 하는가' 스코프 질문의 판단자료** → 2부 유즈케이스에서 결정 | ★1,818, push 2026-07 (검수 2026-08-23 리포 실사 keep·기능 참고로 재분류) |
 
-## 문서·위키 건강 관리 (5)
+## 문서·위키 건강 관리 (4)
 
 | 이름 | kind | 지역 | 요약 | 활성·신호 |
 |------|------|------|------|----------|
 | [lychee](https://github.com/lycheeverse/lychee) | tool | US | Rust async 링크 체커(깨진 링크·메일 검출) — ohmyPM ③문서 건강의 **링크 점검 엔진으로 그대로 채택**. 쓸 부품: CLI+library+**GitHub Action**+**pre-commit 훅**+Docker, **JSON/junit 출력**(브리핑·프로그램 연동)·`--offline`(로컬만)·`.lycheeignore`·`lychee.toml` config·프래그먼트(#anchor) 체크·캐시·재시도. **Windows 네이티브**(scoop/winget/choco, PowerShell 예시)라 사용자 환경 직결. 사실상 표준(megalinter 번들 + OpenSearch·mermaid·nuxt·gradle·git-scm 채용) | ★3,846(실채용 다수), push 2026-08 (검수 2026-08-23 리포 실사 keep) |
-| [Vale](https://vale.sh/) | tool | US | 커스터마이즈 가능한 prose 린터 — 용어 일관성·문체 규칙. Datadog·GitLab 등 90팀 채택 | ★5.6K, 활발 |
-| [doc-drift](https://github.com/jbrockSTL/doc-drift) | code | US | PR diff + docs를 **LLM으로 대조해 stale 문서 검출** — 접근 방식 참고 (실체는 스크립트 1개) | ★0, 2026-01 스냅샷 |
-| [phpstan-todo-by](https://github.com/staabm/phpstan-todo-by) | code | US | **만료되는 TODO** — 날짜·조건 지나면 정적분석 에러. 보류 안건 재부상 규칙의 구현 레퍼런스 | ★205, push 2026-08 |
-| [TODO to Issue Action](https://github.com/marketplace/actions/todo-to-issue) | tool | US | TODO/FIXME 주석 → 이슈 자동 생성·종료. TODO를 브리핑 안건으로 승격시키는 패턴 | ★800, 릴리스 2026-07 |
+| [doc-drift](https://github.com/jbrockSTL/doc-drift) | code | US | **채용 기능(08-23): 코드 변경 → 문서 낡음(stale) 자동 감지**. 흐름: diff에서 변경(토큰·의존성·파일 rename) 추출 → 설정한 문서 소스와 LLM 대조 → 충돌(낡음) 리포트+고칠 문장 제안+확신도(예: 92%). 단 도구 자체는 얇음(파일2·스크립트1·★0·GitHub PR/Actions 전용·OpenAI 고정) → 형태 말고 **아이디어만 이식**(ohmyPM은 로컬·정시). 설정 감각: DOC_SOURCES_JSON로 스캔 문서 지정·confidence threshold로 게이트 | ★0, 2026-01 스냅샷 (검수 2026-08-23 리포 실사 keep=기능 채용) |
+| [phpstan-todo-by](https://github.com/staabm/phpstan-todo-by) | code | US | **채용 기능(08-23): 기한·조건 붙은 메모가 때 되면 자동 재부상**. TODO/FIXME 주석에 만료 조건(날짜 / GitHub 이슈 닫힘 / 버전 릴리스 / Jira·GitHub·YouTrack 티켓 resolved)을 붙이면 충족 시 에러로 튀어나옴. `referenceTime`로 'N일 내 만료' 미리보기. **우리 pending 재검토-시점 규칙의 빠진 장치(때 되면 자동 알림)에 직결** — 형태(PHP/PHPStan 전용)는 이식 X, 기능·패턴만 채용(Python·로컬 재구현) | ★205, push 2026-08 (검수 2026-08-23 리포 실사 keep=기능 채용) |
+| [TODO to Issue Action](https://github.com/marketplace/actions/todo-to-issue) | tool | US | **채용 기능(08-23): 코드 TODO → 가시적 작업 항목 승격(묻힘 방지)**. 커밋 diff의 TODO/FIXME 감지 → 이슈 자동 생성/업데이트/종료(TODO 지우면 이슈 닫힘), 라벨·담당자·마일스톤·이슈 URL 역삽입. 거의 모든 언어. phpstan-todo-by와 **상보적**(저건 기한→재부상=시간축, 이건 이슈화=드러냄축). 형태(GitHub Action·Issue 전용)는 이식 X — ohmyPM의 '이슈'를 뭐로 둘지(텔레그램 브리핑/pending/GitHub Issue)는 설계 사항 | ★800, v5 활발 (검수 2026-08-23 리포 실사 keep=기능 채용) |
 
-## 자율 업무 실행 (8)
+## 자율 업무 실행 (4)
 
 | 이름 | kind | 지역 | 요약 | 활성·신호 |
 |------|------|------|------|----------|
 | [Claude Code Routines (공식 발표)](https://claude.com/blog/introducing-routines-in-claude-code) | post | US | 클라우드 자동 실행 공식 명세 — 트리거 3종(**cron / API 호출 / GitHub 이벤트**), 플랜별 일일 실행 상한(Pro 5·Max 15·Team 25, 초과 유료 → 전 프로젝트 묶음 실행 설계 필요), 로컬 파일 접근 불가(GitHub 저장소·커넥터만) — 실행 스케줄 질문의 1차 소스 | Anthropic 공식, 2026-04-14 research preview (검증 2026-08-22) |
-| [GitHub Agentic Workflows (gh-aw)](https://github.com/github/gh-aw) | tool | US | Markdown+frontmatter → 하드닝된 Actions 워크플로 컴파일, cron 실행. **스케줄+권한 제한+safe outputs 패턴의 핵심 레퍼런스** | ★4,966, GitHub 공식, push 2026-08 |
-| [anthropics/claude-code-action](https://github.com/anthropics/claude-code-action) | code | US | 공식 액션 — cron 스케줄로 야간 유지보수 프롬프트 실행(Scheduled Maintenance 패턴 문서화) | ★8,675, 공식, 매우 활발 |
-| [claude-code-showcase](https://github.com/ChrisWiles/claude-code-showcase) | code | US | 훅·스킬·에이전트·스케줄 워크플로(월간 문서 동기화, 주간 품질 수정, 격주 의존성 감사) 총망라 예제 | ★6,027, 단 2026-01 일회성 스냅샷 |
-| [learn-claude-code](https://github.com/shareAI-lab/learn-claude-code/blob/main/README-zh.md) | code | CN | Claude Code류 에이전트 바닥부터 구현 교육 리포 — **self-scheduling(cron 자가 예약)** 장 포함, 자매 리포 claw0(heartbeat+cron) | ★74.8K, push 2026-08 |
-| [itops-agent-platform](https://github.com/qinshihu/itops-agent-platform) | code | CN | IT 운영 멀티 에이전트 — 감지→진단→**인간 승인 게이트**→실행→검증 폐루프. 자율 실행 안전장치 모델 (리팩토링 과도기) | ★885, 활발 |
+| [learn-claude-code](https://github.com/shareAI-lab/learn-claude-code) | code | CN | **하네스 엔지니어링 교본(17강 runnable Python, ★74.8K)** — Agent=Model+Harness. ohmyPM에 **형태까지 맞음**(Python·로컬·Claude Code 기반). 직결 강: **s03 Permission(경계 먼저=사용자 사전분리 최종안 교본)·s04 Hooks·s17 Goal Loop(중단 시 독립 평가자 검토, 불가능하면 사용자 반환=confused-deputy 해법)**·s12 Cron self-scheduling. **자매 리포 claw0(heartbeat 30s+cron 자가예약+텔레그램 IM+기억)가 ohmyPM 상시 에이전트 아키텍처에 직결**. 교본이라 그대로 쓸 제품 아닌 설계 교재 | ★74.8K, push 2026-08 (검수 2026-08-23 리포 실사 keep) |
 | [야간 무인 에이전트 운영기 (petieclark)](https://blog.petieclark.com/i-do-run-ai-agents-overnight-heres-what-actually-matters/) | post | US | 자율성 3단계(자동화=완전 자율+실패 알림 / 생성=초안 큐 검토 / 코드=초안만, 병합은 인간 — 성공 기준의 측정 가능성으로 구분) + 6원칙(실패를 시끄럽게 정의, 피드백 루프 짧게, **수동 2주 전에 자동화 금지**, 특화>범용, 로컬/프론티어 라우팅, 설정도 버전 관리). "AI가 만들고 AI가 검증하면 자화자찬 기계" — **자율 실행 경계·성공 기준 질문의 판단 틀** | 실운영자, 2026-03, 월 $200 이하 (검증 2026-08-22) |
 | [SmartTodo](https://github.com/LiZeC123/SmartTodo) | code | CN | (브리핑 드랍→자율 실행 재분류) 겉은 할일 관리 웹앱(Vue+Python·★22)이나 **내장 AI 비서**에서 자율 실행 축 참고 3요소: ①**ENV-gated 정시 태스크** — 비용 나는 LLM 크론을 `ENV=PROD`일 때만 실행(개발·테스트 환경선 차단), ohmyPM 크론에 그대로 차용 가능한 안전장치 ②**비용 모니터링**(`/cost`: 역할별 토큰·최근 14일 일별 비용 명세) = 자율 실행 비용 가시화 UX ③**기억 압축**(대화 히스토리가 임계값 넘으면 LLM이 구조화 기억으로 압축, 원본 보존 윈도우 동적 조정) = 우리 llmwiki '다이어트'의 다른 구현. 버림: 우선순위 점수화 알고리즘(ohmyPM은 LLM 판단+petieclark 경계로 감). 비용 가드레일 1순위는 여전히 claude-code-telegram | ★22, push 2026-08 (검수 2026-08-23 리포 실사 keep·재분류) |
 
 ## 드랍 (사유 기록 — 재검토 방지)
 
 <details markdown="1">
-<summary>검수에서 드랍한 14건 (2026-08-21~23)</summary>
+<summary>검수에서 드랍한 18건 (2026-08-21~23)</summary>
 
 | 이름 | 축 | 드랍 사유 |
 |------|-----|----------|
@@ -70,8 +66,12 @@ derived_from: 레퍼런스 스윕 워크플로 2026-08-21 (원시 결과: [raw/r
 | [depromeet/daily-scrum-slack-bot](https://github.com/depromeet/daily-scrum-slack-bot) | 브리핑 | 2022년 2KB 스크립트, 크론+메시지 예시 이상의 참고 가치 없음 |
 | [yurencloud/daily](https://github.com/yurencloud/daily) | 브리핑 | 2019년 방치 ★5 — 일보/주보 컨셉은 다른 자료로 충분 |
 | [GitRecap](https://github.com/aaaaorg/gitrecap) | 브리핑 | archived 스냅샷 — 커밋→LLM 요약 구조는 gitstandup(MCP)이 대신 커버 |
+| [Vale](https://vale.sh/) | 문서 | prose 문체·용어 린터 대표. drop 이유는 단순 — **ohmyPM에 문체 린팅이라는 기능 자체가 불필요**(문서 건강의 핵심은 stale·링크·부패지 문체가 아님). 도구 스펙(언어·커스터마이즈)은 무관, 기능 수요가 없어서 뺌. (초기 근거로 댄 '한국어 부적합'은 번역 우회 가능해 철회 — 도구 스펙 파느라 '기능이 필요한가'를 건너뛴 것) (2026-08-23 판정) |
 | [py-hanspell](https://github.com/ssut/py-hanspell) | 문서 | 네이버 passportKey 변경으로 현재 동작 안 함, 포크 필요 |
 | [Hangul-MCP](https://github.com/Alfex4936/Hangul-MCP) | 문서 | 14개월 정체 ★2 — 맞춤법 점검이 필요해지면 그때 재탐색 |
+| [anthropics/claude-code-action](https://github.com/anthropics/claude-code-action) | 자율 실행 | Anthropic 공식 GitHub Action(Claude Code를 PR/이슈·cron으로 실행, ★8,675). drop: 형태가 GitHub Actions+PR/이슈라 ohmyPM(로컬·텔레그램)과 안 맞음 + 스케줄 실행은 Routines(keep)가 실행 스케줄 1차 소스로 커버 + Claude 공식 도구라 자명. Solutions의 자동화 패턴 카탈로그(정기 유지보수·문서 동기화·이슈 분류·보안 리뷰)만 참고 여지(showcase와 겹침) (2026-08-23 리포 실사 판정) |
+| [itops-agent-platform](https://github.com/qinshihu/itops-agent-platform) | 자율 실행 | 대형 AI IT운영 플랫폼(감지→진단→HITL 승인→SSH 실행→검증, 12 Agent·★885). drop: gh-aw와 동일 논리 — 사용자 최종안=사전 분리라 '위험 작업도 하고 승인받는' 대형 사후 승인 인프라는 오버스펙 + 도메인 완전 다름(인프라 운영 vs 로컬 PM)·규모 압도적·리팩토링 과도기(저자 '직접 쓰지 마라')·마케팅 과장. 살릴 알맹이(HITL 승인 노드·명령 안전 엔진 7류 위험명령 차단)는 claude-code-telegram·petieclark·AI-Codereview가 이미 커버 (2026-08-23 리포 실사 판정) |
+| [GitHub Agentic Workflows (gh-aw)](https://github.com/github/gh-aw) | 자율 실행 | GitHub 공식 자율 에이전트 프레임워크(읽기전용 기본+safe-outputs 쓰기 검증+네트워크 방화벽, ★4,966). drop 이유: 사용자 최종안이 **사전 분리**(안전한 일만 자율, 나머지 사람)라 gh-aw의 **사후 검증**(넓게 하고 출력 게이트) 인프라는 오버스펙 + GitHub Actions 전용이라 형태도 안 맞음. 자율 안전 원칙은 petieclark(자율성 3단계)·claude-code-telegram(비용상한·샌드박스)이 커버. safe-outputs 사상(직접 안 쓰고 검증 통로로만)은 우리 '판정·반영 게이트'에 이미 흡수 (2026-08-23 리포 실사 판정) |
 | [mmoollee101-lab/remote-cli](https://github.com/mmoollee101-lab/remote-cli) | 자율 실행 | ★0 개인 프로젝트, 텔레그램 채널은 Project Odin 기지 영역과 중복 |
 | [claude-code-scheduler](https://github.com/biosphere-labs/claude-code-scheduler) | 자율 실행 | ★0 하루짜리 개인 도구 — '구독 기반 headless 스케줄' 아이디어만 기억 |
 
