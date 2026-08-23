@@ -34,7 +34,7 @@ derived_from: 레퍼런스 스윕 워크플로 2026-08-21 (원시 결과: [raw/r
 
 | 이름 | kind | 지역 | 요약 | 활성·신호 |
 |------|------|------|------|----------|
-| [lychee](https://github.com/lycheeverse/lychee) | tool | US | Rust 고속 링크 체커 — 깨진 링크 점검 엔진으로 **그대로 채택 가능** (CLI+GitHub Action) | ★3,846, push 2026-08, 사실상 표준 |
+| [lychee](https://github.com/lycheeverse/lychee) | tool | US | Rust async 링크 체커(깨진 링크·메일 검출) — ohmyPM ③문서 건강의 **링크 점검 엔진으로 그대로 채택**. 쓸 부품: CLI+library+**GitHub Action**+**pre-commit 훅**+Docker, **JSON/junit 출력**(브리핑·프로그램 연동)·`--offline`(로컬만)·`.lycheeignore`·`lychee.toml` config·프래그먼트(#anchor) 체크·캐시·재시도. **Windows 네이티브**(scoop/winget/choco, PowerShell 예시)라 사용자 환경 직결. 사실상 표준(megalinter 번들 + OpenSearch·mermaid·nuxt·gradle·git-scm 채용) | ★3,846(실채용 다수), push 2026-08 (검수 2026-08-23 리포 실사 keep) |
 | [Vale](https://vale.sh/) | tool | US | 커스터마이즈 가능한 prose 린터 — 용어 일관성·문체 규칙. Datadog·GitLab 등 90팀 채택 | ★5.6K, 활발 |
 | [doc-drift](https://github.com/jbrockSTL/doc-drift) | code | US | PR diff + docs를 **LLM으로 대조해 stale 문서 검출** — 접근 방식 참고 (실체는 스크립트 1개) | ★0, 2026-01 스냅샷 |
 | [phpstan-todo-by](https://github.com/staabm/phpstan-todo-by) | code | US | **만료되는 TODO** — 날짜·조건 지나면 정적분석 에러. 보류 안건 재부상 규칙의 구현 레퍼런스 | ★205, push 2026-08 |
