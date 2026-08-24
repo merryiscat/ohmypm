@@ -22,3 +22,10 @@ docs/log.md
 docs/status.md
 docs/pending.md
 docs/mistakes.md
+
+# 스킬 설치물 — skills-lock.json만 커밋, 코드는 재설치(npm lock 패턴)
+.agents/
+.claude/skills/
+
+# 검수용 임시 렌더
+docs/_*.html
