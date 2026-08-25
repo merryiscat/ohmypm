@@ -1,0 +1,40 @@
+[project]
+name = "ohmypm"
+version = "0.1.0"
+description = "ohmyPM — 모든 로컬 프로젝트를 매일 돌보는 메타 PM 에이전트"
+requires-python = ">=3.11"
+dependencies = [
+    # 웹 대시보드
+    "fastapi>=0.136,<1.0",
+    "uvicorn>=0.48,<1.0",
+    # 스케줄러 (정시 스캔 + heartbeat)
+    "apscheduler>=3.10,<4.0",
+    # 텔레그램 알림 (HTTP 직접)
+    "httpx>=0.28,<1.0",
+    # 설정 (.env 타입 안전 로드)
+    "pydantic>=2.11,<3.0",
+    "pydantic-settings>=2.9,<3.0",
+    "python-dotenv>=1.0,<2.0",
+    # 로깅
+    "loguru>=0.7,<1.0",
+    # DB는 SQLite = 파이썬 표준 라이브러리(sqlite3), 추가 의존 없음
+    # LLM은 Claude Code headless 호출(claude -p) = 파이썬 SDK 불요
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0,<9.0",
+    "pytest-asyncio>=0.26,<1.0",
+    "ruff>=0.11,<1.0",
+]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "W"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]

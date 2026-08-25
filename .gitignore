@@ -10,6 +10,10 @@
 __pycache__/
 *.pyc
 
+# 로컬 데이터·로그 (SQLite·loguru)
+data/
+logs/
+
 # Node
 node_modules/
 
