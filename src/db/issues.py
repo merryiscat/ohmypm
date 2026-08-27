@@ -46,3 +46,43 @@ def set_status(issue_id: int, status: str) -> None:
     db = get_db()
     db.execute("UPDATE issues SET status = ? WHERE id = ?", (status, issue_id))
     db.commit()
+
+
+def list_unjudged(project: str | None = None) -> list[dict]:
+    """아직 판정 에이전트를 안 거친 후보(verdict IS NULL). 프로젝트별로 좁힐 수 있음."""
+    db = get_db()
+    query = "SELECT * FROM issues WHERE verdict IS NULL"
+    params: list = []
+    if project:
+        query += " AND project = ?"
+        params.append(project)
+    query += " ORDER BY created_at"
+    return [dict(row) for row in db.execute(query, params)]
+
+
+def apply_verdict(
+    issue_id: int,
+    verdict: str,
+    kind: str | None = None,
+    due: str | None = None,
+    reason: str | None = None,
+) -> None:
+    """판정 에이전트 결과를 이슈에 반영.
+
+    reclass면 kind·due를 정정하고, 모든 판정은 verdict·근거·시각을 남긴다.
+    fingerprint는 그대로 둔다(판정 캐시 키 — 재스캔 시 이미 판정됨을 이 verdict로 안다).
+    """
+    db = get_db()
+    if verdict == "reclass" and kind is not None:
+        db.execute(
+            "UPDATE issues SET verdict=?, kind=?, due=?, review_reason=?, "
+            "reviewed_at=datetime('now') WHERE id=?",
+            (verdict, kind, due, reason, issue_id),
+        )
+    else:
+        db.execute(
+            "UPDATE issues SET verdict=?, review_reason=?, reviewed_at=datetime('now') "
+            "WHERE id=?",
+            (verdict, reason, issue_id),
+        )
+    db.commit()

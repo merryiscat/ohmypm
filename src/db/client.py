@@ -25,4 +25,19 @@ def init_db() -> None:
     schema = (Path(__file__).parent / "schema.sql").read_text(encoding="utf-8")
     db = get_db()
     db.executescript(schema)
+    _migrate(db)  # 이미 있던 DB에 신규 열 멱등 추가
     db.commit()
+
+
+def _migrate(db: sqlite3.Connection) -> None:
+    """구버전 DB 보정 — CREATE TABLE IF NOT EXISTS는 기존 테이블에 열을 못 넣으므로
+    누락된 열만 ALTER TABLE ADD COLUMN 한다(멱등: 이미 있으면 건너뜀)."""
+    # issues에 판정 에이전트 열이 없으면 추가
+    have = {row["name"] for row in db.execute("PRAGMA table_info(issues)")}
+    for col, ddl in (
+        ("verdict", "verdict TEXT"),
+        ("review_reason", "review_reason TEXT"),
+        ("reviewed_at", "reviewed_at TEXT"),
+    ):
+        if col not in have:
+            db.execute(f"ALTER TABLE issues ADD COLUMN {ddl}")

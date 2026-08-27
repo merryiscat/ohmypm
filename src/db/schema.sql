@@ -11,15 +11,19 @@ CREATE TABLE IF NOT EXISTS projects (
 
 -- 2) 이슈 — status/pending 파싱 산출 + 상담 상태 (케이스 2·4·8)
 CREATE TABLE IF NOT EXISTS issues (
-    id          INTEGER PRIMARY KEY AUTOINCREMENT,
-    project     TEXT NOT NULL,
-    kind        TEXT NOT NULL,         -- unresolved | deadline | stale | format
-    title       TEXT NOT NULL,
-    due         TEXT,                  -- 기한(pending 재검토 시점), NULL=미정
-    status      TEXT DEFAULT 'open',   -- open | consulting | resolved | deferred
-    source      TEXT,                  -- status.md | pending.md | mistakes.md
-    fingerprint TEXT UNIQUE,           -- (project+kind+title) 해시 = 재스캔 중복 방지
-    created_at  TEXT DEFAULT (datetime('now'))
+    id            INTEGER PRIMARY KEY AUTOINCREMENT,
+    project       TEXT NOT NULL,
+    kind          TEXT NOT NULL,         -- unresolved | deadline | conditional | stale | format
+    title         TEXT NOT NULL,
+    due           TEXT,                  -- 기한(pending 재검토 시점), NULL=미정
+    status        TEXT DEFAULT 'open',   -- open | consulting | resolved | deferred
+    source        TEXT,                  -- status.md | pending.md | mistakes.md
+    fingerprint   TEXT UNIQUE,           -- (project+kind+title) 해시 = 재스캔 중복 방지
+    -- 판정 에이전트(자가 확인형) 결과. NULL = 미판정(결정론 파서가 막 뽑은 후보)
+    verdict       TEXT,                  -- keep | drop | reclass (NULL=미판정)
+    review_reason TEXT,                  -- 판정 한 줄 근거
+    reviewed_at   TEXT,                  -- 판정 시각 (ISO8601)
+    created_at    TEXT DEFAULT (datetime('now'))
 );
 
 -- 3) 자율 행동 로그 (케이스 15 — 롤백 단위)

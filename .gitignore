@@ -33,3 +33,6 @@ docs/mistakes.md
 
 # 검수용 임시 렌더
 docs/_*.html
+
+# Playwright 스크래치(스크린샷·콘솔 로그)
+.playwright-mcp/

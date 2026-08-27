@@ -6,6 +6,7 @@
 """
 
 import json
+import shutil
 import subprocess
 from pathlib import Path
 
@@ -17,6 +18,12 @@ from src.config.settings import settings
 GUARD_HOOK = Path(__file__).resolve().parents[2] / "scripts" / "pretooluse_guard.ps1"
 
 
+def _resolve_bin() -> str:
+    """cc_bin 실행파일 경로 해석. Windows에선 `claude`가 claude.CMD 셈이라
+    subprocess가 확장자 없이는 못 찾는다 → shutil.which로 실경로를 잡는다."""
+    return shutil.which(settings.cc_bin) or settings.cc_bin
+
+
 def run_headless(
     prompt: str,
     cwd: str,
@@ -24,17 +31,29 @@ def run_headless(
     disallowed_tools: list[str],
     permission_mode: str = "default",
     timeout: int = 300,
+    append_system_prompt: str | None = None,
+    add_dirs: list[str] | None = None,
 ) -> str | None:
-    """대상 프로젝트에서 claude -p 실행 → 최종 텍스트(result) 반환. 실패는 None."""
+    """claude -p 실행 → 최종 텍스트(result) 반환. 실패는 None.
+
+    ★ 프롬프트는 argv가 아니라 stdin으로 넘긴다 — Windows claude.CMD→cmd.exe가 특수문자(·→—"[]{})
+      투성이 대형 프롬프트를 argv로 받으면 뭉갠다(후보 리스트·경로가 잘려 판정 불가). stdin은 무손실.
+    ★ append_system_prompt로 대상 프로젝트 CLAUDE.md의 대화체 지시를 덮어쓴다(구조화 출력 강제).
+    ★ 판정(읽기)은 중립 cwd + add_dirs로 대상을 '읽기만' — cwd=대상 프로젝트로 두면 그 프로젝트
+      SessionStart 훅이 실행되고 CLAUDE.md 대화체가 JSON 출력을 깨므로. (편집 태스크는 cwd=대상 유지)
+    """
     cmd = [
-        settings.cc_bin,
+        _resolve_bin(),
         "-p",
-        prompt,
         "--output-format",
         "json",
         "--permission-mode",
         permission_mode,
     ]
+    if append_system_prompt:
+        cmd += ["--append-system-prompt", append_system_prompt]
+    for d in add_dirs or []:
+        cmd += ["--add-dir", d]
     if allowed_tools:
         cmd += ["--allowedTools", " ".join(allowed_tools)]
     if disallowed_tools:
@@ -43,6 +62,7 @@ def run_headless(
         r = subprocess.run(
             cmd,
             cwd=cwd,
+            input=prompt,  # 프롬프트는 stdin으로 (argv 뭉갬 회피)
             capture_output=True,
             text=True,
             timeout=timeout,

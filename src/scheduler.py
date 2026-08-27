@@ -23,10 +23,15 @@ async def _run_scan_job() -> None:
         from src.scan import run_scan
 
         result = run_scan()
+        # 결정론 수집 뒤 판정 에이전트가 후보의 오탐을 가린다(기한만 — 첫 관문).
+        from src.cc.judge import run_judgment
+
+        judged = run_judgment()
         from src.bot.telegram_bot import send_telegram
 
         await send_telegram(
             f"<b>ohmyPM 일일 스캔</b>\n프로젝트 {result['projects']}개 · 이슈 {result['issues']}건 추적 중"
+            f"\n판정: 기한 후보 {judged['candidates']}건 중 {judged['applied']}건 정리"
         )
     except Exception as e:
         logger.error(f"[스케줄러] 스캔 실패: {e}")

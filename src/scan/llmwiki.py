@@ -10,6 +10,10 @@ from pathlib import Path
 # YYYY-MM-DD 날짜 (기한 추출용)
 DATE_RE = re.compile(r"\d{4}-\d{2}-\d{2}")
 
+# 이미 버린 안건 표시 — 이런 행은 판정 에이전트에 넘길 것도 없이 값싸게 선거른다.
+# (취소선은 별도로 처리. '취소/철회' 같은 애매한 말은 오작동 우려로 제외 — 나머지는 에이전트가 가림.)
+DEAD_MARKERS = ("미채택", "제외", "폐기", "불채택")
+
 
 def parse_wiki(project_path: str) -> list[dict]:
     """docs/status.md(미해결)·pending.md(기한)를 파싱해 이슈 목록 반환."""
@@ -64,7 +68,12 @@ def _parse_status(text: str) -> list[dict]:
 
 
 def _parse_pending(text: str) -> list[dict]:
-    """pending.md 표에서 날짜(재검토 시점) 있는 행을 기한 이슈로 추출."""
+    """pending.md 표에서 날짜(재검토 시점) 있는 행을 기한 후보로 추출.
+
+    ★ 여기서 뽑는 건 '후보'다 — 표 행의 날짜가 마감일인지 보류일인지, 조건인지는
+       판정 에이전트(cc/judge)가 소스를 열어 가린다. 다만 이미 버린 안건(취소선·미채택)은
+       판정할 것도 없으니 값싸게 선거른다(에이전트 호출·화면 노이즈 절감).
+    """
     out: list[dict] = []
     for line in text.splitlines():
         st = line.strip()
@@ -76,8 +85,15 @@ def _parse_pending(text: str) -> list[dict]:
         cells = [c.strip() for c in st.strip("|").split("|")]
         if not cells or not cells[0] or "안건" in cells[0]:  # 헤더 행 스킵
             continue
+        title = cells[0]
+        # 선거름 ①: 안건 칸이 취소선(~~...~~) = 이미 해소/폐기
+        if title.startswith("~~") or "~~" in title:
+            continue
+        # 선거름 ②: 행 어디든 '미채택/제외/폐기…' = 버린 안건
+        if any(mk in st for mk in DEAD_MARKERS):
+            continue
         out.append(
-            {"kind": "deadline", "title": cells[0][:200], "due": m.group(0), "source": "pending.md"}
+            {"kind": "deadline", "title": title[:200], "due": m.group(0), "source": "pending.md"}
         )
     return out
 
