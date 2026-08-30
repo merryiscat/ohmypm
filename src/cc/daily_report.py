@@ -297,15 +297,34 @@ def run_board_discussion(paths: list[str] | None = None, deadline_ts: float | No
 
 
 def run_nightly() -> dict:
-    """01:00 cron 진입점 — 일간보고(소프트마감 03시) → 자유대화(마감 04시)를 잇는다.
+    """01:00 cron 진입점 — 일간보고(소프트마감 03시) → 게시판 토론(마감 04시).
 
+    텔레그램은 여기서 안 보낸다 — 요약을 저장만 하고 아침(07시) 별도 cron이 발송한다.
     headless 블로킹이라 스케줄러는 이걸 asyncio.to_thread로 돌린다(루프 안 막게).
     """
+    from src.db import alerts as alerts_db
+
     now = datetime.now()
+    date = now.strftime("%Y-%m-%d")
 
     def _at(hour: int) -> float:
         return now.replace(hour=hour, minute=0, second=0, microsecond=0).timestamp()
 
-    report = run_daily_report(deadline_ts=_at(settings.daily_soft_deadline_hour), notify=True)
+    report = run_daily_report(deadline_ts=_at(settings.daily_soft_deadline_hour), notify=False)
     board = run_board_discussion(deadline_ts=_at(settings.discussion_until_hour))
+    # 아침 발송용으로 요약 텍스트를 저장(발송은 telegram cron이)
+    alerts_db.set_setting(f"daily_summary:{date}", report.get("telegram_preview", ""))
     return {"report": report, "board": board}
+
+
+def send_daily_telegram(date: str | None = None) -> bool:
+    """저장된 그날 일간보고 요약을 텔레그램으로 발송(아침 07시 cron)."""
+    from src.bot.telegram_bot import send_telegram_sync
+    from src.db import alerts as alerts_db
+
+    date = date or datetime.now().strftime("%Y-%m-%d")
+    text = alerts_db.get_setting(f"daily_summary:{date}")
+    if not text:
+        logger.info(f"[텔레그램] {date} 발송할 일간보고 요약 없음")
+        return False
+    return send_telegram_sync(text)

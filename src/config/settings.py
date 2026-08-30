@@ -36,6 +36,7 @@ class Settings(BaseSettings):
     daily_report_hour: int = 1
     daily_soft_deadline_hour: int = 3
     discussion_until_hour: int = 4
+    telegram_hour: int = 7   # 일간보고 요약 텔레그램 발송 시각(생성은 새벽, 발송은 아침)
 
     # --- 텔레그램 (비우면 알림 no-op) ---
     telegram_bot_token: str = ""

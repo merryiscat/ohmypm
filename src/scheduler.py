@@ -59,6 +59,18 @@ async def _run_nightly_job() -> None:
         _running.discard("nightly")
 
 
+async def _run_telegram_job() -> None:
+    """매일 07:00 — 새벽에 생성해 저장해 둔 일간보고 요약을 텔레그램으로 발송."""
+    try:
+        import asyncio
+
+        from src.cc.daily_report import send_daily_telegram
+
+        await asyncio.to_thread(send_daily_telegram)
+    except Exception as e:
+        logger.error(f"[스케줄러] 텔레그램 발송 실패: {e}")
+
+
 async def _heartbeat_job() -> None:
     """heartbeat: 기한 임박·신규 이슈 감지 골격. 상담(케이스4)·화이트리스트 자율은 다음 관문."""
     try:
@@ -83,6 +95,12 @@ def start_scheduler() -> None:
         replace_existing=True,
     )
     scheduler.add_job(
+        _run_telegram_job,
+        CronTrigger(hour=settings.telegram_hour, minute=0),
+        id="daily_telegram",
+        replace_existing=True,
+    )
+    scheduler.add_job(
         _heartbeat_job,
         IntervalTrigger(seconds=settings.heartbeat_sec),
         id="heartbeat",
@@ -91,7 +109,7 @@ def start_scheduler() -> None:
     scheduler.start()
     logger.info(
         f"[스케줄러] 시작 — 스캔 {settings.scan_hour}:00, 일간보고 {settings.daily_report_hour}:00, "
-        f"heartbeat {settings.heartbeat_sec}초"
+        f"텔레그램 {settings.telegram_hour}:00, heartbeat {settings.heartbeat_sec}초"
     )
 
 
