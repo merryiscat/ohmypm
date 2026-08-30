@@ -32,6 +32,21 @@ def add_comment(post_id: int, author: str, body: str) -> dict:
     return dict(db.execute("SELECT * FROM comments WHERE id = ?", (cur.lastrowid,)).fetchone())
 
 
+def get_post(post_id: int) -> dict | None:
+    """글 하나 + 그 댓글들. 없으면 None."""
+    db = get_db()
+    row = db.execute("SELECT * FROM posts WHERE id = ?", (post_id,)).fetchone()
+    if not row:
+        return None
+    p = dict(row)
+    p["comments"] = [
+        dict(r) for r in db.execute(
+            "SELECT * FROM comments WHERE post_id = ? ORDER BY id ASC", (post_id,)
+        )
+    ]
+    return p
+
+
 def list_posts(board: str = DAILY_BOARD, limit: int = 100) -> list[dict]:
     """게시판 글 목록(최신 글이 위). 각 글에 comments 배열을 붙여 돌려준다."""
     db = get_db()

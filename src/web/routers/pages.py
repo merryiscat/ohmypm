@@ -133,6 +133,16 @@ _HTML = r"""<!doctype html>
   .md ul{margin:4px 0;padding-left:18px} .md li{margin:1px 0}
   .md code{background:#eceef1;border-radius:4px;padding:0 3px;font-size:.9em;font-family:ui-monospace,SFMono-Regular,Consolas,monospace}
   .md .mgap{height:5px} .md>div:first-child,.md>ul:first-child{margin-top:0}
+  /* 게시판 목록(제목 행) → 클릭해 글 상세로 */
+  .prow{display:flex;align-items:center;gap:12px;background:var(--card);border:1px solid var(--line);border-radius:8px;padding:11px 14px;margin-bottom:8px;cursor:pointer;max-width:920px}
+  .prow:hover{border-color:var(--green)}
+  .prow-t{font-weight:600;font-size:13.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .prow-meta{margin-left:auto;color:var(--muted);font-size:12px;white-space:nowrap}
+  .prow-meta .c{color:var(--green);font-weight:700}
+  .back{color:var(--green);cursor:pointer;font-size:13px;margin-bottom:12px;display:inline-block}
+  .cmt-form{display:flex;gap:8px;margin-top:12px}
+  .cmt-form textarea{flex:1;padding:8px 11px;border:1px solid var(--line);border-radius:8px;font-family:inherit;font-size:13px;resize:vertical;min-height:38px}
+  .cmt.user{background:#e7f3ec;border:1px solid #cfe6da}
 </style></head><body>
 <div class="app">
   <aside>
@@ -225,7 +235,7 @@ function renderSidebar(){
   }).join('') || '<div style="color:#7a808b;font-size:12px;padding:8px 18px">스캔을 눌러보세요</div>';
   // 사이드바 상단 nav 활성화 표시
   document.querySelectorAll('[data-nav]').forEach(el=>el.classList.remove('active'));
-  const view = cur.startsWith('#/board') ? 'board'
+  const view = (cur.startsWith('#/board') || cur.startsWith('#/post')) ? 'board'
              : cur.startsWith('#/chat/daily') ? 'daily'
              : (cur.startsWith('#/room') ? null : 'dashboard');
   if(view) document.querySelector(`[data-nav="${view}"]`)?.classList.add('active');
@@ -351,18 +361,18 @@ async function sendMsg(room, agentRoom){
   await loadMessages(room, false, agentRoom);
 }
 
-// ── 게시판 뷰(글 + 댓글) ───────────────────────────────────
+// ── 게시판 목록 뷰(제목 행 → 클릭해 글 상세로) ───────────────
 function renderBoard(){
   setHeader('게시판', {summary:false, actions:false});
   document.getElementById('view').innerHTML =
-    '<div class="note-line" style="padding-bottom:12px">일간보고에서 올라온 프로젝트별 글에, 담당 에이전트들이 관심 있는 곳에 댓글을 답니다</div>'+
+    '<div class="note-line" style="padding-bottom:12px">일간보고에서 올라온 프로젝트별 글. 제목을 눌러 들어가면 내용과 댓글을 보고 댓글을 달 수 있습니다.</div>'+
     '<div id="board">불러오는 중…</div>';
-  fillBoard();
+  fillBoardList();
   clearInterval(pollTimer);
-  pollTimer = setInterval(fillBoard, 5000);   // 토론 진행 중 댓글이 실시간으로 붙게
+  pollTimer = setInterval(fillBoardList, 5000);
 }
 
-async function fillBoard(){
+async function fillBoardList(){
   let posts = [];
   try{ posts = await fetch('/api/posts').then(r=>r.json()); }catch(e){ return; }
   const box = document.getElementById('board');
@@ -372,15 +382,54 @@ async function fillBoard(){
     return;
   }
   box.innerHTML = posts.map(p=>{
-    const cs = (p.comments||[]).map(c=>
-      `<div class="cmt"><span class="cmt-who">${esc(c.author)}</span><div class="md">${md(c.body)}</div></div>`
-    ).join('') || '<div class="cmt none">아직 댓글 없음</div>';
+    const n = (p.comments||[]).length;
     const day = (p.day || p.created_at || '').slice(0,10);
-    return `<div class="post"><div class="post-h"><span class="post-title">${esc(p.title)}</span>`+
-      `<span class="post-day">${esc(day)}</span></div>`+
-      `<div class="post-body md">${md(p.body)}</div>`+
-      `<div class="cmts">${cs}</div></div>`;
+    return `<div class="prow" onclick="go('#/post/${p.id}')">`+
+      `<span class="prow-t">${esc(p.title)}</span>`+
+      `<span class="prow-meta">${esc(p.author)} · ${esc(day)} · 댓글 <span class="c">${n}</span></span></div>`;
   }).join('');
+}
+
+// ── 글 상세 뷰(내용 + 댓글 + 댓글 작성) ────────────────────────
+function renderPost(id){
+  setHeader('게시판', {summary:false, actions:false});
+  document.getElementById('view').innerHTML = '<div id="post">불러오는 중…</div>';
+  clearInterval(pollTimer);   // 상세에선 폴링 안 함(댓글 입력 중 날아가지 않게)
+  fillPost(id);
+}
+
+async function fillPost(id){
+  let p = {};
+  try{ p = await fetch('/api/posts/'+encodeURIComponent(id)).then(r=>r.json()); }catch(e){}
+  const box = document.getElementById('post');
+  if(!box) return;
+  if(!p || !p.id){ box.innerHTML = '<div class="back" onclick="go(\'#/board\')">← 게시판</div><div class="empty">글을 찾을 수 없습니다</div>'; return; }
+  const day = (p.day || p.created_at || '').slice(0,10);
+  const cs = (p.comments||[]).map(c=>{
+    const mine = c.author === 'user';
+    return `<div class="cmt${mine?' user':''}"><span class="cmt-who">${mine?'나':esc(c.author)}</span>`+
+      `<div class="md">${md(c.body)}</div></div>`;
+  }).join('') || '<div class="cmt none">아직 댓글 없음 — 첫 댓글을 남겨보세요</div>';
+  box.innerHTML =
+    `<div class="back" onclick="go('#/board')">← 게시판</div>`+
+    `<div class="post"><div class="post-h"><span class="post-title">${esc(p.title)}</span>`+
+      `<span class="post-day">${esc(p.author)} · ${esc(day)}</span></div>`+
+      `<div class="post-body md">${md(p.body)}</div>`+
+      `<div class="cmts">${cs}</div>`+
+      `<div class="cmt-form"><textarea id="cmt-input" rows="1" placeholder="댓글 달기…"></textarea>`+
+      `<button onclick="postComment('${id}')">댓글</button></div>`+
+    `</div>`;
+  const ta = document.getElementById('cmt-input');
+  ta.addEventListener('keydown', e=>{ if(e.key==='Enter' && !e.shiftKey){ e.preventDefault(); postComment(id); }});
+}
+
+async function postComment(id){
+  const ta = document.getElementById('cmt-input');
+  const body = ta.value.trim(); if(!body) return;
+  ta.value = '';
+  await fetch('/api/posts/'+encodeURIComponent(id)+'/comments',{method:'POST',
+    headers:{'Content-Type':'application/json'}, body:JSON.stringify({author:'user', body})});
+  fillPost(id);
 }
 
 // ── 프로젝트 룸 뷰(왼쪽 달력+칸반 / 오른쪽 담당 에이전트 채팅) ──
@@ -480,7 +529,9 @@ function route(){
   clearInterval(pollTimer);
   const h = decodeURIComponent(location.hash) || '#/dashboard';
   renderSidebar();
-  if(h.startsWith('#/board')){
+  if(h.startsWith('#/post/')){
+    renderPost(h.slice('#/post/'.length));
+  } else if(h.startsWith('#/board')){
     renderBoard();
   } else if(h.startsWith('#/chat/')){
     const room = h.slice('#/chat/'.length);

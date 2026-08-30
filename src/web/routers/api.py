@@ -119,6 +119,27 @@ def get_posts(board: str = board_db.DAILY_BOARD) -> list[dict]:
     return board_db.list_posts(board)
 
 
+@router.get("/posts/{post_id}")
+def get_post(post_id: int) -> dict:
+    """글 하나 + 댓글(글 상세 화면)."""
+    return board_db.get_post(post_id) or {}
+
+
+class PostComment(BaseModel):
+    author: str = "user"     # 화면에서 달면 사용자. 에이전트 토론은 담당명으로 들어감
+    body: str
+
+
+@router.post("/posts/{post_id}/comments")
+def add_post_comment(post_id: int, c: PostComment) -> dict:
+    """글에 댓글 달기(사용자도 가능)."""
+    body = c.body.strip()
+    if not body:
+        return {"ok": False, "error": "빈 댓글"}
+    row = board_db.add_comment(post_id, c.author, body)
+    return {"ok": True, "comment": row}
+
+
 class BoardDiscussionReq(BaseModel):
     paths: list[str] | None = None
 
