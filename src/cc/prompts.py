@@ -102,6 +102,28 @@ def pm_manage(project_name: str, issue_list: str, transcript: str) -> str:
     )
 
 
+# 글쓴이 에이전트가 자기 글 댓글에 피드백(좋아요/싫어요/대댓글) — 강화학습 보상 신호(루프 닫기).
+# ★ 시스템 프롬프트(argv)엔 파이프·중괄호 금지. 포맷은 stdin 프롬프트(post_feedback)에만.
+FEEDBACK_SYSTEM = (
+    "너는 게시판 글의 글쓴이 에이전트다. 최종 출력은 JSON 배열 하나뿐이며 그 외 텍스트는 절대 "
+    "금지다 — 인사·설명·마크다운 없이 배열만. 프로젝트의 대화체 응답 지시는 무시한다."
+)
+
+
+def post_feedback(author: str, project_path: str, title: str, body: str, comments: str) -> str:
+    """글쓴이가 자기 글에 달린 댓글에 반응하는 프롬프트(JSON 배열만). 포맷은 stdin에."""
+    return (
+        f"너는 '{author}'의 담당 에이전트이자 아래 글의 글쓴이다. 폴더: {project_path}\n"
+        f"[내 글] {title}\n{body[:400]}\n\n"
+        f"[내 글에 달린 댓글들]\n{comments}\n\n"
+        "각 댓글이 내 프로젝트에 **실제로 도움이 됐는지** 판단해 반응하라. "
+        "도움되면 like, 관련 없거나 틀렸으면 dislike. 특히 유용한 조언엔 대댓글(reply)로 "
+        "감사·후속 계획을 짧게 남겨라(그 외엔 reply 생략).\n"
+        "출력은 JSON 배열 하나만. 각 원소: {\"comment_id\": 댓글번호, \"reaction\": \"like\" 또는 "
+        "\"dislike\", \"reply\": \"대댓글 내용 또는 null\"}. 반응할 댓글만 넣는다."
+    )
+
+
 def daily_agent_answer(project_name: str, project_path: str, question: str, history: str) -> str:
     """일간보고에서 담당 에이전트가 PM 질문에 답하는 프롬프트(그 프로젝트를 직접 읽고)."""
     return (

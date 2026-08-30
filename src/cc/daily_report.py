@@ -21,12 +21,14 @@ from src.cc.client import run_headless
 from src.cc.permissions import tools_for
 from src.cc.prompts import (
     BOARD_SYSTEM,
+    FEEDBACK_SYSTEM,
     MANAGE_SYSTEM,
     PM_SYSTEM,
     ROOM_SYSTEM,
     board_comment,
     daily_agent_answer,
     pm_manage,
+    post_feedback,
     pm_turn,
 )
 from src.cc.room_agent import _neutral_cwd
@@ -362,6 +364,60 @@ def run_board_discussion(paths: list[str] | None = None, deadline_ts: float | No
     return {"commented": commented}
 
 
+def run_post_feedback(paths: list[str] | None = None, deadline_ts: float | None = None) -> dict:
+    """글쓴이 에이전트가 자기 글에 달린 댓글에 좋아요/싫어요/대댓글로 반응(강화학습 보상 신호).
+
+    한 글당 headless 1콜(글+댓글 주고 [{comment_id,reaction,reply}] 받음) → 코드가 반영.
+    """
+    posts = board_db.list_posts(board_db.DAILY_BOARD)
+    if paths:
+        wanted = set(paths)
+        posts = [p for p in posts if p.get("project") in wanted]
+    allowed, disallowed = tools_for("daily_agent")
+    reacted = 0
+    for post in posts:
+        if not post.get("project"):
+            continue
+        top = [c for c in post.get("comments", []) if not c.get("parent_id")]
+        if not top:
+            continue
+        if deadline_ts and time.time() > deadline_ts:
+            break
+        cids = {c["id"] for c in top}
+        ctext = "\n".join(f"[{c['id']}] {c['author']}: {(c['body'] or '')[:200]}" for c in top)
+        out = run_headless(
+            prompt=post_feedback(post["author"], post["project"], post["title"], post["body"], ctext),
+            cwd=_neutral_cwd(),
+            allowed_tools=allowed, disallowed_tools=disallowed,
+            timeout=BOARD_TIMEOUT, append_system_prompt=FEEDBACK_SYSTEM,
+            add_dirs=[post["project"]],
+        )
+        if not out:
+            continue
+        m = _ARR_RE.search(out)
+        if not m:
+            continue
+        try:
+            items = json.loads(m.group(0))
+        except json.JSONDecodeError:
+            continue
+        for it in items if isinstance(items, list) else []:
+            try:
+                cid = int(it["comment_id"])
+            except (KeyError, ValueError, TypeError):
+                continue
+            if cid not in cids:
+                continue
+            if it.get("reaction") in ("like", "dislike"):
+                board_db.react_comment(cid, it["reaction"])
+                reacted += 1
+            rep = (it.get("reply") or "").strip()
+            if rep and rep.lower() != "null":
+                board_db.add_comment(post["id"], post["author"], rep, parent_id=cid)
+    logger.info(f"[게시판 피드백] 반응 {reacted}건")
+    return {"reacted": reacted}
+
+
 def run_nightly() -> dict:
     """01:00 cron 진입점 — 일간보고(소프트마감 03시) → 게시판 토론(마감 04시).
 
@@ -378,9 +434,11 @@ def run_nightly() -> dict:
 
     report = run_daily_report(deadline_ts=_at(settings.daily_soft_deadline_hour), notify=False)
     board = run_board_discussion(deadline_ts=_at(settings.discussion_until_hour))
+    # 글쓴이가 자기 글 댓글에 반응(좋아요/싫어요/대댓글) — 강화학습 보상 신호
+    feedback = run_post_feedback(deadline_ts=_at(settings.discussion_until_hour))
     # 아침 발송용으로 요약 텍스트를 저장(발송은 telegram cron이)
     alerts_db.set_setting(f"daily_summary:{date}", report.get("telegram_preview", ""))
-    return {"report": report, "board": board}
+    return {"report": report, "board": board, "feedback": feedback}
 
 
 def send_daily_telegram(date: str | None = None) -> bool:

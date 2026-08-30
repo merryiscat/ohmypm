@@ -267,3 +267,13 @@ def trigger_board_discussion(background: BackgroundTasks, cfg: BoardDiscussionRe
 
     background.add_task(run_board_discussion, paths=cfg.paths)
     return {"ok": True, "started": True}
+
+
+@router.post("/post-feedback")
+def trigger_post_feedback(background: BackgroundTasks, cfg: BoardDiscussionReq | None = None) -> dict:
+    """글쓴이 자동 반응(1b) 수동 트리거 — 글쓴이가 자기 글 댓글에 좋아요/싫어요/대댓글."""
+    cfg = cfg or BoardDiscussionReq()
+    from src.cc.daily_report import run_post_feedback
+
+    background.add_task(run_post_feedback, paths=cfg.paths)
+    return {"ok": True, "started": True}
