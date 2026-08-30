@@ -41,3 +41,20 @@ def _migrate(db: sqlite3.Connection) -> None:
     ):
         if col not in have:
             db.execute(f"ALTER TABLE issues ADD COLUMN {ddl}")
+
+    # 게시판 인센티브 열(조회수·좋아요·댓글 반응·대댓글) — 기존 DB 보정
+    def _ensure(table: str, cols: tuple[tuple[str, str], ...]) -> None:
+        # posts/comments 테이블이 아직 없으면 schema가 곧 만드니 건너뜀
+        if not db.execute("SELECT name FROM sqlite_master WHERE type='table' AND name=?", (table,)).fetchone():
+            return
+        present = {row["name"] for row in db.execute(f"PRAGMA table_info({table})")}
+        for col, ddl in cols:
+            if col not in present:
+                db.execute(f"ALTER TABLE {table} ADD COLUMN {ddl}")
+
+    _ensure("posts", (("views", "views INTEGER DEFAULT 0"), ("likes", "likes INTEGER DEFAULT 0")))
+    _ensure("comments", (
+        ("parent_id", "parent_id INTEGER"),
+        ("likes", "likes INTEGER DEFAULT 0"),
+        ("dislikes", "dislikes INTEGER DEFAULT 0"),
+    ))

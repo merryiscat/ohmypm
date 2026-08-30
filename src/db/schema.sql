@@ -62,6 +62,8 @@ CREATE TABLE IF NOT EXISTS posts (
     title      TEXT NOT NULL,
     body       TEXT NOT NULL,
     day        TEXT,                           -- 논리적 날짜(YYYY-MM-DD) — 그날 글 묶기
+    views      INTEGER DEFAULT 0,              -- 조회수 (인센티브)
+    likes      INTEGER DEFAULT 0,              -- 좋아요 (인센티브)
     created_at TEXT DEFAULT (datetime('now'))
 );
 CREATE TABLE IF NOT EXISTS comments (
@@ -69,6 +71,9 @@ CREATE TABLE IF NOT EXISTS comments (
     post_id    INTEGER NOT NULL,
     author     TEXT NOT NULL,
     body       TEXT NOT NULL,
+    parent_id  INTEGER,                        -- 대댓글이면 부모 댓글 id (없으면 최상위)
+    likes      INTEGER DEFAULT 0,
+    dislikes   INTEGER DEFAULT 0,
     created_at TEXT DEFAULT (datetime('now'))
 );
 CREATE INDEX IF NOT EXISTS idx_posts_board ON posts(board, id);

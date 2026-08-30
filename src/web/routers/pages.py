@@ -148,6 +148,14 @@ _HTML = r"""<!doctype html>
   .cmt-form{display:flex;gap:8px;margin-top:12px}
   .cmt-form textarea{flex:1;padding:8px 11px;border:1px solid var(--line);border-radius:8px;font-family:inherit;font-size:13px;resize:vertical;min-height:38px}
   .cmt.user{background:#e7f3ec;border:1px solid #cfe6da}
+  .cmt.reply{margin-left:22px;background:#fbfcfd;border-left:2px solid var(--line)}
+  .cmt-act{display:flex;gap:12px;margin-top:6px}
+  .cmt-act span{font-size:11.5px;color:var(--muted);cursor:pointer}
+  .cmt-act span:hover{color:var(--green)}
+  .reply-box{margin-top:6px;display:flex;gap:6px}
+  .reply-box textarea{flex:1;padding:6px 9px;border:1px solid var(--line);border-radius:6px;font-family:inherit;font-size:12.5px;resize:vertical;min-height:32px}
+  .post-stat{font-size:12.5px;color:var(--muted);margin:2px 0 12px;display:flex;align-items:center;gap:8px}
+  .post-stat .likebtn{cursor:pointer;color:var(--green);font-weight:700;border:1px solid #cfe6da;background:#e7f3ec;border-radius:6px;padding:2px 10px}
   /* 포트 레지스트리 */
   .pconf{background:#fdeceb;color:var(--red);border-radius:8px;padding:9px 12px;margin-bottom:10px;font-size:13px;font-weight:600;max-width:840px}
   .ptable{border-collapse:collapse;width:100%;max-width:840px;background:var(--card);border:1px solid var(--line);border-radius:10px;overflow:hidden}
@@ -424,7 +432,8 @@ async function fillBoardList(){
     const day = (p.day || p.created_at || '').slice(0,10);
     return `<div class="prow" onclick="go('#/post/${p.id}')">`+
       `<span class="prow-t">${esc(p.title)}</span>`+
-      `<span class="prow-meta">${esc(p.author)} · ${esc(day)} · 댓글 <span class="c">${n}</span></span></div>`;
+      `<span class="prow-meta">${esc(p.author)} · ${esc(day)} · 조회 ${p.views||0} · `+
+      `좋아요 ${p.likes||0} · 댓글 <span class="c">${n}</span></span></div>`;
   }).join('');
 }
 
@@ -443,15 +452,31 @@ async function fillPost(id){
   if(!box) return;
   if(!p || !p.id){ box.innerHTML = '<div class="back" onclick="go(\'#/board\')">← 게시판</div><div class="empty">글을 찾을 수 없습니다</div>'; return; }
   const day = (p.day || p.created_at || '').slice(0,10);
-  const cs = (p.comments||[]).map(c=>{
+  const all = p.comments || [];
+  const repliesOf = pid => all.filter(c=>c.parent_id===pid);
+  const cmtHtml = (c, isReply) => {
     const mine = c.author === 'user';
-    return `<div class="cmt${mine?' user':''}"><span class="cmt-who">${mine?'나':esc(c.author)}</span>`+
-      `<div class="md">${md(c.body)}</div></div>`;
-  }).join('') || '<div class="cmt none">아직 댓글 없음 — 첫 댓글을 남겨보세요</div>';
+    return `<div class="cmt${mine?' user':''}${isReply?' reply':''}">`+
+      `<span class="cmt-who">${mine?'나':esc(c.author)}</span>`+
+      `<div class="md">${md(c.body)}</div>`+
+      `<div class="cmt-act">`+
+        `<span onclick="reactCmt(${c.id},'like','${id}')">좋아요 ${c.likes||0}</span>`+
+        `<span onclick="reactCmt(${c.id},'dislike','${id}')">싫어요 ${c.dislikes||0}</span>`+
+        (isReply?'':`<span onclick="replyTo(${c.id},'${id}')">답글</span>`)+
+      `</div>`+
+      `<div class="reply-box" id="reply-${c.id}"></div>`+
+      repliesOf(c.id).map(r=>cmtHtml(r,true)).join('')+
+    `</div>`;
+  };
+  const top = all.filter(c=>!c.parent_id);
+  const cs = top.length ? top.map(c=>cmtHtml(c,false)).join('')
+                        : '<div class="cmt none">아직 댓글 없음 — 첫 댓글을 남겨보세요</div>';
   box.innerHTML =
     `<div class="back" onclick="go('#/board')">← 게시판</div>`+
     `<div class="post"><div class="post-h"><span class="post-title">${esc(p.title)}</span>`+
       `<span class="post-day">${esc(p.author)} · ${esc(day)}</span></div>`+
+      `<div class="post-stat">조회 ${p.views||0} · 좋아요 <b id="plikes">${p.likes||0}</b> `+
+        `<span class="likebtn" onclick="likePost('${id}')">좋아요</span></div>`+
       `<div class="post-body md">${md(p.body)}</div>`+
       `<div class="cmts">${cs}</div>`+
       `<div class="cmt-form"><textarea id="cmt-input" rows="1" placeholder="댓글 달기…"></textarea>`+
@@ -461,13 +486,31 @@ async function fillPost(id){
   ta.addEventListener('keydown', e=>{ if(e.key==='Enter' && !e.shiftKey){ e.preventDefault(); postComment(id); }});
 }
 
-async function postComment(id){
-  const ta = document.getElementById('cmt-input');
+async function postComment(id, parentId){
+  const ta = document.getElementById(parentId ? 'reply-input-'+parentId : 'cmt-input');
   const body = ta.value.trim(); if(!body) return;
   ta.value = '';
+  const payload = {author:'user', body};
+  if(parentId) payload.parent_id = parentId;
   await fetch('/api/posts/'+encodeURIComponent(id)+'/comments',{method:'POST',
-    headers:{'Content-Type':'application/json'}, body:JSON.stringify({author:'user', body})});
+    headers:{'Content-Type':'application/json'}, body:JSON.stringify(payload)});
   fillPost(id);
+}
+async function likePost(id){
+  await fetch('/api/posts/'+encodeURIComponent(id)+'/like',{method:'POST'});
+  fillPost(id);
+}
+async function reactCmt(cid, reaction, postId){
+  await fetch('/api/comments/'+cid+'/react',{method:'POST',
+    headers:{'Content-Type':'application/json'}, body:JSON.stringify({reaction})});
+  fillPost(postId);
+}
+function replyTo(cid, postId){
+  const box = document.getElementById('reply-'+cid);
+  if(!box || box.querySelector('textarea')){ if(box) box.innerHTML=''; return; }  // 토글
+  box.innerHTML = `<textarea id="reply-input-${cid}" rows="1" placeholder="답글…"></textarea>`+
+    `<button onclick="postComment('${postId}', ${cid})">답글</button>`;
+  const t = document.getElementById('reply-input-'+cid); if(t) t.focus();
 }
 
 // ── 포트 레지스트리 뷰(등록 포트 + 실시간 상태 + 충돌) ────────────

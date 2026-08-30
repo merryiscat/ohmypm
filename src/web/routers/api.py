@@ -214,23 +214,45 @@ def get_posts(board: str = board_db.DAILY_BOARD) -> list[dict]:
 
 @router.get("/posts/{post_id}")
 def get_post(post_id: int) -> dict:
-    """글 하나 + 댓글(글 상세 화면)."""
+    """글 하나 + 댓글(글 상세 화면). 조회 시 조회수 +1."""
+    board_db.increment_views(post_id)
     return board_db.get_post(post_id) or {}
 
 
 class PostComment(BaseModel):
-    author: str = "user"     # 화면에서 달면 사용자. 에이전트 토론은 담당명으로 들어감
+    author: str = "user"          # 화면에서 달면 사용자. 에이전트 토론은 담당명으로 들어감
     body: str
+    parent_id: int | None = None  # 대댓글이면 부모 댓글 id
 
 
 @router.post("/posts/{post_id}/comments")
 def add_post_comment(post_id: int, c: PostComment) -> dict:
-    """글에 댓글 달기(사용자도 가능)."""
+    """글에 댓글/대댓글 달기(사용자도 가능)."""
     body = c.body.strip()
     if not body:
         return {"ok": False, "error": "빈 댓글"}
-    row = board_db.add_comment(post_id, c.author, body)
+    row = board_db.add_comment(post_id, c.author, body, c.parent_id)
     return {"ok": True, "comment": row}
+
+
+@router.post("/posts/{post_id}/like")
+def like_post(post_id: int) -> dict:
+    """글 좋아요 +1."""
+    board_db.like_post(post_id)
+    return {"ok": True}
+
+
+class Reaction(BaseModel):
+    reaction: str   # 'like' | 'dislike'
+
+
+@router.post("/comments/{comment_id}/react")
+def react_comment(comment_id: int, r: Reaction) -> dict:
+    """댓글 좋아요/싫어요."""
+    if r.reaction not in ("like", "dislike"):
+        return {"ok": False, "error": "reaction은 like/dislike"}
+    board_db.react_comment(comment_id, r.reaction)
+    return {"ok": True}
 
 
 class BoardDiscussionReq(BaseModel):

@@ -21,15 +21,35 @@ def add_post(author: str, title: str, body: str, project: str | None = None,
     return dict(db.execute("SELECT * FROM posts WHERE id = ?", (cur.lastrowid,)).fetchone())
 
 
-def add_comment(post_id: int, author: str, body: str) -> dict:
-    """댓글 하나 등록."""
+def add_comment(post_id: int, author: str, body: str, parent_id: int | None = None) -> dict:
+    """댓글 하나 등록. parent_id 주면 대댓글(그 댓글에 달린 답글)."""
     db = get_db()
     cur = db.execute(
-        "INSERT INTO comments (post_id, author, body) VALUES (?, ?, ?)",
-        (post_id, author, body),
+        "INSERT INTO comments (post_id, author, body, parent_id) VALUES (?, ?, ?, ?)",
+        (post_id, author, body, parent_id),
     )
     db.commit()
     return dict(db.execute("SELECT * FROM comments WHERE id = ?", (cur.lastrowid,)).fetchone())
+
+
+def like_post(post_id: int) -> None:
+    db = get_db()
+    db.execute("UPDATE posts SET likes = likes + 1 WHERE id = ?", (post_id,))
+    db.commit()
+
+
+def increment_views(post_id: int) -> None:
+    db = get_db()
+    db.execute("UPDATE posts SET views = views + 1 WHERE id = ?", (post_id,))
+    db.commit()
+
+
+def react_comment(comment_id: int, reaction: str) -> None:
+    """댓글 좋아요/싫어요. reaction='like'|'dislike'."""
+    col = "likes" if reaction == "like" else "dislikes"
+    db = get_db()
+    db.execute(f"UPDATE comments SET {col} = {col} + 1 WHERE id = ?", (comment_id,))
+    db.commit()
 
 
 def get_post(post_id: int) -> dict | None:
