@@ -161,6 +161,8 @@ _HTML = r"""<!doctype html>
   .pform-h{font-size:12px;color:var(--muted);font-weight:700;width:100%}
   .pform select,.pform input{padding:8px 10px;border:1px solid var(--line);border-radius:8px;font-size:13px;font-family:inherit}
   .pform input.grow{flex:1;min-width:120px}
+  .pdet-h{font-size:11.5px;color:var(--muted);font-weight:700;margin:18px 0 6px;text-transform:uppercase;letter-spacing:.02em}
+  .ptable .reg{color:var(--green);cursor:pointer;font-size:12px;font-weight:700}
 </style></head><body>
 <div class="app">
   <aside>
@@ -478,19 +480,33 @@ async function fillPorts(){
     html += '<div class="pconf">⚠ 포트 충돌 — '+
       d.conflicts.map(c=>`${c.port}: ${esc(c.projects.join(', '))}`).join(' · ')+'</div>';
   }
-  if(!d.rows.length){
-    box.innerHTML = html + '<div class="empty">등록된 포트가 없습니다 — 아래에서 추가하세요</div>';
-    return;
+  if(d.rows.length){
+    html += '<table class="ptable"><thead><tr><th>프로젝트</th><th>포트</th><th>용도</th><th>상태</th><th></th></tr></thead><tbody>'+
+      d.rows.map(r=>{
+        const st = r.up
+          ? `<span class="up">● 떠 있음</span> <span class="pid">${esc(r.proc||'')} #${r.pid}</span>`
+          : '<span class="down">○ 멈춤</span>';
+        return `<tr><td>${esc(r.name)}</td><td class="port">${r.port}</td><td>${esc(r.label||'')}</td>`+
+          `<td>${st}</td><td><span class="del" onclick="delPort(${r.id})">삭제</span></td></tr>`;
+      }).join('')+'</tbody></table>';
+  } else {
+    html += '<div class="empty" style="padding:20px">등록된 포트가 없습니다 — 아래 감지된 포트에서 등록하거나 직접 추가하세요</div>';
   }
-  html += '<table class="ptable"><thead><tr><th>프로젝트</th><th>포트</th><th>용도</th><th>상태</th><th></th></tr></thead><tbody>'+
-    d.rows.map(r=>{
-      const st = r.up
-        ? `<span class="up">● 떠 있음</span> <span class="pid">${esc(r.proc||'')} #${r.pid}</span>`
-        : '<span class="down">○ 멈춤</span>';
-      return `<tr><td>${esc(r.name)}</td><td class="port">${r.port}</td><td>${esc(r.label||'')}</td>`+
-        `<td>${st}</td><td><span class="del" onclick="delPort(${r.id})">삭제</span></td></tr>`;
-    }).join('')+'</tbody></table>';
+  // 지금 떠 있는데 미등록인 개발 서버(python·node 등) — 클릭해 등록
+  const det = d.detected || [];
+  if(det.length){
+    html += '<div class="pdet-h">지금 떠 있는데 미등록 (개발 서버 자동 감지)</div>'+
+      '<table class="ptable"><thead><tr><th>포트</th><th>프로세스</th><th></th></tr></thead><tbody>'+
+      det.map(x=>`<tr><td class="port">${x.port}</td><td>${esc(x.proc)} <span class="pid">#${x.pid}</span></td>`+
+        `<td><span class="reg" onclick="pickPort(${x.port})">＋ 등록</span></td></tr>`).join('')+
+      '</tbody></table>';
+  }
   box.innerHTML = html;
+}
+
+function pickPort(port){
+  const el = document.getElementById('pf-port');
+  if(el){ el.value = port; el.scrollIntoView({block:'center'}); document.getElementById('pf-proj').focus(); }
 }
 
 async function addPort(){

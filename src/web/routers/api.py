@@ -112,7 +112,16 @@ def get_ports() -> dict:
         })
         by_port.setdefault(r["port"], []).append(names.get(r["project"], r["project"]))
     conflicts = [{"port": p, "projects": ns} for p, ns in by_port.items() if len(ns) > 1]
-    return {"rows": rows, "conflicts": conflicts}
+    # 등록 안 됐지만 지금 떠 있는 개발 서버(python·node 등)를 자동 감지해 보여준다
+    dev_procs = {"python", "pythonw", "node", "deno", "bun", "ruby", "java",
+                 "dotnet", "go", "php", "uvicorn", "gunicorn", "caddy", "nginx"}
+    registered_ports = set(by_port.keys())
+    detected = [
+        {"port": p, "pid": info["pid"], "proc": info["proc"]}
+        for p, info in sorted(live.items())
+        if p not in registered_ports and (info["proc"] or "").lower() in dev_procs
+    ]
+    return {"rows": rows, "conflicts": conflicts, "detected": detected}
 
 
 class PortReg(BaseModel):
