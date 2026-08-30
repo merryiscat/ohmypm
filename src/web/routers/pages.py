@@ -127,6 +127,12 @@ _HTML = r"""<!doctype html>
   .cmt{font-size:12.5px;color:#3a3f47;line-height:1.45;background:#f7f8fa;border-radius:6px;padding:6px 9px}
   .cmt-who{font-weight:700;color:var(--green);margin-right:5px}
   .cmt.none{color:var(--muted);background:none;padding:2px 0;font-style:italic}
+  .cmt-who{display:block;margin-bottom:2px}
+  /* 마크다운 렌더 */
+  .md .mh{font-weight:700;margin:6px 0 2px}
+  .md ul{margin:4px 0;padding-left:18px} .md li{margin:1px 0}
+  .md code{background:#eceef1;border-radius:4px;padding:0 3px;font-size:.9em;font-family:ui-monospace,SFMono-Regular,Consolas,monospace}
+  .md .mgap{height:5px} .md>div:first-child,.md>ul:first-child{margin-top:0}
 </style></head><body>
 <div class="app">
   <aside>
@@ -160,6 +166,22 @@ _HTML = r"""<!doctype html>
 const esc = s => (s||'').replace(/[&<>]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));
 // HTML 속성값용(따옴표까지 이스케이프) — Windows 경로엔 \ 와 " 가 섞여 인라인 onclick을 깨므로 data-*로 넘긴다
 const escAttr = s => esc(s).replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+// 가벼운 마크다운 렌더 — 에이전트 답에 ## 제목·**굵게**·- 목록·`코드`가 섞여 온다(외부 lib 없이)
+function md(src){
+  const e = s => s.replace(/[&<>]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));
+  const inl = s => e(s).replace(/`([^`]+)`/g,'<code>$1</code>').replace(/\*\*([^*]+?)\*\*/g,'<strong>$1</strong>');
+  const out=[]; let list=false;
+  const close=()=>{ if(list){ out.push('</ul>'); list=false; } };
+  for(const raw of (src||'').split('\n')){
+    const line = raw.replace(/\s+$/,''); let m;
+    if(m = line.match(/^(#{1,6})\s+(.*)$/)){ close(); out.push(`<div class="mh">${inl(m[2])}</div>`); }
+    else if(m = line.match(/^\s*[-*]\s+(.*)$/)){ if(!list){ out.push('<ul>'); list=true; } out.push(`<li>${inl(m[1])}</li>`); }
+    else if(!line.trim()){ close(); out.push('<div class="mgap"></div>'); }
+    else { close(); out.push(`<div>${inl(line)}</div>`); }
+  }
+  close();
+  return out.join('');
+}
 const clean = s => (s||'').replace(/~~/g,'').trim();          // 취소선 마크 제거
 const isCancelled = s => /~~.+~~/.test(s||'');                 // ~~...~~ = 취소 → 제외
 const todayStr = () => new Date().toISOString().slice(0,10);
@@ -270,7 +292,7 @@ function chatMarkup(){
   return `<div class="chat">`+
     `<div class="stream" id="stream"><div class="chat-empty">불러오는 중…</div></div>`+
     `<div class="composer">`+
-      `<textarea id="msg-input" rows="1" placeholder="메시지 입력 · Enter 전송 · Shift+Enter 줄바꿈" autocomplete="off"></textarea>`+
+      `<textarea id="msg-input" rows="1" placeholder="" autocomplete="off"></textarea>`+
     `</div>`+
   `</div>`;
 }
@@ -309,7 +331,7 @@ async function loadMessages(room, silent, agentRoom){
     const ts = (m.created_at||'').slice(5,16);
     return `<div class="msg ${mine?'user':'agent'}">`+
            (mine?'':`<div class="who">${esc(who)}</div>`)+
-           `<div>${esc(m.body)}</div><div class="ts">${esc(ts)}</div></div>`;
+           `<div class="md">${md(m.body)}</div><div class="ts">${esc(ts)}</div></div>`;
   }).join('') : '<div class="chat-empty">아직 대화가 없습니다. 첫 메시지를 남겨보세요.</div>';
   // 담당 에이전트 방에서 마지막 글이 사용자면 = 답이 오는 중 → 대기 표시
   if(agentRoom && msgs.length && msgs[msgs.length-1].author === 'user'){
@@ -351,12 +373,12 @@ async function fillBoard(){
   }
   box.innerHTML = posts.map(p=>{
     const cs = (p.comments||[]).map(c=>
-      `<div class="cmt"><span class="cmt-who">${esc(c.author)}</span>${esc(c.body)}</div>`
+      `<div class="cmt"><span class="cmt-who">${esc(c.author)}</span><div class="md">${md(c.body)}</div></div>`
     ).join('') || '<div class="cmt none">아직 댓글 없음</div>';
     const day = (p.day || p.created_at || '').slice(0,10);
     return `<div class="post"><div class="post-h"><span class="post-title">${esc(p.title)}</span>`+
       `<span class="post-day">${esc(day)}</span></div>`+
-      `<div class="post-body">${esc(p.body)}</div>`+
+      `<div class="post-body md">${md(p.body)}</div>`+
       `<div class="cmts">${cs}</div></div>`;
   }).join('');
 }
