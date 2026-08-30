@@ -120,11 +120,16 @@ _HTML = r"""<!doctype html>
   /* 게시판(글+댓글) */
   .post{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:14px;margin-bottom:12px;max-width:920px}
   .post-h{display:flex;align-items:center;gap:10px;margin-bottom:6px}
-  .post-title{font-weight:700;font-size:14px}
-  .post-day{color:var(--muted);font-size:11.5px;margin-left:auto}
-  .post-body{font-size:13px;color:#3a3f47;line-height:1.5;white-space:pre-wrap;margin-bottom:10px}
-  .cmts{border-top:1px solid #f2f3f5;padding-top:8px;display:flex;flex-direction:column;gap:6px}
-  .cmt{font-size:12.5px;color:#3a3f47;line-height:1.45;background:#f7f8fa;border-radius:6px;padding:6px 9px}
+  .post{padding:18px 20px}
+  .post-title{font-weight:700;font-size:16px;line-height:1.4}
+  .post-day{color:var(--muted);font-size:12px;margin-left:auto;white-space:nowrap}
+  .post-body{font-size:14.5px;color:#2b2f36;line-height:1.78;margin:4px 0 14px}
+  .post-body>div{margin:3px 0}
+  .post-body .mh{font-size:15px;margin:16px 0 5px}
+  .post-body .mgap{height:11px}
+  .post-body ul{margin:9px 0} .post-body li{margin:4px 0}
+  .cmts{border-top:1px solid #f2f3f5;padding-top:12px;display:flex;flex-direction:column;gap:9px}
+  .cmt{font-size:13px;color:#33383f;line-height:1.62;background:#f7f8fa;border-radius:8px;padding:9px 12px}
   .cmt-who{font-weight:700;color:var(--green);margin-right:5px}
   .cmt.none{color:var(--muted);background:none;padding:2px 0;font-style:italic}
   .cmt-who{display:block;margin-bottom:2px}

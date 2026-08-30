@@ -73,21 +73,22 @@ def build_facts(path: str) -> str:
 
 
 def _parse_pm(result: str | None) -> dict:
-    """PM 응답에서 {ask,done,summary} 추출. 실패하면 done 처리(무한루프 방지)."""
+    """PM 응답에서 {ask,done,summary,headline} 추출. 실패하면 done 처리(무한루프 방지)."""
     if not result:
-        return {"ask": None, "done": True, "summary": "(PM 응답 없음)"}
+        return {"ask": None, "done": True, "summary": "(PM 응답 없음)", "headline": ""}
     m = _OBJ_RE.search(result)
     if not m:
-        return {"ask": None, "done": True, "summary": result.strip()[:300]}
+        return {"ask": None, "done": True, "summary": result.strip()[:300], "headline": ""}
     try:
         d = json.loads(m.group(0))
         return {
             "ask": d.get("ask"),
             "done": bool(d.get("done")),
             "summary": (d.get("summary") or "").strip(),
+            "headline": (d.get("headline") or "").strip(),
         }
     except json.JSONDecodeError:
-        return {"ask": None, "done": True, "summary": result.strip()[:300]}
+        return {"ask": None, "done": True, "summary": result.strip()[:300], "headline": ""}
 
 
 def _pm_call(name: str, facts: str, history: str) -> dict:
@@ -120,11 +121,13 @@ def report_one_project(path: str, name: str, max_rounds: int = MAX_ROUNDS) -> di
     facts = build_facts(path)
     turns: list[tuple[str, str]] = []   # (PM 질문, 담당 답)
     summary = ""
+    headline = ""
     rounds = 0
     for rounds in range(1, max_rounds + 1):
         hist = "\n".join(f"PM: {q}\n담당: {a}" for q, a in turns)
         pm = _pm_call(name, facts, hist)
         summary = pm["summary"] or summary
+        headline = pm["headline"] or headline
         # PM 발화 저장(요약 + 질문)
         pm_body = summary + (f"\n▸ 담당에게: {pm['ask']}" if pm["ask"] and not pm["done"] else "")
         messages_db.add_message(DAILY_ROOM, "pm", f"[{name}] {pm_body}".strip())
@@ -134,7 +137,7 @@ def report_one_project(path: str, name: str, max_rounds: int = MAX_ROUNDS) -> di
         messages_db.add_message(DAILY_ROOM, name, ans)
         turns.append((pm["ask"], ans))
     return {"name": name, "path": path, "rounds": rounds, "summary": summary or "(요약 없음)",
-            "skipped": False}
+            "headline": headline, "skipped": False}
 
 
 def run_daily_report(
@@ -176,10 +179,11 @@ def run_daily_report(
             (skipped.append(res["name"]) if res.get("skipped") else done_results.append(res))
 
     logger.info(f"[일간보고] 완료 {len(done_results)}개 · 미처리 {len(skipped)}개")
-    # 각 프로젝트 요약을 게시판 글로 올린다 — 이어지는 게시판 토론(4단계) 댓글의 대상
+    # 각 프로젝트 요약을 게시판 글로 올린다 — 제목은 PM이 뽑은 눈길 끄는 헤드라인
     for r in done_results:
+        title = r.get("headline") or f"{r['name']}: {(r.get('summary') or '').splitlines()[0][:35]}"
         board_db.add_post(
-            author=r["name"], title=f"{r['name']} 일간보고",
+            author=r["name"], title=title,
             body=r.get("summary", ""), project=r.get("path"), day=date,
         )
     telegram_text = _assemble_telegram(date, done_results, skipped)
