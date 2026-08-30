@@ -20,9 +20,12 @@ def discover_projects() -> list[dict]:
         logger.warning(f"[발견] projects_root 없음: {root}")
         return found
 
+    excluded = projects_db.disabled_paths()  # 사용자가 제외한 프로젝트는 다시 안 잡는다
     for child in sorted(root.iterdir()):
         if not child.is_dir() or child.name.startswith("."):
             continue
+        if str(child) in excluded:
+            continue  # 관리 제외됨 (예: 안 쓰는 프로젝트)
         has_wiki = (child / "docs").is_dir()
         if not has_wiki:
             continue  # MVP는 위키 있는 것만

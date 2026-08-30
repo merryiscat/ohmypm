@@ -18,6 +18,21 @@ def get_projects() -> list[dict]:
     return projects_db.list_projects()
 
 
+class ProjectPath(BaseModel):
+    path: str
+
+
+@router.post("/projects/remove")
+def remove_project(p: ProjectPath) -> dict:
+    """프로젝트를 관리에서 제외 — 비활성(enabled=0, 재스캔 재등장 방지) + 관련 데이터 정리
+    (이슈·게시판 글/댓글·대화 방). 폴더 자체는 건드리지 않는다."""
+    projects_db.set_enabled(p.path, False)
+    issues = issues_db.delete_by_project(p.path)
+    posts = board_db.delete_by_project(p.path)
+    messages_db.delete_for_project(p.path)
+    return {"ok": True, "disabled": p.path, "issues_deleted": issues, "posts_deleted": posts}
+
+
 @router.get("/issues")
 def get_issues(status: str | None = None) -> list[dict]:
     """이슈 목록(선택: 상태 필터). 기한 임박순."""

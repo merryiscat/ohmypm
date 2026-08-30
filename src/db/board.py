@@ -47,6 +47,17 @@ def get_post(post_id: int) -> dict | None:
     return p
 
 
+def delete_by_project(project: str) -> int:
+    """한 프로젝트가 쓴 글과 그 댓글 전부 삭제. 삭제한 글 수 반환."""
+    db = get_db()
+    ids = [r["id"] for r in db.execute("SELECT id FROM posts WHERE project = ?", (project,))]
+    for pid in ids:
+        db.execute("DELETE FROM comments WHERE post_id = ?", (pid,))
+    cur = db.execute("DELETE FROM posts WHERE project = ?", (project,))
+    db.commit()
+    return cur.rowcount
+
+
 def list_posts(board: str = DAILY_BOARD, limit: int = 100) -> list[dict]:
     """게시판 글 목록(최신 글이 위). 각 글에 comments 배열을 붙여 돌려준다."""
     db = get_db()

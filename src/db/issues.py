@@ -29,6 +29,14 @@ def upsert_issue(
     db.commit()
 
 
+def delete_by_project(project: str) -> int:
+    """한 프로젝트의 이슈 전부 삭제(프로젝트 관리 제외 시). 삭제 건수 반환."""
+    db = get_db()
+    cur = db.execute("DELETE FROM issues WHERE project = ?", (project,))
+    db.commit()
+    return cur.rowcount
+
+
 def list_issues(status: str | None = None) -> list[dict]:
     """이슈 목록. 기한 있는 것 먼저(임박순), 그다음 생성순."""
     db = get_db()

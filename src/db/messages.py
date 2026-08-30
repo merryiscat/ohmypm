@@ -30,6 +30,13 @@ def list_rooms_like(prefix: str) -> list[str]:
     return [r["room"] for r in rows]
 
 
+def delete_for_project(path: str) -> None:
+    """프로젝트의 대화 방 삭제 — 룸 채팅(room=path)과 일간보고 방(daily::*::path)."""
+    db = get_db()
+    db.execute("DELETE FROM messages WHERE room = ? OR room LIKE ?", (path, f"daily::%::{path}"))
+    db.commit()
+
+
 def list_messages(room: str, limit: int = 200) -> list[dict]:
     """방의 최근 글 목록(오래된→최신 순). 기본 200줄까지."""
     db = get_db()

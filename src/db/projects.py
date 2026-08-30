@@ -31,3 +31,9 @@ def set_enabled(path: str, enabled: bool) -> None:
     db = get_db()
     db.execute("UPDATE projects SET enabled = ? WHERE path = ?", (int(enabled), path))
     db.commit()
+
+
+def disabled_paths() -> set[str]:
+    """제외(enabled=0)된 프로젝트 path 집합 — 스캔이 다시 안 잡게 discover가 참조."""
+    db = get_db()
+    return {r["path"] for r in db.execute("SELECT path FROM projects WHERE enabled = 0")}
