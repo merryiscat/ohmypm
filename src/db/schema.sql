@@ -41,3 +41,13 @@ CREATE TABLE IF NOT EXISTS alerts (
     key   TEXT PRIMARY KEY,            -- 예: 'whitelist.format_standardize'='on'
     value TEXT
 );
+
+-- 5) 메시지 보드 — 에이전트 채팅방 + 프로젝트 룸 (사용자·에이전트 대화 기록)
+CREATE TABLE IF NOT EXISTS messages (
+    id         INTEGER PRIMARY KEY AUTOINCREMENT,
+    room       TEXT NOT NULL,          -- 'global'(전체 채팅방) | 프로젝트 path(프로젝트 룸)
+    author     TEXT NOT NULL,          -- 'user' | 에이전트 이름(scanner/judge/pm…)
+    body       TEXT NOT NULL,
+    created_at TEXT DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_messages_room ON messages(room, id);

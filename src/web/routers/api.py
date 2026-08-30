@@ -1,8 +1,10 @@
 """대시보드 데이터 API (JSON). 화면 JS가 이걸 fetch해 카드를 그린다."""
 
-from fastapi import APIRouter
+from fastapi import APIRouter, BackgroundTasks
+from pydantic import BaseModel
 
 from src.db import issues as issues_db
+from src.db import messages as messages_db
 from src.db import projects as projects_db
 
 router = APIRouter(prefix="/api")
@@ -18,6 +20,19 @@ def get_projects() -> list[dict]:
 def get_issues(status: str | None = None) -> list[dict]:
     """이슈 목록(선택: 상태 필터). 기한 임박순."""
     return issues_db.list_issues(status)
+
+
+class StatusUpdate(BaseModel):
+    status: str
+
+
+@router.post("/issues/{issue_id}/status")
+def update_issue_status(issue_id: int, upd: StatusUpdate) -> dict:
+    """칸반 열 이동 = 이슈 status 변경. open/consulting/resolved/deferred만 허용."""
+    if upd.status not in ("open", "consulting", "resolved", "deferred"):
+        return {"ok": False, "error": f"알 수 없는 상태: {upd.status}"}
+    issues_db.set_status(issue_id, upd.status)
+    return {"ok": True}
 
 
 @router.post("/scan")
@@ -37,3 +52,39 @@ def trigger_judge() -> dict:
     from src.cc.judge import run_judgment
 
     return run_judgment()
+
+
+# ── 메시지 보드 (에이전트 채팅방 + 프로젝트 룸) ───────────────────────────
+
+
+@router.get("/messages")
+def get_messages(room: str = messages_db.GLOBAL_ROOM) -> list[dict]:
+    """방의 대화 목록. room 미지정이면 전체 채팅방('global')."""
+    return messages_db.list_messages(room)
+
+
+class PostMessage(BaseModel):
+    room: str = messages_db.GLOBAL_ROOM
+    author: str = "user"
+    body: str
+
+
+@router.post("/messages")
+def post_message(msg: PostMessage, background: BackgroundTasks) -> dict:
+    """방에 글 한 줄 추가. 프로젝트 룸에서 사용자가 말하면 그 프로젝트 담당 에이전트가 답한다.
+
+    담당 에이전트 응답은 headless Claude 호출이라 느리다 → 백그라운드로 돌리고
+    화면은 폴링으로 답을 받는다(HTTP 응답을 막지 않음).
+    """
+    body = msg.body.strip()
+    if not body:
+        return {"ok": False, "error": "빈 메시지"}
+    row = messages_db.add_message(msg.room, msg.author, body)
+    # 프로젝트 룸(room=프로젝트 path)에서 사용자 발화면 → 담당 에이전트 응답 예약
+    if msg.author == "user" and msg.room != messages_db.GLOBAL_ROOM:
+        proj = next((p for p in projects_db.list_projects() if p["path"] == msg.room), None)
+        if proj:
+            from src.cc.room_agent import reply_in_room
+
+            background.add_task(reply_in_room, proj["path"], proj["name"])
+    return {"ok": True, "message": row}

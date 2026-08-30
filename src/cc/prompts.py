@@ -15,6 +15,32 @@ JUDGE_SYSTEM = (
 )
 
 
+# 프로젝트 담당 에이전트 system prompt — judge와 달리 '대화형' 답을 원한다(JSON 강제 없음).
+# 중립 cwd에서 돌아 대상 CLAUDE.md가 자동 로드되지 않으므로, 여기서 역할·읽기전용·톤을 지정한다.
+ROOM_SYSTEM = (
+    "너는 ohmyPM에서 특정 로컬 프로젝트를 전담하는 '담당 에이전트'다. 대상 프로젝트의 "
+    "CLAUDE.md와 docs/를 근거로, 사용자와 그 프로젝트에 대해 한국어로 자연스럽게 대화한다. "
+    "읽기 전용이다 — 파일을 고치거나 명령을 실행하지 않는다. 간결하고 구체적으로, 필요하면 "
+    "파일명을 인용해 답한다. 근거가 없으면 모른다고 말한다. 인사말 반복·과한 서론은 생략한다."
+)
+
+
+def room_chat(project_name: str, project_path: str, history: str) -> str:
+    """프로젝트 담당 에이전트 대화 프롬프트. 방의 최근 대화를 주고 마지막 발화에 답하게 한다.
+
+    project_path: 대상 프로젝트 절대경로(--add-dir로 열려 있음). CLAUDE.md·docs가 여기 있다.
+    history: "작성자: 내용" 줄들로 이어붙인 최근 대화 맥락.
+    나중 PM↔담당 일간보고·에이전트 자유채팅에도 이 계약(대화 히스토리→답)을 재사용한다.
+    """
+    return (
+        f"너는 프로젝트 '{project_name}'의 담당 에이전트다. 이 프로젝트 폴더가 열려 있다: {project_path}\n"
+        "필요하면 그 안의 CLAUDE.md·docs/status.md·docs/plan.md·docs/log.md 등을 Read/Grep으로 "
+        "직접 열어 근거를 갖고 답하라.\n\n"
+        f"[지금까지의 대화]\n{history}\n\n"
+        "위 맥락에서 마지막 사용자 발화에 한국어로 답하라. 핵심만, 필요하면 파일명 인용."
+    )
+
+
 def summarize_unresolved(project_name: str, items: list[str]) -> str:
     """미해결 항목 요약 + 가장 급한 것 짚기 (읽기 전용 태스크)."""
     body = "\n".join(f"- {t}" for t in items)

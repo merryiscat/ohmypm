@@ -17,6 +17,8 @@ TASK_TOOLS = {
     "scan": ["Read", "Grep", "Glob"],  # 읽기 전용
     # 판정 에이전트(자가 확인형) — 대상 프로젝트 llmwiki를 직접 열어보고 이슈를 가린다. 읽기만.
     "judge": ["Read", "Grep", "Glob"],
+    # 프로젝트 담당 에이전트(룸 채팅) — CLAUDE.md·docs를 읽고 대화만. 읽기 전용.
+    "room_chat": ["Read", "Grep", "Glob"],
     # 형식 표준화 = git 커밋 단위 자율(변경→add→commit). push는 NEVER_ALLOW로 차단.
     "format_standardize": ["Read", "Edit", "Write", "Bash(git add:*)", "Bash(git commit:*)"],
 }
