@@ -21,10 +21,12 @@ from src.cc.client import run_headless
 from src.cc.permissions import tools_for
 from src.cc.prompts import (
     BOARD_SYSTEM,
+    MANAGE_SYSTEM,
     PM_SYSTEM,
     ROOM_SYSTEM,
     board_comment,
     daily_agent_answer,
+    pm_manage,
     pm_turn,
 )
 from src.cc.room_agent import _neutral_cwd
@@ -86,19 +88,21 @@ def _parse_pm(result: str | None) -> dict:
         return {"ask": None, "done": True, "summary": result.strip()[:300], "headline": ""}
     try:
         d = json.loads(m.group(0))
+        upd = d.get("updates")
         return {
             "ask": d.get("ask"),
             "done": bool(d.get("done")),
             "summary": (d.get("summary") or "").strip(),
             "headline": (d.get("headline") or "").strip(),
+            "updates": upd if isinstance(upd, list) else [],
         }
     except json.JSONDecodeError:
-        return {"ask": None, "done": True, "summary": result.strip()[:300], "headline": ""}
+        return {"ask": None, "done": True, "summary": result.strip()[:300], "headline": "", "updates": []}
 
 
-def _pm_call(name: str, facts: str, history: str) -> dict:
+def _pm_call(name: str, facts: str, history: str, issues: str) -> dict:
     r = run_headless(
-        prompt=pm_turn(name, facts, history),
+        prompt=pm_turn(name, facts, history, issues),
         cwd=_neutral_cwd(),
         allowed_tools=tools_for("daily_pm")[0],
         disallowed_tools=tools_for("daily_pm")[1],
@@ -106,6 +110,57 @@ def _pm_call(name: str, facts: str, history: str) -> dict:
         append_system_prompt=PM_SYSTEM,
     )
     return _parse_pm(r)
+
+
+def _project_issues(path: str) -> list[dict]:
+    """이 프로젝트의 활성 이슈(drop·취소선 제외)."""
+    return [
+        i for i in issues_db.list_issues()
+        if i["project"] == path and i.get("verdict") != "drop" and not _cancelled(i["title"])
+    ]
+
+
+def _manage_call(name: str, issue_list: str, transcript: str) -> list:
+    """대화 종료 후 PM이 칸반 상태·일정을 확정(JSON 배열). 실패는 빈 리스트."""
+    r = run_headless(
+        prompt=pm_manage(name, issue_list, transcript),
+        cwd=_neutral_cwd(),
+        allowed_tools=tools_for("daily_pm")[0],
+        disallowed_tools=tools_for("daily_pm")[1],
+        timeout=PM_TIMEOUT,
+        append_system_prompt=MANAGE_SYSTEM,
+    )
+    if not r:
+        return []
+    m = _ARR_RE.search(r)
+    if not m:
+        return []
+    try:
+        data = json.loads(m.group(0))
+        return data if isinstance(data, list) else []
+    except json.JSONDecodeError:
+        return []
+
+
+def _apply_updates(updates: list, valid_ids: set[int]) -> int:
+    """PM이 낸 칸반 상태·기한 갱신을 이슈 DB에 반영. 반영 건수 반환."""
+    n = 0
+    for u in updates:
+        try:
+            iid = int(u["id"])
+        except (KeyError, ValueError, TypeError):
+            continue
+        if iid not in valid_ids:
+            continue
+        st = u.get("status")
+        if st in ("open", "consulting", "resolved", "deferred"):
+            issues_db.set_status(iid, st)
+            n += 1
+        if "due" in u:
+            due = u.get("due")
+            issues_db.set_due(iid, None if due in ("", "null", None) else due)
+            n += 1
+    return n
 
 
 def _agent_call(name: str, path: str, question: str, history: str) -> str:
@@ -128,13 +183,21 @@ def report_one_project(path: str, name: str, date: str, max_rounds: int = MAX_RO
     """
     room = _daily_room(date, path)
     facts = build_facts(path)
+    # PM이 상태·기한을 갱신할 수 있게 이슈를 id와 함께 목록화
+    issue_rows = _project_issues(path)
+    valid_ids = {i["id"] for i in issue_rows}
+    issue_list = "\n".join(
+        f"[{i['id']}] ({i.get('status') or 'open'}/{i['kind']}"
+        f"{', 기한 ' + i['due'] if i.get('due') else ''}) {i['title'][:75]}"
+        for i in issue_rows
+    )
     turns: list[tuple[str, str]] = []   # (PM 질문, 담당 답)
     summary = ""
     headline = ""
     rounds = 0
     for rounds in range(1, max_rounds + 1):
         hist = "\n".join(f"PM: {q}\n담당: {a}" for q, a in turns)
-        pm = _pm_call(name, facts, hist)
+        pm = _pm_call(name, facts, hist, issue_list)
         summary = pm["summary"] or summary
         headline = pm["headline"] or headline
         pm_body = summary + (f"\n▸ 담당에게: {pm['ask']}" if pm["ask"] and not pm["done"] else "")
@@ -144,8 +207,11 @@ def report_one_project(path: str, name: str, date: str, max_rounds: int = MAX_RO
         ans = _agent_call(name, path, pm["ask"], hist)
         messages_db.add_message(room, "agent", ans)
         turns.append((pm["ask"], ans))
+    # 대화 종료 후: PM이 칸반 상태·일정을 확정해 실제 반영(전용 관리 호출)
+    transcript = "\n".join(f"PM: {q}\n담당: {a}" for q, a in turns) or summary
+    applied = _apply_updates(_manage_call(name, issue_list, transcript), valid_ids)
     return {"name": name, "path": path, "rounds": rounds, "summary": summary or "(요약 없음)",
-            "headline": headline, "skipped": False}
+            "headline": headline, "updates_applied": applied, "skipped": False}
 
 
 def run_daily_report(

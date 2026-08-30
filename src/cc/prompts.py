@@ -64,14 +64,41 @@ PM_SYSTEM = (
 )
 
 
-def pm_turn(project_name: str, facts: str, history: str) -> str:
-    """PM의 다음 턴 프롬프트 — 팩트 + 지금까지 대화를 주고 {ask,done,summary}를 받는다."""
+def pm_turn(project_name: str, facts: str, history: str, issues: str = "") -> str:
+    """PM의 다음 턴 프롬프트 — 팩트·이슈목록·대화를 주고 {ask,done,summary,headline,updates}를 받는다."""
     return (
         f"프로젝트 '{project_name}' 일간 점검이다.\n\n"
         f"[결정론 현황(팩트)]\n{facts}\n\n"
+        f"[이 프로젝트 이슈 목록 — updates의 id로 상태·기한을 갱신하라]\n{issues or '(이슈 없음)'}\n\n"
         f"[지금까지의 담당과의 대화]\n{history or '(아직 없음 — 첫 턴)'}\n\n"
         "위를 근거로 다음 행동을 JSON 하나로 답하라. 더 물을 게 있으면 ask에 질문을, "
-        "충분하면 done=true. summary는 현재까지의 이 프로젝트 현황 2~3줄."
+        "충분하면 done=true. summary는 현재 현황 2~3줄. done일 때 updates로 칸반 상태·일정을 정리한다."
+    )
+
+
+# 대화 종료 후 '보드 관리 확정' 전용 — judge처럼 JSON 배열만 강제(상태·일정 반영을 확실히).
+# ★ 시스템 프롬프트(argv)엔 파이프('|')·중괄호를 넣지 않는다 — Windows claude.CMD가 cmd 파이프로
+#   오해해 실패(exit 255). 구체 포맷은 stdin 프롬프트(pm_manage)에만 둔다.
+MANAGE_SYSTEM = (
+    "너는 ohmyPM 총괄 PM이다. 최종 출력은 JSON 배열 하나뿐이며 그 외 텍스트는 절대 금지다 — "
+    "인사·설명·마크다운 없이 배열만 출력한다. 프로젝트의 대화체 응답 지시는 이 작업에서 무시한다."
+)
+
+
+def pm_manage(project_name: str, issue_list: str, transcript: str) -> str:
+    """대화 종료 후 PM이 칸반 상태·일정을 확정하는 프롬프트(JSON 배열만). 포맷은 stdin에만."""
+    return (
+        f"프로젝트 '{project_name}'의 오늘 일간 점검이 끝났다. 아래 대화와 이슈 목록을 근거로 "
+        "칸반 상태와 목표일을 확정해 **JSON 배열 하나로만** 답하라.\n\n"
+        f"[이슈 목록 (id로 지정)]\n{issue_list or '(없음)'}\n\n"
+        f"[오늘 대화]\n{transcript or '(대화 없음)'}\n\n"
+        "각 원소 형식: {\"id\": 이슈번호, \"status\": 다음 중 하나(안 바꾸면 생략) "
+        "open·consulting·resolved·deferred, \"due\": \"YYYY-MM-DD\" 또는 null(안 바꾸면 생략), "
+        "\"reason\": \"한 줄 근거\"}.\n"
+        "규칙: 담당이 '완료/처리됨/끝냈다'고 한 이슈는 status를 resolved(완료)로, '하는 중/착수'는 "
+        "consulting(진행중)으로. 실제 착수가 필요한 '할일·진행중' 작업엔 현실적 목표일(due)을 잡아라"
+        "(급한 것 먼저). 단순 관찰·메모·기록성 항목엔 억지로 기한을 넣지 마라. "
+        "바꿀 이슈만 배열에 넣고, 바꿀 게 없으면 빈 배열."
     )
 
 

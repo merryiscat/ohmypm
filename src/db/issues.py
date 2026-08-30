@@ -56,6 +56,13 @@ def set_status(issue_id: int, status: str) -> None:
     db.commit()
 
 
+def set_due(issue_id: int, due: str | None) -> None:
+    """이슈 목표일(기한) 설정/해제 — PM이 일정 정리 시 사용."""
+    db = get_db()
+    db.execute("UPDATE issues SET due = ? WHERE id = ?", (due, issue_id))
+    db.commit()
+
+
 def list_unjudged(project: str | None = None) -> list[dict]:
     """아직 판정 에이전트를 안 거친 후보(verdict IS NULL). 프로젝트별로 좁힐 수 있음."""
     db = get_db()
