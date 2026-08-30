@@ -88,3 +88,25 @@ def post_message(msg: PostMessage, background: BackgroundTasks) -> dict:
 
             background.add_task(reply_in_room, proj["path"], proj["name"])
     return {"ok": True, "message": row}
+
+
+class DailyReportReq(BaseModel):
+    paths: list[str] | None = None   # 지정 시 그 프로젝트만(테스트). None=전체
+    max_rounds: int = 8
+    notify: bool = True              # 텔레그램 종합 발송 여부
+
+
+@router.post("/daily-report")
+def trigger_daily_report(background: BackgroundTasks, cfg: DailyReportReq | None = None) -> dict:
+    """일간보고 수동 트리거. 오래 걸리는 headless 오케스트레이션이라 백그라운드로 돌리고,
+    진행/결과는 '일간보고' 방(room='daily')에 쌓인다(사이드바에서 확인)."""
+    cfg = cfg or DailyReportReq()
+    from src.cc.daily_report import run_daily_report
+
+    background.add_task(
+        run_daily_report,
+        paths=cfg.paths,
+        max_rounds=cfg.max_rounds,
+        notify=cfg.notify,
+    )
+    return {"ok": True, "started": True}

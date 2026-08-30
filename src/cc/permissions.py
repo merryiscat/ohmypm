@@ -19,6 +19,9 @@ TASK_TOOLS = {
     "judge": ["Read", "Grep", "Glob"],
     # 프로젝트 담당 에이전트(룸 채팅) — CLAUDE.md·docs를 읽고 대화만. 읽기 전용.
     "room_chat": ["Read", "Grep", "Glob"],
+    # 일간보고: PM(팩트로 판단, 필요 시 읽기)·담당(프로젝트 읽고 답) — 둘 다 읽기 전용.
+    "daily_pm": ["Read", "Grep", "Glob"],
+    "daily_agent": ["Read", "Grep", "Glob"],
     # 형식 표준화 = git 커밋 단위 자율(변경→add→commit). push는 NEVER_ALLOW로 차단.
     "format_standardize": ["Read", "Edit", "Write", "Bash(git add:*)", "Bash(git commit:*)"],
 }

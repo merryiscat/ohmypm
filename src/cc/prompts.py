@@ -41,6 +41,42 @@ def room_chat(project_name: str, project_path: str, history: str) -> str:
     )
 
 
+# ── 일간보고 오케스트레이션 (PM ↔ 담당 1:1) ──────────────────────────────
+# PM은 비대화형 JSON API. 매 턴 {ask, done, summary} 하나만 낸다(대화 종료를 코드가 감지).
+PM_SYSTEM = (
+    "너는 ohmyPM의 총괄 PM이다. 매일 새벽 각 프로젝트 담당 에이전트와 1:1로 그 프로젝트 "
+    "현황을 점검한다. 너는 비대화형 JSON API로 실행된다 — 매 턴 **오직 JSON 객체 하나**만 "
+    "출력한다(인사·설명·마크다운 금지). 형식: "
+    '{"ask": "담당에게 할 다음 질문(더 물을 게 없으면 null)", "done": true/false, '
+    '"summary": "지금까지 파악한 이 프로젝트 현황 2~3줄 요약"}. '
+    "제공된 결정론 현황(팩트)과 담당의 답을 근거로 삼아, 애매하거나 급한 게 있으면 ask로 "
+    "더 캐묻고, 충분히 파악했으면 done=true로 끝낸다. 대개 1~3번이면 충분하다."
+)
+
+
+def pm_turn(project_name: str, facts: str, history: str) -> str:
+    """PM의 다음 턴 프롬프트 — 팩트 + 지금까지 대화를 주고 {ask,done,summary}를 받는다."""
+    return (
+        f"프로젝트 '{project_name}' 일간 점검이다.\n\n"
+        f"[결정론 현황(팩트)]\n{facts}\n\n"
+        f"[지금까지의 담당과의 대화]\n{history or '(아직 없음 — 첫 턴)'}\n\n"
+        "위를 근거로 다음 행동을 JSON 하나로 답하라. 더 물을 게 있으면 ask에 질문을, "
+        "충분하면 done=true. summary는 현재까지의 이 프로젝트 현황 2~3줄."
+    )
+
+
+def daily_agent_answer(project_name: str, project_path: str, question: str, history: str) -> str:
+    """일간보고에서 담당 에이전트가 PM 질문에 답하는 프롬프트(그 프로젝트를 직접 읽고)."""
+    return (
+        f"너는 프로젝트 '{project_name}'의 담당 에이전트다. 폴더가 열려 있다: {project_path}\n"
+        "총괄 PM이 오늘 현황을 묻는다. 그 프로젝트의 CLAUDE.md·docs/status.md·docs/pending.md·"
+        "docs/log.md 등을 Read/Grep으로 직접 확인해 **근거 있게** 답하라(읽기 전용).\n\n"
+        f"[지금까지의 대화]\n{history or '(첫 질문)'}\n\n"
+        f"[PM의 질문]\n{question}\n\n"
+        "한국어로 핵심만 간결히 답하라(과한 서론 없이). 근거 파일명은 인용해도 좋다."
+    )
+
+
 def summarize_unresolved(project_name: str, items: list[str]) -> str:
     """미해결 항목 요약 + 가장 급한 것 짚기 (읽기 전용 태스크)."""
     body = "\n".join(f"- {t}" for t in items)

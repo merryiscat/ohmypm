@@ -124,6 +124,7 @@ _HTML = r"""<!doctype html>
     <nav>
       <div class="nav-item" data-nav="dashboard" onclick="go('#/dashboard')">대시보드</div>
       <div class="nav-item" data-nav="chat" onclick="go('#/chat/global')">전체 채팅방 <span class="cnt" id="nav-chat-cnt" hidden></span></div>
+      <div class="nav-item" data-nav="daily" onclick="go('#/chat/daily')">일간보고</div>
     </nav>
     <div class="sec-label">프로젝트 룸</div>
     <div class="rooms" id="rooms"></div>
@@ -192,7 +193,9 @@ function renderSidebar(){
   }).join('') || '<div style="color:#7a808b;font-size:12px;padding:8px 18px">스캔을 눌러보세요</div>';
   // 사이드바 상단 nav 활성화 표시
   document.querySelectorAll('[data-nav]').forEach(el=>el.classList.remove('active'));
-  const view = cur.startsWith('#/chat') ? 'chat' : (cur.startsWith('#/room')? null : 'dashboard');
+  const view = cur.startsWith('#/chat/daily') ? 'daily'
+             : cur.startsWith('#/chat') ? 'chat'
+             : (cur.startsWith('#/room') ? null : 'dashboard');
   if(view) document.querySelector(`[data-nav="${view}"]`)?.classList.add('active');
 }
 
@@ -413,8 +416,10 @@ function route(){
   clearInterval(pollTimer);
   const h = decodeURIComponent(location.hash) || '#/dashboard';
   renderSidebar();
-  if(h.startsWith('#/chat')){
-    renderChat('global', '전체 채팅방', '에이전트와 사용자가 함께 쓰는 방 — 스캔·판정 결과 공유, 지시');
+  if(h.startsWith('#/chat/')){
+    const room = h.slice('#/chat/'.length);
+    if(room === 'daily') renderChat('daily', '일간보고', '매일 새벽 PM과 각 담당 에이전트의 일간보고 대화 기록');
+    else renderChat('global', '전체 채팅방', '에이전트와 사용자가 함께 쓰는 방 — 스캔·판정 결과 공유, 지시');
   } else if(h.startsWith('#/room/')){
     renderRoom(h.slice('#/room/'.length));
   } else {
