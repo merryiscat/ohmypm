@@ -21,6 +21,15 @@ def add_message(room: str, author: str, body: str) -> dict:
     return dict(row)
 
 
+def list_rooms_like(prefix: str) -> list[str]:
+    """접두사로 시작하는 방(room) 키 목록(중복 제거). 일간보고 daily::{날짜}::{path} 조회용."""
+    db = get_db()
+    rows = db.execute(
+        "SELECT DISTINCT room FROM messages WHERE room LIKE ? ORDER BY room", (prefix + "%",)
+    )
+    return [r["room"] for r in rows]
+
+
 def list_messages(room: str, limit: int = 200) -> list[dict]:
     """방의 최근 글 목록(오래된→최신 순). 기본 200줄까지."""
     db = get_db()

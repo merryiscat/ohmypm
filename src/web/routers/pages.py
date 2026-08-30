@@ -163,6 +163,20 @@ _HTML = r"""<!doctype html>
   .pform input.grow{flex:1;min-width:120px}
   .pdet-h{font-size:11.5px;color:var(--muted);font-weight:700;margin:18px 0 6px;text-transform:uppercase;letter-spacing:.02em}
   .ptable .reg{color:var(--green);cursor:pointer;font-size:12px;font-weight:700}
+  .ptable .reg-cell select,.ptable .reg-cell input,.ptable .reg-cell button{font-size:12px;padding:5px 8px;border:1px solid var(--line);border-radius:6px;font-family:inherit;margin-right:5px}
+  .ptable .reg-cell .ireg-label{width:120px}
+  .ptable .reg-cell button{background:var(--green);color:#fff;border:none;cursor:pointer}
+  /* 일간보고: 왼쪽 날짜/프로젝트 목록 + 오른쪽 대화(PM 우/담당 좌) */
+  .daily-nav{width:260px;flex:0 0 260px;min-height:0;overflow-y:auto;background:var(--card);border:1px solid var(--line);border-radius:10px;padding:6px}
+  .dnav-date{font-weight:700;font-size:13px;padding:10px 10px 5px;border-top:1px solid var(--line);margin-top:4px}
+  .dnav-date:first-child{border-top:none;margin-top:0}
+  .dnav-proj{padding:7px 12px;font-size:12.5px;color:#3a3f47;cursor:pointer;border-radius:6px}
+  .dnav-proj:hover{background:#f1f3f6}
+  .dnav-proj.active{background:#e7f3ec;font-weight:600}
+  .daily-main{flex:1;min-width:0;min-height:0;display:flex;flex-direction:column;background:var(--card);border:1px solid var(--line);border-radius:10px;overflow:hidden}
+  .daily-h{padding:12px 16px;border-bottom:1px solid var(--line);font-weight:700;font-size:13.5px}
+  .daily-main .stream{flex:1;overflow-y:auto;padding:16px 18px;display:flex;flex-direction:column;gap:10px}
+  .msg.pm{align-self:flex-end;background:#eef2fb;border:1px solid #d3ddf3}
 </style></head><body>
 <div class="app">
   <aside>
@@ -170,7 +184,7 @@ _HTML = r"""<!doctype html>
     <nav>
       <div class="nav-item" data-nav="dashboard" onclick="go('#/dashboard')">대시보드</div>
       <div class="nav-item" data-nav="board" onclick="go('#/board')">게시판</div>
-      <div class="nav-item" data-nav="daily" onclick="go('#/chat/daily')">일간보고</div>
+      <div class="nav-item" data-nav="daily" onclick="go('#/daily')">일간보고</div>
       <div class="nav-item" data-nav="ports" onclick="go('#/ports')">포트</div>
     </nav>
     <div class="sec-label">프로젝트 룸</div>
@@ -222,6 +236,8 @@ let PROJECTS = [], ISSUES = [];        // 마지막 로드 캐시
 let pollTimer = null;                   // 채팅 자동 새로고침 타이머
 let CUR_ROOM = null;                    // 현재 열린 프로젝트 룸 path
 let CAL_YM = null;                      // 달력이 보여주는 {y, m} (m=0-based)
+let portEditing = false;                // 포트 인라인 등록 중이면 폴링 새로고침 멈춤
+let DAILY_DATA = [];                    // 일간보고 트리 캐시(날짜→프로젝트)
 
 // ── 데이터 로드 ─────────────────────────────────────────
 async function loadData(){
@@ -257,7 +273,7 @@ function renderSidebar(){
   // 사이드바 상단 nav 활성화 표시
   document.querySelectorAll('[data-nav]').forEach(el=>el.classList.remove('active'));
   const view = (cur.startsWith('#/board') || cur.startsWith('#/post')) ? 'board'
-             : cur.startsWith('#/chat/daily') ? 'daily'
+             : cur.startsWith('#/daily') ? 'daily'
              : cur.startsWith('#/ports') ? 'ports'
              : (cur.startsWith('#/room') ? null : 'dashboard');
   if(view) document.querySelector(`[data-nav="${view}"]`)?.classList.add('active');
@@ -468,10 +484,11 @@ function renderPorts(){
       `<button onclick="addPort()">등록</button></div>`;
   fillPorts();
   clearInterval(pollTimer);
-  pollTimer = setInterval(fillPorts, 5000);   // 점유 상태 실시간 갱신
+  pollTimer = setInterval(fillPorts, 8000);   // 점유 상태 갱신(편집 중이면 portEditing가 막음)
 }
 
 async function fillPorts(){
+  if(portEditing) return;   // 인라인 등록 중이면 새로고침으로 폼 날리지 않기
   let d = {rows:[], conflicts:[]};
   try{ d = await fetch('/api/ports').then(r=>r.json()); }catch(e){ return; }
   const box = document.getElementById('ports'); if(!box) return;
@@ -497,16 +514,73 @@ async function fillPorts(){
   if(det.length){
     html += '<div class="pdet-h">지금 떠 있는데 미등록 (개발 서버 자동 감지)</div>'+
       '<table class="ptable"><thead><tr><th>포트</th><th>프로세스</th><th></th></tr></thead><tbody>'+
-      det.map(x=>`<tr><td class="port">${x.port}</td><td>${esc(x.proc)} <span class="pid">#${x.pid}</span></td>`+
-        `<td><span class="reg" onclick="pickPort(${x.port})">＋ 등록</span></td></tr>`).join('')+
+      det.map(x=>`<tr data-port="${x.port}"><td class="port">${x.port}</td><td>${esc(x.proc)} <span class="pid">#${x.pid}</span></td>`+
+        `<td class="reg-cell"><span class="reg" onclick="inlineReg(${x.port}, this)">＋ 등록</span></td></tr>`).join('')+
       '</tbody></table>';
   }
   box.innerHTML = html;
 }
 
-function pickPort(port){
-  const el = document.getElementById('pf-port');
-  if(el){ el.value = port; el.scrollIntoView({block:'center'}); document.getElementById('pf-proj').focus(); }
+// 감지된 포트 행에서 바로 프로젝트 골라 등록(그 자리 인라인)
+function inlineReg(port, el){
+  portEditing = true;
+  const td = el.closest('td');
+  const opts = PROJECTS.map(p=>`<option value="${escAttr(p.path)}">${esc(p.name)}</option>`).join('');
+  td.innerHTML = `<select class="ireg-proj">${opts}</select>`+
+    `<input class="ireg-label" placeholder="용도(선택)">`+
+    `<button onclick="saveInlineReg(${port}, this)">저장</button>`+
+    `<span class="del" onclick="cancelInlineReg()">취소</span>`;
+  td.querySelector('.ireg-proj').focus();
+}
+async function saveInlineReg(port, btn){
+  const td = btn.closest('td');
+  const project = td.querySelector('.ireg-proj').value;
+  const label = td.querySelector('.ireg-label').value;
+  await fetch('/api/ports',{method:'POST',headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({project, port, label})});
+  portEditing = false;
+  fillPorts();   // 등록되면 위 '등록 포트' 표로 올라가고 감지 목록에서 빠짐
+}
+function cancelInlineReg(){ portEditing = false; fillPorts(); }
+
+// ── 일간보고 뷰(일자별 목록 → 프로젝트 진입, PM 오른쪽/담당 왼쪽) ──────────
+function renderDaily(){
+  setHeader('일간보고', {summary:false, actions:false});
+  document.getElementById('view').innerHTML =
+    '<div class="room-layout">'+
+      '<div class="daily-nav" id="daily-nav">불러오는 중…</div>'+
+      '<div class="daily-main" id="daily-convo"><div class="chat-empty">왼쪽에서 날짜·프로젝트를 골라 대화를 보세요</div></div>'+
+    '</div>';
+  clearInterval(pollTimer);
+  fillDailyNav();
+}
+
+async function fillDailyNav(){
+  try{ DAILY_DATA = await fetch('/api/daily').then(r=>r.json()); }catch(e){ DAILY_DATA = []; }
+  const nav = document.getElementById('daily-nav'); if(!nav) return;
+  if(!DAILY_DATA.length){ nav.innerHTML = '<div class="empty" style="padding:16px">아직 일간보고가 없습니다</div>'; return; }
+  nav.innerHTML = DAILY_DATA.map((d,di)=>
+    `<div class="dnav-date">${esc(d.date)}</div>`+
+    d.projects.map((p,pi)=>`<div class="dnav-proj" onclick="openDaily(${di},${pi},this)">${esc(p.name)}</div>`).join('')
+  ).join('');
+}
+
+async function openDaily(di, pi, el){
+  document.querySelectorAll('.dnav-proj').forEach(x=>x.classList.remove('active'));
+  el.classList.add('active');
+  const p = DAILY_DATA[di].projects[pi];
+  const box = document.getElementById('daily-convo');
+  box.innerHTML = '<div class="chat-empty">불러오는 중…</div>';
+  let msgs = [];
+  try{ msgs = await fetch('/api/messages?room='+encodeURIComponent(p.room)).then(r=>r.json()); }catch(e){}
+  const bubbles = msgs.length ? msgs.map(m=>{
+    const isPm = m.author === 'pm';
+    const ts = (m.created_at||'').slice(5,16);
+    return `<div class="msg ${isPm?'pm':'agent'}"><div class="who">${isPm?'PM':esc(p.name)+' 담당'}</div>`+
+      `<div class="md">${md(m.body)}</div><div class="ts">${esc(ts)}</div></div>`;
+  }).join('') : '<div class="chat-empty">대화 없음</div>';
+  box.innerHTML = `<div class="daily-h">${esc(p.name)} · ${esc(DAILY_DATA[di].date)}</div><div class="stream">${bubbles}</div>`;
+  const s = box.querySelector('.stream'); if(s) s.scrollTop = s.scrollHeight;
 }
 
 async function addPort(){
@@ -621,7 +695,9 @@ function route(){
   clearInterval(pollTimer);
   const h = decodeURIComponent(location.hash) || '#/dashboard';
   renderSidebar();
-  if(h.startsWith('#/ports')){
+  if(h.startsWith('#/daily')){
+    renderDaily();
+  } else if(h.startsWith('#/ports')){
     renderPorts();
   } else if(h.startsWith('#/post/')){
     renderPost(h.slice('#/post/'.length));

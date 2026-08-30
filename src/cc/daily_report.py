@@ -33,7 +33,12 @@ from src.db import board as board_db
 from src.db import issues as issues_db
 from src.db import messages as messages_db
 
-DAILY_ROOM = "daily"          # PM 전용 방(따로) — 사이드바 '일간보고'가 이 방을 본다
+DAILY_PREFIX = "daily::"       # 일간보고 대화 방 키: daily::{날짜}::{프로젝트path} (일자·프로젝트별 분리)
+
+
+def _daily_room(date: str, path: str) -> str:
+    return f"{DAILY_PREFIX}{date}::{path}"
+
 MAX_ROUNDS = 8                # 담당당 최대 왕복(안전 상한)
 CONCURRENCY = 6              # 동시 진행 프로젝트 수(headless 병렬)
 PM_TIMEOUT = 150
@@ -116,8 +121,12 @@ def _agent_call(name: str, path: str, question: str, history: str) -> str:
     return (r or "").strip() or "(담당 응답 없음)"
 
 
-def report_one_project(path: str, name: str, max_rounds: int = MAX_ROUNDS) -> dict:
-    """한 프로젝트의 PM↔담당 1:1 일간 점검. PM 전용 방에 대화 저장. 결과 dict 반환."""
+def report_one_project(path: str, name: str, date: str, max_rounds: int = MAX_ROUNDS) -> dict:
+    """한 프로젝트의 PM↔담당 1:1 일간 점검. (날짜·프로젝트)별 방에 대화 저장. 결과 dict 반환.
+
+    저장 방 = daily::{date}::{path}. PM 발화 author='pm'(화면 오른쪽), 담당 author='agent'(왼쪽).
+    """
+    room = _daily_room(date, path)
     facts = build_facts(path)
     turns: list[tuple[str, str]] = []   # (PM 질문, 담당 답)
     summary = ""
@@ -128,13 +137,12 @@ def report_one_project(path: str, name: str, max_rounds: int = MAX_ROUNDS) -> di
         pm = _pm_call(name, facts, hist)
         summary = pm["summary"] or summary
         headline = pm["headline"] or headline
-        # PM 발화 저장(요약 + 질문)
         pm_body = summary + (f"\n▸ 담당에게: {pm['ask']}" if pm["ask"] and not pm["done"] else "")
-        messages_db.add_message(DAILY_ROOM, "pm", f"[{name}] {pm_body}".strip())
+        messages_db.add_message(room, "pm", pm_body.strip())
         if pm["done"] or not pm["ask"]:
             break
         ans = _agent_call(name, path, pm["ask"], hist)
-        messages_db.add_message(DAILY_ROOM, name, ans)
+        messages_db.add_message(room, "agent", ans)
         turns.append((pm["ask"], ans))
     return {"name": name, "path": path, "rounds": rounds, "summary": summary or "(요약 없음)",
             "headline": headline, "skipped": False}
@@ -159,7 +167,6 @@ def run_daily_report(
         wanted = set(paths)
         projects = [p for p in projects if p["path"] in wanted]
     date = datetime.now().strftime("%Y-%m-%d")
-    messages_db.add_message(DAILY_ROOM, "pm", f"━━ {date} 일간보고 시작 (대상 {len(projects)}개) ━━")
 
     done_results: list[dict] = []
     skipped: list[str] = []
@@ -168,7 +175,7 @@ def run_daily_report(
         if deadline_ts and time.time() > deadline_ts:
             return {"name": p["name"], "path": p["path"], "skipped": True}
         try:
-            return report_one_project(p["path"], p["name"], max_rounds)
+            return report_one_project(p["path"], p["name"], date, max_rounds)
         except Exception as e:  # 한 프로젝트 실패가 전체를 안 멈춤
             logger.warning(f"[일간보고] {p['name']} 실패: {e}")
             return {"name": p["name"], "path": p["path"], "skipped": False,
@@ -187,7 +194,6 @@ def run_daily_report(
             body=r.get("summary", ""), project=r.get("path"), day=date,
         )
     telegram_text = _assemble_telegram(date, done_results, skipped)
-    messages_db.add_message(DAILY_ROOM, "pm", f"━━ {date} 일간보고 종료 (완료 {len(done_results)}·미처리 {len(skipped)}) ━━")
     sent = False
     if notify:
         from src.bot.telegram_bot import send_telegram_sync

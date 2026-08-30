@@ -92,6 +92,28 @@ def post_message(msg: PostMessage, background: BackgroundTasks) -> dict:
     return {"ok": True, "message": row}
 
 
+@router.get("/daily")
+def get_daily() -> list[dict]:
+    """일간보고 트리 — [{date, projects:[{project, name, room}]}], 최신 날짜 먼저.
+
+    방 키 daily::{date}::{path} 를 날짜·프로젝트로 묶는다. 대화는 /api/messages?room=<room>로.
+    """
+    names = {p["path"]: p["name"] for p in projects_db.list_projects(enabled_only=False)}
+    by_date: dict[str, list[dict]] = {}
+    for room in messages_db.list_rooms_like("daily::"):
+        try:
+            _, date, path = room.split("::", 2)
+        except ValueError:
+            continue
+        by_date.setdefault(date, []).append(
+            {"project": path, "name": names.get(path, path), "room": room}
+        )
+    return [
+        {"date": d, "projects": sorted(by_date[d], key=lambda x: x["name"].lower())}
+        for d in sorted(by_date, reverse=True)
+    ]
+
+
 # ── 포트 레지스트리 (1단계: 표시·충돌 감지, 읽기 전용) ──────────────────────
 @router.get("/ports")
 def get_ports() -> dict:
