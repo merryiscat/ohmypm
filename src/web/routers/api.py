@@ -6,6 +6,7 @@ from pydantic import BaseModel
 from src.db import board as board_db
 from src.db import issues as issues_db
 from src.db import messages as messages_db
+from src.db import ports as ports_db
 from src.db import projects as projects_db
 
 router = APIRouter(prefix="/api")
@@ -89,6 +90,52 @@ def post_message(msg: PostMessage, background: BackgroundTasks) -> dict:
 
             background.add_task(reply_in_room, proj["path"], proj["name"])
     return {"ok": True, "message": row}
+
+
+# ── 포트 레지스트리 (1단계: 표시·충돌 감지, 읽기 전용) ──────────────────────
+@router.get("/ports")
+def get_ports() -> dict:
+    """등록 포트 + 실시간 점유 상태(UP/PID) + 충돌(같은 포트 여러 프로젝트)."""
+    from src.portscan import listening_ports
+
+    regs = ports_db.list_ports()
+    live = listening_ports()
+    names = {p["path"]: p["name"] for p in projects_db.list_projects(enabled_only=False)}
+    rows, by_port = [], {}
+    for r in regs:
+        info = live.get(r["port"])
+        rows.append({
+            **r, "name": names.get(r["project"], r["project"]),
+            "up": info is not None,
+            "pid": info["pid"] if info else None,
+            "proc": info["proc"] if info else None,
+        })
+        by_port.setdefault(r["port"], []).append(names.get(r["project"], r["project"]))
+    conflicts = [{"port": p, "projects": ns} for p, ns in by_port.items() if len(ns) > 1]
+    return {"rows": rows, "conflicts": conflicts}
+
+
+class PortReg(BaseModel):
+    project: str          # 프로젝트 path
+    port: int
+    label: str = ""
+    start_cmd: str = ""
+
+
+@router.post("/ports")
+def register_port(reg: PortReg) -> dict:
+    """포트 등록/갱신."""
+    if not (0 < reg.port < 65536):
+        return {"ok": False, "error": "포트 범위 오류"}
+    row = ports_db.register(reg.project, reg.port, reg.label.strip(), reg.start_cmd.strip())
+    return {"ok": True, "port": row}
+
+
+@router.delete("/ports/{port_id}")
+def delete_port(port_id: int) -> dict:
+    """포트 등록 삭제."""
+    ports_db.delete(port_id)
+    return {"ok": True}
 
 
 class DailyReportReq(BaseModel):

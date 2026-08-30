@@ -148,6 +148,19 @@ _HTML = r"""<!doctype html>
   .cmt-form{display:flex;gap:8px;margin-top:12px}
   .cmt-form textarea{flex:1;padding:8px 11px;border:1px solid var(--line);border-radius:8px;font-family:inherit;font-size:13px;resize:vertical;min-height:38px}
   .cmt.user{background:#e7f3ec;border:1px solid #cfe6da}
+  /* 포트 레지스트리 */
+  .pconf{background:#fdeceb;color:var(--red);border-radius:8px;padding:9px 12px;margin-bottom:10px;font-size:13px;font-weight:600;max-width:840px}
+  .ptable{border-collapse:collapse;width:100%;max-width:840px;background:var(--card);border:1px solid var(--line);border-radius:10px;overflow:hidden}
+  .ptable th{text-align:left;font-size:11.5px;color:var(--muted);text-transform:uppercase;padding:9px 12px;border-bottom:1px solid var(--line);font-weight:700}
+  .ptable td{padding:9px 12px;border-top:1px solid #f2f3f5;font-size:13px}
+  .ptable td.port{font-weight:700}
+  .ptable .up{color:var(--green);font-weight:700} .ptable .down{color:var(--muted)}
+  .ptable .pid{color:var(--muted);font-size:11.5px}
+  .ptable .del{color:var(--red);cursor:pointer;font-size:12px}
+  .pform{display:flex;gap:8px;align-items:center;margin-top:16px;flex-wrap:wrap;max-width:840px}
+  .pform-h{font-size:12px;color:var(--muted);font-weight:700;width:100%}
+  .pform select,.pform input{padding:8px 10px;border:1px solid var(--line);border-radius:8px;font-size:13px;font-family:inherit}
+  .pform input.grow{flex:1;min-width:120px}
 </style></head><body>
 <div class="app">
   <aside>
@@ -156,6 +169,7 @@ _HTML = r"""<!doctype html>
       <div class="nav-item" data-nav="dashboard" onclick="go('#/dashboard')">대시보드</div>
       <div class="nav-item" data-nav="board" onclick="go('#/board')">게시판</div>
       <div class="nav-item" data-nav="daily" onclick="go('#/chat/daily')">일간보고</div>
+      <div class="nav-item" data-nav="ports" onclick="go('#/ports')">포트</div>
     </nav>
     <div class="sec-label">프로젝트 룸</div>
     <div class="rooms" id="rooms"></div>
@@ -242,6 +256,7 @@ function renderSidebar(){
   document.querySelectorAll('[data-nav]').forEach(el=>el.classList.remove('active'));
   const view = (cur.startsWith('#/board') || cur.startsWith('#/post')) ? 'board'
              : cur.startsWith('#/chat/daily') ? 'daily'
+             : cur.startsWith('#/ports') ? 'ports'
              : (cur.startsWith('#/room') ? null : 'dashboard');
   if(view) document.querySelector(`[data-nav="${view}"]`)?.classList.add('active');
 }
@@ -437,6 +452,62 @@ async function postComment(id){
   fillPost(id);
 }
 
+// ── 포트 레지스트리 뷰(등록 포트 + 실시간 상태 + 충돌) ────────────
+function renderPorts(){
+  setHeader('포트', {summary:false, actions:false});
+  const opts = PROJECTS.map(p=>`<option value="${escAttr(p.path)}">${esc(p.name)}</option>`).join('');
+  document.getElementById('view').innerHTML =
+    '<div class="note-line" style="padding-bottom:12px">프로젝트가 점유하는 로컬 포트를 등록해 지금 떠 있는지·충돌 여부를 봅니다. 실행 관리(start/stop)는 다음 단계.</div>'+
+    '<div id="ports">불러오는 중…</div>'+
+    `<div class="pform"><div class="pform-h">포트 등록</div>`+
+      `<select id="pf-proj">${opts}</select>`+
+      `<input id="pf-port" type="number" placeholder="포트(예: 8000)" style="width:150px">`+
+      `<input id="pf-label" class="grow" placeholder="용도(예: 웹 대시보드)">`+
+      `<button onclick="addPort()">등록</button></div>`;
+  fillPorts();
+  clearInterval(pollTimer);
+  pollTimer = setInterval(fillPorts, 5000);   // 점유 상태 실시간 갱신
+}
+
+async function fillPorts(){
+  let d = {rows:[], conflicts:[]};
+  try{ d = await fetch('/api/ports').then(r=>r.json()); }catch(e){ return; }
+  const box = document.getElementById('ports'); if(!box) return;
+  let html = '';
+  if(d.conflicts && d.conflicts.length){
+    html += '<div class="pconf">⚠ 포트 충돌 — '+
+      d.conflicts.map(c=>`${c.port}: ${esc(c.projects.join(', '))}`).join(' · ')+'</div>';
+  }
+  if(!d.rows.length){
+    box.innerHTML = html + '<div class="empty">등록된 포트가 없습니다 — 아래에서 추가하세요</div>';
+    return;
+  }
+  html += '<table class="ptable"><thead><tr><th>프로젝트</th><th>포트</th><th>용도</th><th>상태</th><th></th></tr></thead><tbody>'+
+    d.rows.map(r=>{
+      const st = r.up
+        ? `<span class="up">● 떠 있음</span> <span class="pid">${esc(r.proc||'')} #${r.pid}</span>`
+        : '<span class="down">○ 멈춤</span>';
+      return `<tr><td>${esc(r.name)}</td><td class="port">${r.port}</td><td>${esc(r.label||'')}</td>`+
+        `<td>${st}</td><td><span class="del" onclick="delPort(${r.id})">삭제</span></td></tr>`;
+    }).join('')+'</tbody></table>';
+  box.innerHTML = html;
+}
+
+async function addPort(){
+  const project = document.getElementById('pf-proj').value;
+  const port = parseInt(document.getElementById('pf-port').value, 10);
+  const label = document.getElementById('pf-label').value;
+  if(!port) return;
+  await fetch('/api/ports',{method:'POST',headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({project, port, label})});
+  document.getElementById('pf-port').value = ''; document.getElementById('pf-label').value = '';
+  fillPorts();
+}
+async function delPort(id){
+  await fetch('/api/ports/'+id,{method:'DELETE'});
+  fillPorts();
+}
+
 // ── 프로젝트 룸 뷰(왼쪽 달력+칸반 / 오른쪽 담당 에이전트 채팅) ──
 const KCOLS = [['open','할일'],['consulting','진행중'],['resolved','완료']];
 const KORDER = ['open','consulting','resolved'];   // 열 순서(‹ › 이동)
@@ -534,7 +605,9 @@ function route(){
   clearInterval(pollTimer);
   const h = decodeURIComponent(location.hash) || '#/dashboard';
   renderSidebar();
-  if(h.startsWith('#/post/')){
+  if(h.startsWith('#/ports')){
+    renderPorts();
+  } else if(h.startsWith('#/post/')){
     renderPost(h.slice('#/post/'.length));
   } else if(h.startsWith('#/board')){
     renderBoard();

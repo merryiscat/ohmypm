@@ -73,3 +73,14 @@ CREATE TABLE IF NOT EXISTS comments (
 );
 CREATE INDEX IF NOT EXISTS idx_posts_board ON posts(board, id);
 CREATE INDEX IF NOT EXISTS idx_comments_post ON comments(post_id, id);
+
+-- 7) 포트 레지스트리 — 프로젝트가 점유하는 로컬 포트 등록(표시·충돌 감지·실행 관리).
+--    start_cmd는 2단계 실행 관리(start)용 화이트리스트 명령(등록된 것만 실행).
+CREATE TABLE IF NOT EXISTS ports (
+    id         INTEGER PRIMARY KEY AUTOINCREMENT,
+    project    TEXT NOT NULL,     -- 프로젝트 path
+    port       INTEGER NOT NULL,
+    label      TEXT,              -- 예: '웹 대시보드', 'API'
+    start_cmd  TEXT,              -- 실행 관리용 등록 명령(없으면 start 불가)
+    created_at TEXT DEFAULT (datetime('now'))
+);
