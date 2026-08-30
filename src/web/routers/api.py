@@ -3,6 +3,7 @@
 from fastapi import APIRouter, BackgroundTasks
 from pydantic import BaseModel
 
+from src.db import board as board_db
 from src.db import issues as issues_db
 from src.db import messages as messages_db
 from src.db import projects as projects_db
@@ -109,4 +110,24 @@ def trigger_daily_report(background: BackgroundTasks, cfg: DailyReportReq | None
         max_rounds=cfg.max_rounds,
         notify=cfg.notify,
     )
+    return {"ok": True, "started": True}
+
+
+@router.get("/posts")
+def get_posts(board: str = board_db.DAILY_BOARD) -> list[dict]:
+    """게시판 글 목록(각 글에 comments 배열 포함). 화면 '게시판'이 이걸 그린다."""
+    return board_db.list_posts(board)
+
+
+class BoardDiscussionReq(BaseModel):
+    paths: list[str] | None = None
+
+
+@router.post("/board-discussion")
+def trigger_board_discussion(background: BackgroundTasks, cfg: BoardDiscussionReq | None = None) -> dict:
+    """게시판 토론(4단계) 수동 트리거 — 담당들이 관심 있는 글에 댓글. posts/comments에 쌓인다."""
+    cfg = cfg or BoardDiscussionReq()
+    from src.cc.daily_report import run_board_discussion
+
+    background.add_task(run_board_discussion, paths=cfg.paths)
     return {"ok": True, "started": True}

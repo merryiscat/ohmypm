@@ -32,6 +32,10 @@ class Settings(BaseSettings):
     # --- 스케줄 ---
     scan_hour: int = 8       # 매일 정시 스캔 시각(24시간)
     heartbeat_sec: int = 300  # 이슈 감지 heartbeat 주기(초)
+    # 일간보고(멀티에이전트) — 01:00 시작, 보고 소프트마감 03:00, 게시판 토론 마감 04:00
+    daily_report_hour: int = 1
+    daily_soft_deadline_hour: int = 3
+    discussion_until_hour: int = 4
 
     # --- 텔레그램 (비우면 알림 no-op) ---
     telegram_bot_token: str = ""

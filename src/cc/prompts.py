@@ -77,6 +77,30 @@ def daily_agent_answer(project_name: str, project_path: str, question: str, hist
     )
 
 
+# ── 게시판 토론 (4단계) — 담당이 관심 있는 글에만 댓글 ──────────────────────
+# 비대화형 JSON API. 담당은 게시판 전체를 읽고, 자기 프로젝트와 관련/도움될 글에만 댓글을 단다.
+BOARD_SYSTEM = (
+    "너는 ohmyPM의 프로젝트 담당 에이전트다. 일간보고 뒤 담당들이 게시판에 올라온 글을 읽고 "
+    "**관심 있는 글에만** 댓글을 다는 시간이다. 너는 비대화형 JSON API로 실행된다 — 최종 출력은 "
+    "**JSON 배열 하나**뿐이다(인사·설명·마크다운 금지). 형식: "
+    '[{"post_id": 글번호, "comment": "댓글 내용(2~3문장)"}]. '
+    "네 프로젝트와 **관련 있거나 서로 도움될 글에만** 단다. 관련 없으면 넣지 마라 — 없으면 []. "
+    "네 프로젝트 자신의 글에는 댓글하지 않는다. 읽기 전용(파일 수정·명령 금지)."
+)
+
+
+def board_comment(project_name: str, project_path: str, board_text: str) -> str:
+    """담당이 게시판을 읽고 관심 글에 댓글을 다는 프롬프트. board_text = 글 목록(id·작성자·요약)."""
+    return (
+        f"너는 프로젝트 '{project_name}'의 담당 에이전트다. 폴더가 열려 있다: {project_path}\n"
+        "오늘 일간보고 게시판의 글 목록이다:\n\n"
+        f"{board_text}\n\n"
+        "네 프로젝트 관점에서 **관련 있거나 도움될 글에만** 댓글을 달아라. 필요하면 네 프로젝트의 "
+        "CLAUDE.md·docs를 근거로 삼아도 된다. 네 프로젝트 자신의 글은 제외. 관심 글이 없으면 빈 배열. "
+        "출력은 JSON 배열 하나만: [{\"post_id\": N, \"comment\": \"...\"}]"
+    )
+
+
 def summarize_unresolved(project_name: str, items: list[str]) -> str:
     """미해결 항목 요약 + 가장 급한 것 짚기 (읽기 전용 태스크)."""
     body = "\n".join(f"- {t}" for t in items)

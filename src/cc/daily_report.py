@@ -19,11 +19,19 @@ from loguru import logger
 
 from src.cc.client import run_headless
 from src.cc.permissions import tools_for
-from src.cc.prompts import PM_SYSTEM, ROOM_SYSTEM, daily_agent_answer, pm_turn
+from src.cc.prompts import (
+    BOARD_SYSTEM,
+    PM_SYSTEM,
+    ROOM_SYSTEM,
+    board_comment,
+    daily_agent_answer,
+    pm_turn,
+)
 from src.cc.room_agent import _neutral_cwd
+from src.config.settings import settings
+from src.db import board as board_db
 from src.db import issues as issues_db
 from src.db import messages as messages_db
-from src.db import projects as projects_db
 
 DAILY_ROOM = "daily"          # PM 전용 방(따로) — 사이드바 '일간보고'가 이 방을 본다
 MAX_ROUNDS = 8                # 담당당 최대 왕복(안전 상한)
@@ -31,6 +39,7 @@ CONCURRENCY = 6              # 동시 진행 프로젝트 수(headless 병렬)
 PM_TIMEOUT = 150
 AGENT_TIMEOUT = 200
 _OBJ_RE = re.compile(r"\{.*\}", re.DOTALL)   # PM 응답에서 첫 JSON 객체 추출
+_ARR_RE = re.compile(r"\[.*\]", re.DOTALL)   # 게시판 댓글 응답에서 JSON 배열 추출
 
 
 def _cancelled(title: str) -> bool:
@@ -167,6 +176,12 @@ def run_daily_report(
             (skipped.append(res["name"]) if res.get("skipped") else done_results.append(res))
 
     logger.info(f"[일간보고] 완료 {len(done_results)}개 · 미처리 {len(skipped)}개")
+    # 각 프로젝트 요약을 게시판 글로 올린다 — 이어지는 게시판 토론(4단계) 댓글의 대상
+    for r in done_results:
+        board_db.add_post(
+            author=r["name"], title=f"{r['name']} 일간보고",
+            body=r.get("summary", ""), project=r.get("path"), day=date,
+        )
     telegram_text = _assemble_telegram(date, done_results, skipped)
     messages_db.add_message(DAILY_ROOM, "pm", f"━━ {date} 일간보고 종료 (완료 {len(done_results)}·미처리 {len(skipped)}) ━━")
     sent = False
@@ -196,3 +211,91 @@ def _assemble_telegram(date: str, results: list[dict], skipped: list[str]) -> st
         lines.append("─────")
         lines.append(f"⚠ 미처리 {len(skipped)}개(마감 초과): {', '.join(skipped)}")
     return "\n".join(lines)
+
+
+# ── 게시판 토론 (4단계) — 담당이 관심 있는 글에만 댓글 ───────────────────────
+BOARD_TIMEOUT = 150
+
+
+def _parse_comments(result: str | None, valid_ids: set[int]) -> list[dict]:
+    """담당 응답에서 [{post_id, comment}] 추출. 유효한 글 번호만 통과."""
+    if not result:
+        return []
+    m = _ARR_RE.search(result)
+    if not m:
+        return []
+    try:
+        data = json.loads(m.group(0))
+    except json.JSONDecodeError:
+        return []
+    out = []
+    for it in data if isinstance(data, list) else []:
+        try:
+            pid = int(it["post_id"])
+            c = (it.get("comment") or "").strip()
+            if pid in valid_ids and c:
+                out.append({"post_id": pid, "comment": c})
+        except (KeyError, ValueError, TypeError):
+            continue
+    return out
+
+
+def run_board_discussion(paths: list[str] | None = None, deadline_ts: float | None = None) -> dict:
+    """게시판 토론(4단계) — 각 담당이 오늘 게시판 글을 읽고 **관심 있는 글에만** 댓글.
+
+    한 담당당 headless 1콜(게시판 전체를 주고 [{post_id,comment}] 배열을 받음) → 코드가 댓글 삽입.
+    자기 프로젝트 글에는 안 단다. 마감(deadline_ts) 넘겨 시작하는 담당은 스킵.
+    """
+    from src.scan.discover import discover_projects
+
+    posts = board_db.list_posts(board_db.DAILY_BOARD)
+    if not posts:
+        return {"commented": 0, "note": "게시판에 글 없음"}
+    valid_ids = {p["id"] for p in posts}
+    board_text = "\n".join(
+        f"글#{p['id']} [{p['author']}] {p['title']}: {(p['body'] or '')[:220]}" for p in posts
+    )
+    own_post_ids = {p["project"]: p["id"] for p in posts if p.get("project")}
+
+    projects = discover_projects()
+    if paths:
+        wanted = set(paths)
+        projects = [p for p in projects if p["path"] in wanted]
+    allowed, disallowed = tools_for("daily_agent")
+
+    commented = 0
+    for p in projects:
+        if deadline_ts and time.time() > deadline_ts:
+            break
+        out = run_headless(
+            prompt=board_comment(p["name"], p["path"], board_text),
+            cwd=_neutral_cwd(),
+            allowed_tools=allowed,
+            disallowed_tools=disallowed,
+            timeout=BOARD_TIMEOUT,
+            append_system_prompt=BOARD_SYSTEM,
+            add_dirs=[p["path"]],
+        )
+        own = own_post_ids.get(p["path"])
+        for it in _parse_comments(out, valid_ids):
+            if it["post_id"] == own:      # 자기 글엔 안 단다
+                continue
+            board_db.add_comment(it["post_id"], p["name"], it["comment"])
+            commented += 1
+    logger.info(f"[게시판] 댓글 {commented}개 작성")
+    return {"commented": commented}
+
+
+def run_nightly() -> dict:
+    """01:00 cron 진입점 — 일간보고(소프트마감 03시) → 자유대화(마감 04시)를 잇는다.
+
+    headless 블로킹이라 스케줄러는 이걸 asyncio.to_thread로 돌린다(루프 안 막게).
+    """
+    now = datetime.now()
+
+    def _at(hour: int) -> float:
+        return now.replace(hour=hour, minute=0, second=0, microsecond=0).timestamp()
+
+    report = run_daily_report(deadline_ts=_at(settings.daily_soft_deadline_hour), notify=True)
+    board = run_board_discussion(deadline_ts=_at(settings.discussion_until_hour))
+    return {"report": report, "board": board}

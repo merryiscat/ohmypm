@@ -51,3 +51,25 @@ CREATE TABLE IF NOT EXISTS messages (
     created_at TEXT DEFAULT (datetime('now'))
 );
 CREATE INDEX IF NOT EXISTS idx_messages_room ON messages(room, id);
+
+-- 6) 게시판 — 글(post) + 댓글(comment). 자유대화를 게시판 성격으로(글 올리고 관심 글에 댓글).
+--    글 = 일간보고에서 나온 각 프로젝트 요약. 댓글 = 다른 담당이 관심 있는 글에 남김.
+CREATE TABLE IF NOT EXISTS posts (
+    id         INTEGER PRIMARY KEY AUTOINCREMENT,
+    board      TEXT NOT NULL DEFAULT 'daily',  -- 게시판 키(지금은 'daily' 하나)
+    project    TEXT,                           -- 이 글의 대상 프로젝트 path(있으면)
+    author     TEXT NOT NULL,                  -- 글쓴이(보통 프로젝트명 or 'pm')
+    title      TEXT NOT NULL,
+    body       TEXT NOT NULL,
+    day        TEXT,                           -- 논리적 날짜(YYYY-MM-DD) — 그날 글 묶기
+    created_at TEXT DEFAULT (datetime('now'))
+);
+CREATE TABLE IF NOT EXISTS comments (
+    id         INTEGER PRIMARY KEY AUTOINCREMENT,
+    post_id    INTEGER NOT NULL,
+    author     TEXT NOT NULL,
+    body       TEXT NOT NULL,
+    created_at TEXT DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_posts_board ON posts(board, id);
+CREATE INDEX IF NOT EXISTS idx_comments_post ON comments(post_id, id);

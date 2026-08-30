@@ -102,7 +102,7 @@ _HTML = r"""<!doctype html>
   .cal-h button{padding:2px 10px;background:#f1f3f6;color:var(--ink);border:1px solid var(--line)}
   .cal-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:3px}
   .cal-grid .dow{font-size:10.5px;color:var(--muted);text-align:center;padding:2px}
-  .cal-cell{min-height:46px;border:1px solid #eef0f2;border-radius:6px;padding:3px}
+  .cal-cell{min-height:46px;min-width:0;overflow:hidden;border:1px solid #eef0f2;border-radius:6px;padding:3px}
   .cal-cell.out{background:#fafbfc}
   .cal-cell.today{border-color:var(--green);border-width:2px}
   .cal-cell .dd{font-size:10.5px;color:var(--muted)}
@@ -117,13 +117,23 @@ _HTML = r"""<!doctype html>
   .kcard .mv{display:flex;gap:6px;margin-top:7px}
   .kcard .mv button{padding:1px 9px;font-size:12px;background:#f1f3f6;color:var(--ink);border:1px solid var(--line);border-radius:5px}
   .kcol .col-empty{color:var(--muted);font-size:12px;padding:8px 4px}
+  /* 게시판(글+댓글) */
+  .post{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:14px;margin-bottom:12px;max-width:920px}
+  .post-h{display:flex;align-items:center;gap:10px;margin-bottom:6px}
+  .post-title{font-weight:700;font-size:14px}
+  .post-day{color:var(--muted);font-size:11.5px;margin-left:auto}
+  .post-body{font-size:13px;color:#3a3f47;line-height:1.5;white-space:pre-wrap;margin-bottom:10px}
+  .cmts{border-top:1px solid #f2f3f5;padding-top:8px;display:flex;flex-direction:column;gap:6px}
+  .cmt{font-size:12.5px;color:#3a3f47;line-height:1.45;background:#f7f8fa;border-radius:6px;padding:6px 9px}
+  .cmt-who{font-weight:700;color:var(--green);margin-right:5px}
+  .cmt.none{color:var(--muted);background:none;padding:2px 0;font-style:italic}
 </style></head><body>
 <div class="app">
   <aside>
     <div class="brand">ohmyPM</div>
     <nav>
       <div class="nav-item" data-nav="dashboard" onclick="go('#/dashboard')">대시보드</div>
-      <div class="nav-item" data-nav="chat" onclick="go('#/chat/global')">전체 채팅방 <span class="cnt" id="nav-chat-cnt" hidden></span></div>
+      <div class="nav-item" data-nav="board" onclick="go('#/board')">게시판</div>
       <div class="nav-item" data-nav="daily" onclick="go('#/chat/daily')">일간보고</div>
     </nav>
     <div class="sec-label">프로젝트 룸</div>
@@ -193,8 +203,8 @@ function renderSidebar(){
   }).join('') || '<div style="color:#7a808b;font-size:12px;padding:8px 18px">스캔을 눌러보세요</div>';
   // 사이드바 상단 nav 활성화 표시
   document.querySelectorAll('[data-nav]').forEach(el=>el.classList.remove('active'));
-  const view = cur.startsWith('#/chat/daily') ? 'daily'
-             : cur.startsWith('#/chat') ? 'chat'
+  const view = cur.startsWith('#/board') ? 'board'
+             : cur.startsWith('#/chat/daily') ? 'daily'
              : (cur.startsWith('#/room') ? null : 'dashboard');
   if(view) document.querySelector(`[data-nav="${view}"]`)?.classList.add('active');
 }
@@ -319,6 +329,38 @@ async function sendMsg(room, agentRoom){
   await loadMessages(room, false, agentRoom);
 }
 
+// ── 게시판 뷰(글 + 댓글) ───────────────────────────────────
+function renderBoard(){
+  setHeader('게시판', {summary:false, actions:false});
+  document.getElementById('view').innerHTML =
+    '<div class="note-line" style="padding-bottom:12px">일간보고에서 올라온 프로젝트별 글에, 담당 에이전트들이 관심 있는 곳에 댓글을 답니다</div>'+
+    '<div id="board">불러오는 중…</div>';
+  fillBoard();
+  clearInterval(pollTimer);
+  pollTimer = setInterval(fillBoard, 5000);   // 토론 진행 중 댓글이 실시간으로 붙게
+}
+
+async function fillBoard(){
+  let posts = [];
+  try{ posts = await fetch('/api/posts').then(r=>r.json()); }catch(e){ return; }
+  const box = document.getElementById('board');
+  if(!box) return;
+  if(!posts.length){
+    box.innerHTML = '<div class="empty">아직 글이 없습니다 — 일간보고가 돌면 프로젝트별 글이 올라옵니다</div>';
+    return;
+  }
+  box.innerHTML = posts.map(p=>{
+    const cs = (p.comments||[]).map(c=>
+      `<div class="cmt"><span class="cmt-who">${esc(c.author)}</span>${esc(c.body)}</div>`
+    ).join('') || '<div class="cmt none">아직 댓글 없음</div>';
+    const day = (p.day || p.created_at || '').slice(0,10);
+    return `<div class="post"><div class="post-h"><span class="post-title">${esc(p.title)}</span>`+
+      `<span class="post-day">${esc(day)}</span></div>`+
+      `<div class="post-body">${esc(p.body)}</div>`+
+      `<div class="cmts">${cs}</div></div>`;
+  }).join('');
+}
+
 // ── 프로젝트 룸 뷰(왼쪽 달력+칸반 / 오른쪽 담당 에이전트 채팅) ──
 const KCOLS = [['open','할일'],['consulting','진행중'],['resolved','완료']];
 const KORDER = ['open','consulting','resolved'];   // 열 순서(‹ › 이동)
@@ -416,10 +458,12 @@ function route(){
   clearInterval(pollTimer);
   const h = decodeURIComponent(location.hash) || '#/dashboard';
   renderSidebar();
-  if(h.startsWith('#/chat/')){
+  if(h.startsWith('#/board')){
+    renderBoard();
+  } else if(h.startsWith('#/chat/')){
     const room = h.slice('#/chat/'.length);
     if(room === 'daily') renderChat('daily', '일간보고', '매일 새벽 PM과 각 담당 에이전트의 일간보고 대화 기록');
-    else renderChat('global', '전체 채팅방', '에이전트와 사용자가 함께 쓰는 방 — 스캔·판정 결과 공유, 지시');
+    else renderChat('global', '전체 채팅방', '에이전트와 사용자가 함께 쓰는 방');
   } else if(h.startsWith('#/room/')){
     renderRoom(h.slice('#/room/'.length));
   } else {
