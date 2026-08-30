@@ -129,6 +129,58 @@ def get_daily() -> list[dict]:
     ]
 
 
+# ── 전문가 에이전트 (ohmyPM 상주, 웹 지식수집 + PM 자문) ────────────────────
+@router.get("/experts")
+def get_experts() -> list[dict]:
+    """사내 전문가 명부 + 위키 상태."""
+    from src.cc import expert as ex
+
+    out = []
+    for domain, meta in ex.EXPERTS.items():
+        wiki = ex.read_wiki(domain)
+        out.append({"domain": domain, "name": meta["name"], "topic": meta["topic"],
+                    "wiki_chars": len(wiki)})
+    return out
+
+
+@router.get("/experts/{domain}/wiki")
+def get_expert_wiki(domain: str) -> dict:
+    """전문가 지식 위키 본문."""
+    from src.cc import expert as ex
+
+    return {"domain": domain, "wiki": ex.read_wiki(domain)}
+
+
+@router.post("/experts/{domain}/collect")
+def collect_expert(domain: str, background: BackgroundTasks) -> dict:
+    """전문가가 웹으로 최신 지식을 수집해 위키 갱신(백그라운드)."""
+    from src.cc.expert import EXPERTS, collect_knowledge
+
+    if domain not in EXPERTS:
+        return {"ok": False, "error": "unknown expert"}
+    background.add_task(collect_knowledge, domain)
+    return {"ok": True, "started": True}
+
+
+class ExpertQ(BaseModel):
+    question: str
+
+
+@router.post("/experts/{domain}/ask")
+def ask_expert_api(domain: str, q: ExpertQ, background: BackgroundTasks) -> dict:
+    """전문가에게 질문 — 질문은 즉시 방에 기록, 답변은 백그라운드(위키+웹)로."""
+    from src.cc.expert import EXPERTS, ask_expert, expert_room
+
+    if domain not in EXPERTS:
+        return {"ok": False, "error": "unknown expert"}
+    body = q.question.strip()
+    if not body:
+        return {"ok": False, "error": "빈 질문"}
+    messages_db.add_message(expert_room(domain), "user", body)
+    background.add_task(ask_expert, domain, body)
+    return {"ok": True, "started": True}
+
+
 # ── 포트 레지스트리 (1단계: 표시·충돌 감지, 읽기 전용) ──────────────────────
 @router.get("/ports")
 def get_ports() -> dict:

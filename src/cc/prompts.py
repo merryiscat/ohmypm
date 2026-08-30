@@ -162,6 +162,37 @@ def board_comment(project_name: str, project_path: str, board_text: str) -> str:
     )
 
 
+# ── 전문가 에이전트 (ohmyPM 상주, 웹으로 지식 수집 + PM 자문) ──────────────────
+EXPERT_SYSTEM = (
+    "너는 ohmyPM에 상주하는 특정 도메인 '전문가 에이전트'다. 웹(WebSearch/WebFetch)으로 최신 "
+    "지식을 조사하고, 근거(출처 URL)를 갖고 한국어로 정확히 답한다. 추측은 추측이라 밝힌다. "
+    "읽기 전용 — 파일을 직접 고치지 않는다(정리된 지식은 텍스트로만 낸다)."
+)
+
+
+def expert_collect(topic: str, existing: str) -> str:
+    """전문가가 웹으로 최신 지식을 수집해 위키를 갱신하는 프롬프트(마크다운 본문만 출력)."""
+    return (
+        f"너는 '{topic}' 전문가다. WebSearch/WebFetch로 이 주제의 **최신 지식·모범사례·도구·"
+        "변화**를 조사해, 아래 기존 지식 위키를 갱신·보강하라.\n\n"
+        f"[기존 위키]\n{existing or '(아직 비어 있음 — 처음부터 정리)'}\n\n"
+        "출력은 **갱신된 위키 마크다운 본문 전체**만(설명·인사 없이). 구조: 한 줄 개요 → 핵심 "
+        "주제별 섹션(## 제목) → 각 항목에 짧은 설명과 출처 링크. 최신 것 위주로, 오래돼 틀린 건 "
+        "고친다. 배경지식 없는 사람도 이해되게 쉬운 말로. 마지막에 '## 출처' 절에 참고 URL 모음."
+    )
+
+
+def expert_consult(topic: str, wiki: str, question: str) -> str:
+    """PM/사용자 질문에 전문가가 위키 + (필요시)웹으로 답하는 프롬프트."""
+    return (
+        f"너는 '{topic}' 전문가다. 아래는 네가 관리하는 지식 위키다. 이걸 1차 근거로, 부족하면 "
+        "WebSearch/WebFetch로 보완해 질문에 답하라.\n\n"
+        f"[내 지식 위키]\n{wiki or '(비어 있음 — 웹으로 조사해 답하라)'}\n\n"
+        f"[질문]\n{question}\n\n"
+        "한국어로 정확·간결하게. 근거 URL이 있으면 붙이고, 확실치 않으면 그렇다고 밝혀라."
+    )
+
+
 def summarize_unresolved(project_name: str, items: list[str]) -> str:
     """미해결 항목 요약 + 가장 급한 것 짚기 (읽기 전용 태스크)."""
     body = "\n".join(f"- {t}" for t in items)

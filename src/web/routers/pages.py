@@ -185,6 +185,12 @@ _HTML = r"""<!doctype html>
   .daily-h{padding:12px 16px;border-bottom:1px solid var(--line);font-weight:700;font-size:13.5px}
   .daily-main .stream{flex:1;overflow-y:auto;padding:16px 18px;display:flex;flex-direction:column;gap:10px}
   .msg.pm{align-self:flex-end;background:#eef2fb;border:1px solid #d3ddf3}
+  /* 전문가 */
+  #expert-top button{margin-left:8px;padding:4px 12px;font-size:12px}
+  .expert-wiki{flex:1;min-width:0;min-height:0;overflow-y:auto;background:var(--card);border:1px solid var(--line);border-radius:10px;padding:14px}
+  .wiki-body{font-size:13.5px;line-height:1.7;color:#2b2f36}
+  .wiki-body .mh{font-size:15px;margin:14px 0 5px}
+  .wiki-body .mgap{height:9px}
 </style></head><body>
 <div class="app">
   <aside>
@@ -193,6 +199,7 @@ _HTML = r"""<!doctype html>
       <div class="nav-item" data-nav="dashboard" onclick="go('#/dashboard')">대시보드</div>
       <div class="nav-item" data-nav="board" onclick="go('#/board')">게시판</div>
       <div class="nav-item" data-nav="daily" onclick="go('#/daily')">일간보고</div>
+      <div class="nav-item" data-nav="experts" onclick="go('#/experts')">전문가</div>
       <div class="nav-item" data-nav="ports" onclick="go('#/ports')">포트</div>
     </nav>
     <div class="sec-label">프로젝트 룸</div>
@@ -282,6 +289,7 @@ function renderSidebar(){
   document.querySelectorAll('[data-nav]').forEach(el=>el.classList.remove('active'));
   const view = (cur.startsWith('#/board') || cur.startsWith('#/post')) ? 'board'
              : cur.startsWith('#/daily') ? 'daily'
+             : cur.startsWith('#/experts') ? 'experts'
              : cur.startsWith('#/ports') ? 'ports'
              : (cur.startsWith('#/room') ? null : 'dashboard');
   if(view) document.querySelector(`[data-nav="${view}"]`)?.classList.add('active');
@@ -391,7 +399,7 @@ async function loadMessages(room, silent, agentRoom){
   }).join('') : '<div class="chat-empty">아직 대화가 없습니다. 첫 메시지를 남겨보세요.</div>';
   // 담당 에이전트 방에서 마지막 글이 사용자면 = 답이 오는 중 → 대기 표시
   if(agentRoom && msgs.length && msgs[msgs.length-1].author === 'user'){
-    html += `<div class="msg pending">담당 에이전트가 프로젝트를 읽고 답하는 중…</div>`;
+    html += `<div class="msg pending">에이전트가 확인하고 답하는 중…</div>`;
   }
   stream.innerHTML = html;
   if(!silent || atBottom) stream.scrollTop = stream.scrollHeight;
@@ -511,6 +519,67 @@ function replyTo(cid, postId){
   box.innerHTML = `<textarea id="reply-input-${cid}" rows="1" placeholder="답글…"></textarea>`+
     `<button onclick="postComment('${postId}', ${cid})">답글</button>`;
   const t = document.getElementById('reply-input-'+cid); if(t) t.focus();
+}
+
+// ── 전문가 뷰(왼쪽 지식 위키 / 오른쪽 자문 채팅 + 웹 수집) ──────────
+function renderExperts(){
+  setHeader('전문가', {summary:false, actions:false});
+  document.getElementById('view').innerHTML =
+    '<div id="expert-top" class="note-line" style="padding-bottom:10px">불러오는 중…</div>'+
+    '<div class="room-layout">'+
+      '<div class="expert-wiki" id="expert-wiki"></div>'+
+      '<div class="room-side"><div class="side-h">전문가에게 자문</div>'+chatMarkup()+'</div>'+
+    '</div>';
+  clearInterval(pollTimer);
+  loadExpert();
+}
+
+const expertRoom = d => 'expert::'+d;
+
+async function loadExpert(){
+  let list = [];
+  try{ list = await fetch('/api/experts').then(r=>r.json()); }catch(e){}
+  const top = document.getElementById('expert-top'); if(!top) return;
+  if(!list.length){ top.textContent = '전문가가 없습니다'; return; }
+  const e = list[0];
+  top.innerHTML = `<b style="color:var(--ink);font-size:14px">${esc(e.name)}</b> — ${esc(e.topic)} `+
+    `· 위키 ${e.wiki_chars}자 <button id="collect-btn" onclick="collectExpert('${e.domain}')">웹으로 지식 수집</button>`;
+  const w = await fetch('/api/experts/'+e.domain+'/wiki').then(r=>r.json()).catch(()=>({wiki:''}));
+  const wikiBox = document.getElementById('expert-wiki');
+  if(wikiBox) wikiBox.innerHTML = '<div class="side-h">지식 위키</div>'+
+    (w.wiki ? `<div class="md wiki-body">${md(w.wiki)}</div>`
+            : '<div class="empty" style="padding:20px">아직 비어 있음 — "웹으로 지식 수집"을 눌러 채우세요</div>');
+  const input = document.getElementById('msg-input');
+  if(input){
+    input.addEventListener('keydown', ev=>{ if(ev.key==='Enter' && !ev.shiftKey){ ev.preventDefault(); sendExpertQ(e.domain); }});
+    input.focus({preventScroll:true});
+  }
+  loadMessages(expertRoom(e.domain), false, true);
+  clearInterval(pollTimer);
+  pollTimer = setInterval(()=>loadMessages(expertRoom(e.domain), true, true), 4000);
+}
+
+async function sendExpertQ(domain){
+  const input = document.getElementById('msg-input');
+  const body = input.value.trim(); if(!body) return;
+  input.value = '';
+  await fetch('/api/experts/'+domain+'/ask',{method:'POST',headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({question:body})});
+  loadMessages(expertRoom(domain), false, true);
+}
+
+async function collectExpert(domain){
+  const b = document.getElementById('collect-btn');
+  if(b){ b.disabled = true; b.textContent = '수집 중…(웹, 수 분)'; }
+  await fetch('/api/experts/'+domain+'/collect',{method:'POST'});
+  // 수집은 오래 걸림 — 위키 글자수가 늘 때까지 가끔 확인
+  let tries = 0;
+  const before = await fetch('/api/experts').then(r=>r.json()).then(l=>(l[0]||{}).wiki_chars).catch(()=>0);
+  const iv = setInterval(async ()=>{
+    tries++;
+    const now = await fetch('/api/experts').then(r=>r.json()).then(l=>(l[0]||{}).wiki_chars).catch(()=>0);
+    if(now !== before || tries > 20){ clearInterval(iv); loadExpert(); }
+  }, 12000);
 }
 
 // ── 포트 레지스트리 뷰(등록 포트 + 실시간 상태 + 충돌) ────────────
@@ -740,6 +809,8 @@ function route(){
   renderSidebar();
   if(h.startsWith('#/daily')){
     renderDaily();
+  } else if(h.startsWith('#/experts')){
+    renderExperts();
   } else if(h.startsWith('#/ports')){
     renderPorts();
   } else if(h.startsWith('#/post/')){

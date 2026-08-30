@@ -24,10 +24,17 @@ TASK_TOOLS = {
     "daily_agent": ["Read", "Grep", "Glob"],
     # 형식 표준화 = git 커밋 단위 자율(변경→add→commit). push는 NEVER_ALLOW로 차단.
     "format_standardize": ["Read", "Edit", "Write", "Bash(git add:*)", "Bash(git commit:*)"],
+    # 전문가 에이전트 — 웹으로 최신 지식 수집·자문(읽기 전용 + 웹). 파일 쓰기는 코드가 함.
+    "expert": ["Read", "Grep", "Glob", "WebSearch", "WebFetch"],
 }
 
 
 def tools_for(task: str) -> tuple[list[str], list[str]]:
-    """(allowed_tools, disallowed_tools) 반환. 미등록 태스크는 읽기 전용 기본."""
+    """(allowed_tools, disallowed_tools) 반환. 미등록 태스크는 읽기 전용 기본.
+
+    disallowed는 '허용 목록에 없는' NEVER_ALLOW만 — 예: 전문가는 WebFetch를 허용하므로
+    그 태스크에선 WebFetch가 disallow에서 빠지되, rm·force push는 항상 막힌다(허용에 없음).
+    """
     allowed = TASK_TOOLS.get(task, ["Read", "Grep", "Glob"])
-    return allowed, NEVER_ALLOW
+    disallowed = [t for t in NEVER_ALLOW if t not in allowed]
+    return allowed, disallowed
