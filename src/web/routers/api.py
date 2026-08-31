@@ -162,6 +162,24 @@ def get_daily() -> list[dict]:
     ]
 
 
+# ── PM 대화 패널 (사용자 ↔ 총괄 PM, 일간보고 화면 오른쪽) ─────────────────────
+class PmChatMsg(BaseModel):
+    message: str
+
+
+@router.post("/pm-chat")
+def pm_chat_api(m: PmChatMsg, background: BackgroundTasks) -> dict:
+    """사용자가 PM에게 말하면 즉시 방에 기록, PM 답변은 백그라운드(저널+게시판 근거)로."""
+    from src.cc.manager import PM_CHAT_ROOM, pm_chat_reply
+
+    body = m.message.strip()
+    if not body:
+        return {"ok": False, "error": "빈 메시지"}
+    messages_db.add_message(PM_CHAT_ROOM, "user", body)
+    background.add_task(pm_chat_reply)
+    return {"ok": True, "started": True, "room": PM_CHAT_ROOM}
+
+
 # ── 전문가 에이전트 (ohmyPM 상주, 웹 지식수집 + PM 자문) ────────────────────
 @router.get("/experts")
 def get_experts() -> list[dict]:

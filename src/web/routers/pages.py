@@ -187,6 +187,20 @@ _HTML = r"""<!doctype html>
   .daily-h{padding:12px 16px;border-bottom:1px solid var(--line);font-weight:700;font-size:13.5px}
   .daily-main .stream{flex:1;overflow-y:auto;padding:16px 18px;display:flex;flex-direction:column;gap:10px}
   .msg.pm{align-self:flex-end;background:#eef2fb;border:1px solid #d3ddf3}
+  /* 일간보고 개편: 상단 날짜바 + (좌 프로젝트목록 · 중 대화 · 우 PM 패널) */
+  .daily-wrap{display:flex;flex-direction:column;gap:10px;flex:1;min-height:0}
+  .daily-datebar{display:flex;gap:8px;overflow-x:auto;padding:2px;flex:0 0 auto}
+  .datechip{flex:0 0 auto;padding:7px 14px;border:1px solid var(--line);border-radius:20px;background:var(--card);cursor:pointer;font-size:12.5px;font-weight:600;white-space:nowrap}
+  .datechip:hover{background:#f1f3f6}
+  .datechip.active{background:#e7f3ec;border-color:#bcdcc7}
+  .datechip .cnt{margin-left:6px;color:var(--muted);font-weight:700;font-size:11px}
+  .daily-body{flex:1;min-height:0;display:flex;gap:10px}
+  .daily-projcol{width:190px;flex:0 0 190px;min-height:0;overflow-y:auto;background:var(--card);border:1px solid var(--line);border-radius:10px;padding:6px}
+  .daily-pm{width:340px;flex:0 0 340px;min-height:0;display:flex;flex-direction:column;background:var(--card);border:1px solid var(--line);border-radius:10px;overflow:hidden}
+  .daily-pm .stream{flex:1;overflow-y:auto;padding:14px;display:flex;flex-direction:column;gap:10px}
+  .daily-pm .composer{border-top:1px solid var(--line);padding:8px;background:#fafbfc}
+  .daily-pm textarea{width:100%;box-sizing:border-box;border:1px solid var(--line);border-radius:8px;padding:8px 10px;font-family:inherit;font-size:13px;line-height:1.45;resize:none;max-height:120px;overflow-y:auto}
+  @media(max-width:1100px){.daily-pm{flex-basis:280px;width:280px}.daily-projcol{flex-basis:150px;width:150px}}
   /* 전문가 */
   #expert-top button{margin-left:8px;padding:4px 12px;font-size:12px}
   .expert-wiki{flex:1;min-width:0;min-height:0;overflow-y:auto;background:var(--card);border:1px solid var(--line);border-radius:10px;padding:14px}
@@ -688,26 +702,43 @@ async function saveInlineReg(port, btn){
 }
 function cancelInlineReg(){ portEditing = false; fillPorts(); }
 
-// ── 일간보고 뷰(일자별 목록 → 프로젝트 진입, PM 오른쪽/담당 왼쪽) ──────────
+// ── 일간보고 뷰(상단 날짜바 → 좌 프로젝트목록 · 중 PM↔담당 대화 · 우 PM 대화 패널) ──
 function renderDaily(){
   setHeader('일간보고', {summary:false, actions:false});
   document.getElementById('view').innerHTML =
-    '<div class="room-layout">'+
-      '<div class="daily-nav" id="daily-nav">불러오는 중…</div>'+
-      '<div class="daily-main" id="daily-convo"><div class="chat-empty">왼쪽에서 날짜·프로젝트를 골라 대화를 보세요</div></div>'+
+    '<div class="daily-wrap">'+
+      '<div class="daily-datebar" id="daily-datebar">불러오는 중…</div>'+
+      '<div class="daily-body">'+
+        '<div class="daily-projcol" id="daily-projcol"><div class="empty" style="padding:14px 8px;font-size:12px">날짜를 고르세요</div></div>'+
+        '<div class="daily-main" id="daily-convo"><div class="chat-empty">프로젝트를 골라 PM↔담당 대화를 보세요</div></div>'+
+        '<div class="daily-pm" id="daily-pm"></div>'+
+      '</div>'+
     '</div>';
   clearInterval(pollTimer);
   fillDailyNav();
+  fillPmPanel();
+  // PM 답변은 headless라 뒤늦게 온다 → 오른쪽 패널만 폴링
+  pollTimer = setInterval(()=>loadPm(true), 4000);
 }
 
 async function fillDailyNav(){
   try{ DAILY_DATA = await fetch('/api/daily').then(r=>r.json()); }catch(e){ DAILY_DATA = []; }
-  const nav = document.getElementById('daily-nav'); if(!nav) return;
-  if(!DAILY_DATA.length){ nav.innerHTML = '<div class="empty" style="padding:16px">아직 일간보고가 없습니다</div>'; return; }
-  nav.innerHTML = DAILY_DATA.map((d,di)=>
-    `<div class="dnav-date">${esc(d.date)}</div>`+
-    d.projects.map((p,pi)=>`<div class="dnav-proj" onclick="openDaily(${di},${pi},this)">${esc(p.name)}</div>`).join('')
+  const bar = document.getElementById('daily-datebar'); if(!bar) return;
+  if(!DAILY_DATA.length){ bar.innerHTML = '<div class="empty" style="padding:8px;font-size:12px">아직 일간보고가 없습니다</div>'; return; }
+  bar.innerHTML = DAILY_DATA.map((d,di)=>
+    `<div class="datechip" onclick="pickDate(${di},this)">${esc(d.date)}<span class="cnt">${d.projects.length}</span></div>`
   ).join('');
+  const first = bar.querySelector('.datechip'); if(first) first.click();   // 최신 날짜 자동 선택
+}
+
+function pickDate(di, el){
+  document.querySelectorAll('.datechip').forEach(x=>x.classList.remove('active'));
+  el.classList.add('active');
+  const col = document.getElementById('daily-projcol');
+  col.innerHTML = DAILY_DATA[di].projects.map((p,pi)=>
+    `<div class="dnav-proj" onclick="openDaily(${di},${pi},this)">${esc(p.name)}</div>`
+  ).join('') || '<div class="empty" style="padding:14px 8px;font-size:12px">이 날 보고 없음</div>';
+  document.getElementById('daily-convo').innerHTML = '<div class="chat-empty">프로젝트를 골라 PM↔담당 대화를 보세요</div>';
 }
 
 async function openDaily(di, pi, el){
@@ -726,6 +757,42 @@ async function openDaily(di, pi, el){
   }).join('') : '<div class="chat-empty">대화 없음</div>';
   box.innerHTML = `<div class="daily-h">${esc(p.name)} · ${esc(DAILY_DATA[di].date)}</div><div class="stream">${bubbles}</div>`;
   const s = box.querySelector('.stream'); if(s) s.scrollTop = s.scrollHeight;
+}
+
+// ── PM 대화 패널(#5) — 사용자가 일간보고를 보며 PM에게 직접 묻는다(room='pmchat') ──
+function fillPmPanel(){
+  const box = document.getElementById('daily-pm'); if(!box) return;
+  box.innerHTML =
+    '<div class="daily-h">PM과 대화</div>'+
+    '<div class="stream" id="pm-stream"><div class="chat-empty">불러오는 중…</div></div>'+
+    '<div class="composer"><textarea id="pm-input" rows="1" placeholder="일간보고에 대해 PM에게 물어보세요"></textarea></div>';
+  const input = document.getElementById('pm-input');
+  const grow = ()=>{ input.style.height='auto'; input.style.height=Math.min(input.scrollHeight,120)+'px'; };
+  input.addEventListener('keydown', e=>{ if(e.key==='Enter' && !e.shiftKey){ e.preventDefault(); sendPm(); }});
+  input.addEventListener('input', grow);
+  loadPm(false);
+}
+
+async function loadPm(silent){
+  let msgs; try{ msgs = await fetch('/api/messages?room=pmchat').then(r=>r.json()); }catch(e){ return; }
+  const s = document.getElementById('pm-stream'); if(!s) return;
+  const atBottom = s.scrollHeight - s.scrollTop - s.clientHeight < 40;
+  let html = msgs.length ? msgs.map(m=>{
+    const mine = m.author === 'user';
+    const ts = (m.created_at||'').slice(5,16);
+    return `<div class="msg ${mine?'user':'pm'}">`+(mine?'':`<div class="who">PM</div>`)+
+      `<div class="md">${md(m.body)}</div><div class="ts">${esc(ts)}</div></div>`;
+  }).join('') : '<div class="chat-empty">PM에게 현황·우선순위를 물어보세요</div>';
+  if(msgs.length && msgs[msgs.length-1].author === 'user') html += '<div class="msg pending">PM이 확인하고 답하는 중…</div>';
+  s.innerHTML = html;
+  if(!silent || atBottom) s.scrollTop = s.scrollHeight;
+}
+
+async function sendPm(){
+  const input = document.getElementById('pm-input'); const body = input.value.trim(); if(!body) return;
+  input.value = ''; input.style.height = 'auto';
+  await fetch('/api/pm-chat',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({message:body})});
+  await loadPm(false);
 }
 
 async function addPort(){

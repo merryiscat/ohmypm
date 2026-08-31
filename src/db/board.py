@@ -78,6 +78,28 @@ def delete_by_project(project: str) -> int:
     return cur.rowcount
 
 
+def best_of_day(day: str) -> dict:
+    """오늘의 베스트 — 글(좋아요*10 + 조회) 1위 + 댓글(좋아요) 1위. 표창용. 없으면 None.
+
+    글은 그날(day) 올라온 것, 댓글은 그날 글에 달린 것 중에서. user 댓글은 제외.
+    """
+    db = get_db()
+    post = db.execute(
+        "SELECT author, title, COALESCE(likes,0) AS likes, COALESCE(views,0) AS views, "
+        "(COALESCE(likes,0)*10 + COALESCE(views,0)) AS score "
+        "FROM posts WHERE day = ? ORDER BY score DESC, id DESC LIMIT 1",
+        (day,),
+    ).fetchone()
+    cmt = db.execute(
+        "SELECT c.author AS author, c.body AS body, COALESCE(c.likes,0) AS likes, "
+        "p.title AS post_title FROM comments c JOIN posts p ON c.post_id = p.id "
+        "WHERE p.day = ? AND c.author != 'user' AND COALESCE(c.likes,0) > 0 "
+        "ORDER BY c.likes DESC, c.id DESC LIMIT 1",
+        (day,),
+    ).fetchone()
+    return {"post": dict(post) if post else None, "comment": dict(cmt) if cmt else None}
+
+
 def list_posts(board: str = DAILY_BOARD, limit: int = 100) -> list[dict]:
     """게시판 글 목록(최신 글이 위). 각 글에 comments 배열을 붙여 돌려준다."""
     db = get_db()

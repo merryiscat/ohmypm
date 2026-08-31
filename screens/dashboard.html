@@ -1,0 +1,136 @@
+<!doctype html>
+<html lang="ko"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ohmyPM 대시보드 — 4안</title>
+<style>
+  :root{--k0:#000;--k1:#333;--k2:#666;--k3:#999;--k4:#ccc;--k5:#eee;--w:#fff}
+  *{box-sizing:border-box}
+  body{font-family:-apple-system,'Segoe UI',sans-serif;margin:0;background:var(--k5);color:var(--k0);font-size:13px;line-height:1.5}
+  .meta{background:var(--w);border-bottom:2px solid var(--k0);padding:16px 22px}
+  .meta h1{margin:0 0 6px;font-size:16px}
+  .meta dl{margin:0;display:grid;grid-template-columns:auto 1fr;gap:2px 12px;font-size:12px;color:var(--k2)}
+  .meta dt{color:var(--k1);font-weight:700}
+  .plans{padding:22px;display:grid;gap:22px}
+  @media(min-width:1100px){.plans{grid-template-columns:1fr 1fr}}
+  .plan{background:var(--w);border:1px solid var(--k3)}
+  .plan>.hd{border-bottom:1px solid var(--k4);padding:10px 14px}
+  .plan .tag{font-size:10px;font-weight:700;color:var(--k2);letter-spacing:.05em}
+  .plan .nm{font-size:14px;font-weight:700;margin:2px 0}
+  .plan .cc{font-size:12px;color:var(--k2)}
+  .plan>.body{padding:12px 14px}
+  /* 와이어 공용 */
+  .bar{display:flex;align-items:center;gap:10px;border:1px solid var(--k4);padding:6px 10px;font-size:11px;color:var(--k2)}
+  .bar b{color:var(--k0);font-size:13px}
+  .h{font-size:10px;font-weight:700;color:var(--k2);text-transform:uppercase;letter-spacing:.04em;margin:12px 0 5px}
+  .row{display:flex;align-items:center;gap:8px;border:1px solid var(--k4);border-top:none;padding:6px 9px;font-size:11px}
+  .row:first-of-type{border-top:1px solid var(--k4)}
+  .due{border:1px solid var(--k0);padding:0 4px;font-weight:700;font-size:10px}
+  .pill{border:1px solid var(--k3);border-radius:20px;padding:0 7px;font-size:10px;color:var(--k2)}
+  .card{border:1px solid var(--k4);padding:9px;margin-bottom:8px}
+  .card .t{font-weight:700;display:flex;justify-content:space-between;font-size:12px}
+  .badge{border:1px solid var(--k2);border-radius:20px;padding:0 6px;font-size:10px}
+  .grid2{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+  .col{border:1px solid var(--k4);padding:8px;min-height:90px}
+  .col .ch{font-size:10px;font-weight:700;color:var(--k2);border-bottom:1px solid var(--k4);padding-bottom:4px;margin-bottom:6px}
+  .chip{border:1px solid var(--k3);padding:4px 6px;font-size:10px;margin-bottom:5px}
+  .big{border:1px solid var(--k0);padding:12px;margin-bottom:8px}
+  .big .t{font-size:13px;font-weight:700}
+  .big .m{font-size:11px;color:var(--k2)}
+  .muted{color:var(--k3);font-size:11px}
+  .note{background:var(--w);border-top:2px solid var(--k0);padding:18px 22px;font-size:12px}
+  .note h3{font-size:12px;margin:0 0 4px;text-transform:uppercase;letter-spacing:.04em}
+  .note section{margin-bottom:12px}
+  .x{border:1px solid var(--k4);width:34px;height:26px;position:relative;display:inline-block;vertical-align:middle}
+  .x::before,.x::after{content:'';position:absolute;left:0;top:0;width:100%;height:100%;background:linear-gradient(to top right,transparent 47%,var(--k4) 48%,var(--k4) 52%,transparent 53%)}
+</style></head><body>
+
+<div class="meta">
+  <h1>D1 · 프로젝트 현황 대시보드 — 4안</h1>
+  <dl>
+    <dt>목적</dt><dd>관리 중인 전 프로젝트의 급한 것(기한·미해결)을 한눈에 — "안 봐도 안 놓친다"</dd>
+    <dt>진입</dt><dd>서버 실행 후 http://127.0.0.1:8123 (로컬 단독, 인증 없음)</dd>
+    <dt>데이터</dt><dd>각 프로젝트 llmwiki 스캔(status 미해결·pending 기한) · 예시: odin 미해결30·기한2, naverblog 등 19프로젝트·68이슈</dd>
+    <dt>다음</dt><dd>이슈 클릭 → 상담(케이스4) / 프로젝트 클릭 → 상세 · 자율 행동 내역(케이스15)</dd>
+    <dt>작성</dt><dd>2026-08-26</dd>
+  </dl>
+</div>
+
+<div class="plans">
+
+  <!-- 보편 A -->
+  <div class="plan">
+    <div class="hd"><div class="tag">보편 A</div><div class="nm">요약 + 임박 + 프로젝트 카드</div>
+      <div class="cc">위→아래 위계: 전체 요약 → 급한 기한 → 프로젝트별. 지금 안의 정돈판.</div></div>
+    <div class="body">
+      <div class="bar"><span>프로젝트 <b>19</b></span><span>이슈 <b>68</b></span><span>임박 <b>3</b></span><span style="margin-left:auto" class="muted">↻ 스캔</span></div>
+      <div class="h">⏰ 임박 기한 (7일 내)</div>
+      <div class="row"><span class="due">09-02 · 7일후</span><span class="muted">odin</span><span>rotation 로직 도입</span></div>
+      <div class="row"><span class="due">09-15 · 지남</span><span class="muted">odin</span><span>델타 트리거</span></div>
+      <div class="h">프로젝트 (이슈 많은 순)</div>
+      <div class="card"><div class="t">project_odin <span><span class="badge">미 30</span> <span class="badge">기 2</span></span></div>
+        <div class="muted">버그(소) technical.py:33 주석 거짓 · 교체 비원자성 #32 …</div></div>
+      <div class="card"><div class="t">naverblog_ssalmuk <span><span class="badge">미 4</span> <span class="badge">기 12</span></span></div>
+        <div class="muted">블로그 카테고리 전략 · 애드포스트 도입 …</div></div>
+    </div>
+  </div>
+
+  <!-- 보편 B -->
+  <div class="plan">
+    <div class="hd"><div class="tag">보편 B</div><div class="nm">급한 순 통합 리스트 (프로젝트 벽 허물기)</div>
+      <div class="cc">"어느 프로젝트냐"보다 "뭐부터 보나". 전 이슈를 급한 순 한 줄씩, 프로젝트는 태그.</div></div>
+    <div class="body">
+      <div class="bar"><span>할 일 <b>68</b></span><span>급함 <b>3</b></span><span class="muted" style="margin-left:auto">필터: 전체 · 기한 · 미해결</span></div>
+      <div class="h">지금부터</div>
+      <div class="row"><span class="due">09-02</span><span class="pill">odin</span><span>rotation 로직 도입</span></div>
+      <div class="row"><span class="due">지남</span><span class="pill">odin</span><span>델타 트리거</span></div>
+      <div class="row"><span class="pill">odin</span><span>버그(소) technical.py:33 주석 거짓</span></div>
+      <div class="row"><span class="pill">naverblog</span><span>LLM JSON 파싱 폴백 남은 호출부</span></div>
+      <div class="row"><span class="pill">n_step</span><span>원티드 OpenAPI 연동</span></div>
+      <div class="muted" style="margin-top:6px">…스크롤로 계속. 프로젝트별 보기는 탭 전환.</div>
+    </div>
+  </div>
+
+  <!-- 실험 A -->
+  <div class="plan">
+    <div class="hd"><div class="tag">실험 A</div><div class="nm">"오늘 볼 것" 포커스 (나머지는 접기)</div>
+      <div class="cc">화면 대부분이 급한 3~5개. 68건 다 안 보여줌 — 매일 아침 "이것만" 던지는 브리핑형.</div></div>
+    <div class="body">
+      <div class="muted" style="text-align:center;margin-bottom:8px">2026-08-26 · 오늘 볼 것 3</div>
+      <div class="big"><div class="t">🔴 odin · rotation 로직 도입</div><div class="m">기한 09-02 (7일 후) · pending 재검토 시점</div></div>
+      <div class="big"><div class="t">odin · 교체 비원자성 #32</div><div class="m">미해결 · status.md 백로그</div></div>
+      <div class="big"><div class="t">naverblog · 출처 권위 강화</div><div class="m">미해결 · 08-24</div></div>
+      <div class="bar" style="margin-top:6px"><span class="muted">나머지 65건 · 프로젝트 19개</span><span class="muted" style="margin-left:auto">펼치기 ▾</span></div>
+    </div>
+  </div>
+
+  <!-- 실험 B -->
+  <div class="plan">
+    <div class="hd"><div class="tag">실험 B</div><div class="nm">칸반 보드 (상태 열)</div>
+      <div class="cc">이슈를 상태별 열로. "해야할 일 / 진행중 / 기한임박"을 흐름으로 조망 — PM 보드 느낌.</div></div>
+    <div class="body">
+      <div class="grid2">
+        <div class="col"><div class="ch">⏰ 기한 임박</div>
+          <div class="chip">09-02 odin rotation</div><div class="chip">지남 odin 델타</div></div>
+        <div class="col"><div class="ch">🔧 미해결 (급)</div>
+          <div class="chip">odin 교체 비원자성 #32</div><div class="chip">odin technical.py 주석</div></div>
+        <div class="col"><div class="ch">📋 미해결 (백로그)</div>
+          <div class="chip">naverblog 카테고리 전략</div><div class="chip">n_step OpenAPI</div></div>
+        <div class="col"><div class="ch">🤖 자율 처리됨</div>
+          <div class="chip muted">형식 표준화 3건 (롤백 가능)</div></div>
+      </div>
+      <div class="muted" style="margin-top:6px">열 = 상태, 카드 = 이슈. 자율 행동(케이스15)도 한 열로.</div>
+    </div>
+  </div>
+
+</div>
+
+<div class="note">
+  <section><h3>의도</h3>
+    4안 모두 "급한 것이 눈에 띄게"가 핵심(사용자 피드백: 지금은 안 띔). 보편A=위계 정돈, 보편B=프로젝트 벽 제거·할일 중심, 실험A=미니멀 브리핑(68건 다 안 보임), 실험B=상태 흐름 조망.</section>
+  <section><h3>대안</h3>
+    실험A+실험B 혼합(오늘 볼 것 크게 + 아래 칸반) 가능. 보편A에 실험B의 "자율 처리됨" 열만 붙이는 것도.</section>
+  <section><h3>미정</h3>
+    ① 기계식 오탐(naverblog 기한 12건 로드맵 날짜) — 화면에서 숨길지, 파서로 거를지, LLM으로 판정할지 ② 이슈 클릭 후 상담(케이스4) 화면은 별도 기획(D2) ③ 자율 내역(케이스15) 별도 화면 vs 대시보드 한 구석.</section>
+</div>
+
+</body></html>

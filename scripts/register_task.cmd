@@ -1,0 +1,13 @@
+@echo off
+REM ohmyPM ?€?œë³´???œë²„ë¥?Windows ë¡œê·¸?????ë™ ?¤í–‰?˜ë„ë¡??‘ì—… ?¤ì?ì¤„ëŸ¬???±ë¡.
+REM wizard??4ë²ˆì§¸ ?¨ê³„ê°€ ?´ê±¸ ?¸ì¶œ?œë‹¤. ì§ì ‘ ?¤í–‰?´ë„ ?œë‹¤(ê´€ë¦¬ì ê¶Œì¥).
+schtasks /create /tn "ohmyPM" /tr "C:\Users\minhy\project\ohmyPM\scripts\run_ohmypm.cmd" /sc onlogon /f
+if %errorlevel%==0 (
+  echo.
+  echo [OK] ?±ë¡ ?„ë£Œ - ?¤ìŒ ë¡œê·¸?¸ë????€?œë³´???œë²„ê°€ ?ë™?¼ë¡œ ì¼œì§‘?ˆë‹¤.
+  echo      ì§€ê¸?ë°”ë¡œ ì¼œë ¤ë©? scripts\run_ohmypm.cmd ë¥??¤í–‰?˜ì„¸??
+) else (
+  echo.
+  echo [?¤íŒ¨] ?±ë¡ ?¤íŒ¨ - ê´€ë¦¬ì ê¶Œí•œ?¼ë¡œ ?¤ì‹œ ?¤í–‰??ë³´ì„¸??
+)
+pause
