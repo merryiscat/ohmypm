@@ -415,6 +415,19 @@ def trigger_post_feedback(background: BackgroundTasks, cfg: BoardDiscussionReq |
     return {"ok": True, "started": True}
 
 
+@router.post("/harness-audit")
+def trigger_harness_audit(background: BackgroundTasks, cfg: BoardDiscussionReq | None = None) -> dict:
+    """하네스 감사(일일보고) 수동 트리거 — 환경·하네스 점검 + 빠진 기본기 자동 반영(git 커밋, push X).
+
+    에이전트는 Write/Edit만(Bash 없음), 커밋은 코드가 안전 경로만 스코프. 리포트는 게시판에 올라간다.
+    """
+    cfg = cfg or BoardDiscussionReq()
+    from src.cc.harness_audit import run_harness_audit
+
+    background.add_task(run_harness_audit, paths=cfg.paths)
+    return {"ok": True, "started": True}
+
+
 @router.post("/reprocess")
 def trigger_reprocess(background: BackgroundTasks, cfg: BoardDiscussionReq | None = None) -> dict:
     """문서 재가공(#4) 수동 트리거 — 담당이 당일 게시판 조언을 자기 docs에 반영(git 커밋, push 안 함).
