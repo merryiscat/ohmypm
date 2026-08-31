@@ -49,8 +49,12 @@ def _commit_harness(path: str, date: str) -> dict:
     staged = _git(path, "diff", "--cached", "--name-only", "--", *present).stdout.strip()
     if not staged:
         return {"committed": False, "reason": "변경 없음"}
+    # ★ 커밋 pathspec은 allowlist 경로가 아니라 '실제 스테이징된 파일'로 준다 — allowlist에 있으나
+    #   git 미추적인 경로(.claude 등)를 pathspec에 넣으면 'did not match'로 커밋 전체가 실패한다
+    #   (Ts_skin_maker에서 .claude 미추적으로 실패 실증, 2026-09-01).
+    staged_files = staged.splitlines()
     msg = f"harness: {date} 환경·하네스 점검 자동 반영 (ohmyPM)"
-    c = _git(path, "commit", "-m", msg, "--", *present)
+    c = _git(path, "commit", "-m", msg, "--", *staged_files)
     ok = c.returncode == 0
     if not ok:
         logger.warning(f"[하네스감사] {path} 커밋 실패: {(c.stderr or '')[:160]}")

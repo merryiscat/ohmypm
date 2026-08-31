@@ -1,0 +1,36 @@
+{
+  "audited": 3,
+  "committed": 2,
+  "failed": 0,
+  "per": [
+    {
+      "name": "benchmark",
+      "failed": false,
+      "committed": true,
+      "files": [
+        ".gitignore",
+        "CLAUDE.md",
+        "README.md"
+      ]
+    },
+    {
+      "name": "SixSortingHat",
+      "failed": false,
+      "committed": true,
+      "files": [
+        "CLAUDE.md",
+        "docs/index.md",
+        "docs/status.md"
+      ]
+    },
+    {
+      "name": "Ts_skin_maker",
+      "failed": false,
+      "committed": false,
+      "files": [
+        "CLAUDE.md",
+        "docs/TODO.md"
+      ]
+    }
+  ]
+}
