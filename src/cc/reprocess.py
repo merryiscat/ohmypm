@@ -83,8 +83,10 @@ def reprocess_one(path: str, name: str, posts: list[dict], date: str) -> dict:
 def run_reprocess(paths: list[str] | None = None) -> dict:
     """당일 게시판 조언을 각 담당이 자기 docs에 반영(git 커밋, push 안 함). 커밋 건수 반환."""
     date = datetime.now().strftime("%Y-%m-%d")
-    posts = board_db.list_posts(board_db.DAILY_BOARD)
-    # 오늘 글이 있고(=참여) 조언 댓글을 받은 프로젝트만 대상
+    all_posts = board_db.list_posts(board_db.DAILY_BOARD)
+    # ★ 오늘(day=date) 올라온 글만 재가공 대상 — 안 그러면 어제 조언을 매일 다시 반영해
+    #   중복 커밋이 쌓인다(09-01 야간에 08-31 조언이 재처리된 버그). material도 오늘 글 기준.
+    posts = [p for p in all_posts if p.get("day") == date]
     targets: dict[str, str] = {}
     for p in posts:
         if p.get("project") and p.get("comments"):

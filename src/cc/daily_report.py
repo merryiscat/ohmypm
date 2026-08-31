@@ -83,12 +83,15 @@ def build_facts(path: str) -> str:
 
 
 def _parse_pm(result: str | None) -> dict:
-    """PM 응답에서 {ask,done,summary,headline} 추출. 실패하면 done 처리(무한루프 방지)."""
+    """PM 응답에서 {ask,done,summary,headline} 추출. 실패하면 done 처리(무한루프 방지).
+
+    failed=True는 headless 자체가 실패(None)했다는 뜻 — 호출부가 '응답없음' 글/메시지를 안 만들게 구분.
+    """
     if not result:
-        return {"ask": None, "done": True, "summary": "(PM 응답 없음)", "headline": ""}
+        return {"ask": None, "done": True, "summary": "(PM 응답 없음)", "headline": "", "failed": True}
     m = _OBJ_RE.search(result)
     if not m:
-        return {"ask": None, "done": True, "summary": result.strip()[:300], "headline": ""}
+        return {"ask": None, "done": True, "summary": result.strip()[:300], "headline": "", "failed": False}
     try:
         d = json.loads(m.group(0))
         upd = d.get("updates")
@@ -98,9 +101,19 @@ def _parse_pm(result: str | None) -> dict:
             "summary": (d.get("summary") or "").strip(),
             "headline": (d.get("headline") or "").strip(),
             "updates": upd if isinstance(upd, list) else [],
+            "failed": False,
         }
     except json.JSONDecodeError:
-        return {"ask": None, "done": True, "summary": result.strip()[:300], "headline": "", "updates": []}
+        return {"ask": None, "done": True, "summary": result.strip()[:300], "headline": "",
+                "updates": [], "failed": False}
+
+
+def _is_failed(r: dict) -> bool:
+    """일간보고 결과가 실패/빈 것인지 — 게시판 글·재가공에서 걸러낼 판단."""
+    if r.get("failed"):
+        return True
+    s = (r.get("summary") or "").strip()
+    return (not s) or s.startswith("(PM 응답") or s.startswith("(요약 없음") or "점검 실패" in s
 
 
 def _pm_call(name: str, facts: str, history: str, issues: str) -> dict:
@@ -205,6 +218,11 @@ def report_one_project(path: str, name: str, date: str, guidance: str = "",
     for rounds in range(1, max_rounds + 1):
         hist = "\n".join(f"PM: {q}\n담당: {a}" for q, a in turns)
         pm = _pm_call(name, facts, hist, issue_list)
+        # ★ headless가 실패(None)했고 아직 대화가 없으면 = 그냥 못 돈 것. 방에 '응답없음'을 남기지
+        #   말고 실패로 반환(2026-09-01 야간 한도 전량실패가 게시판에 빈 글 18개를 만든 사고 방지).
+        if pm.get("failed") and not turns:
+            return {"name": name, "path": path, "rounds": rounds, "summary": "(점검 실패: headless 무응답)",
+                    "headline": "", "updates_applied": 0, "skipped": False, "failed": True}
         summary = pm["summary"] or summary
         headline = pm["headline"] or headline
         pm_body = summary + (f"\n▸ 담당에게: {pm['ask']}" if pm["ask"] and not pm["done"] else "")
@@ -261,22 +279,25 @@ def run_daily_report(
         for res in ex.map(worker, projects):
             (skipped.append(res["name"]) if res.get("skipped") else done_results.append(res))
 
-    logger.info(f"[일간보고] 완료 {len(done_results)}개 · 미처리 {len(skipped)}개")
-    # 각 프로젝트 요약을 게시판 글로 올린다 — 제목은 PM이 뽑은 눈길 끄는 헤드라인
-    for r in done_results:
+    ok_results = [r for r in done_results if not _is_failed(r)]
+    failed_n = len(done_results) - len(ok_results)
+    logger.info(f"[일간보고] 완료 {len(ok_results)}개 · 실패 {failed_n}개 · 미처리 {len(skipped)}개")
+    # 각 프로젝트 요약을 게시판 글로 올린다 — 제목은 PM이 뽑은 눈길 끄는 헤드라인.
+    # ★ 실패/빈 결과(headless 한도 등)는 글로 올리지 않는다 — '(PM 응답 없음)' 쓰레기 글 방지.
+    for r in ok_results:
         title = r.get("headline") or f"{r['name']}: {(r.get('summary') or '').splitlines()[0][:35]}"
         board_db.add_post(
             author=r["name"], title=title,
             body=r.get("summary", ""), project=r.get("path"), day=date,
         )
-    telegram_text = _assemble_telegram(date, done_results, skipped)
+    telegram_text = _assemble_telegram(date, ok_results, skipped)
     sent = False
     if notify:
         from src.bot.telegram_bot import send_telegram_sync
 
         sent = send_telegram_sync(telegram_text)
-    return {"date": date, "completed": len(done_results), "skipped": skipped,
-            "telegram_sent": sent, "telegram_preview": telegram_text, "results": done_results}
+    return {"date": date, "completed": len(ok_results), "failed": failed_n, "skipped": skipped,
+            "telegram_sent": sent, "telegram_preview": telegram_text, "results": ok_results}
 
 
 def _assemble_telegram(date: str, results: list[dict], skipped: list[str]) -> str:
@@ -449,6 +470,15 @@ def run_nightly() -> dict:
     guidance = manager.plan_day(projects)                        # ① 아침 계획
     report = run_daily_report(deadline_ts=_at(settings.daily_soft_deadline_hour),
                               notify=False, guidance_by_path=guidance)   # ②
+    # ★ 대량 실패 가드 — 무응답(사용량/속도 한도 등)으로 성공 0이면 하위 단계를 통째로 건너뛴다.
+    #   (안 그러면 빈 게시판 글·헛 재가공 커밋·헛 보상까지 이어져 쓰레기가 번진다 — 09-01 사고)
+    attempted = report.get("completed", 0) + report.get("failed", 0)
+    if attempted and report.get("completed", 0) == 0:
+        msg = (f"일간보고 실패 — {report.get('failed', 0)}개 전부 무응답(사용량/속도 한도 추정). "
+               "하위 단계(게시판·재가공·보상·종합) 건너뜀. 로그의 [headless] 종료코드 확인 후 재시도.")
+        logger.error(f"[일간보고] {msg}")
+        alerts_db.set_setting(f"daily_summary:{date}", f"<b>ohmyPM {date}</b>\n{msg}")
+        return {"report": report, "aborted": True, "reason": msg}
     board = run_board_discussion(deadline_ts=_at(settings.discussion_until_hour))    # ③
     feedback = run_post_feedback(deadline_ts=_at(settings.discussion_until_hour))    # ④
     reprocess = run_reprocess()                                   # ⑤ 문서 재가공(docs 커밋·push 안 함)

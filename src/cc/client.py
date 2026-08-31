@@ -70,7 +70,10 @@ def run_headless(
             errors="replace",
         )
         if r.returncode != 0:
-            logger.warning(f"[headless] 종료코드 {r.returncode}: {(r.stderr or '')[:200]}")
+            # ★ 실패 원인은 stderr가 비고 stdout(JSON)에 담기는 경우가 많다(사용량·속도 한도 등).
+            #   둘 다 로깅해야 사후 진단이 된다(2026-09-01 야간 전량 실패를 stderr 빈 값이라 놓침).
+            detail = ((r.stderr or "").strip() or (r.stdout or "").strip())[:300]
+            logger.warning(f"[headless] 종료코드 {r.returncode}: {detail}")
             return None
         return json.loads(r.stdout).get("result")
     except Exception as e:
