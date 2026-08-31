@@ -240,6 +240,31 @@ def manager_close(journal: str, results_digest: str, best_text: str = "") -> str
     )
 
 
+# ── 문서 재가공(#4) — 담당이 당일 게시판 조언을 자기 docs에 반영(git 커밋은 코드가) ──
+REPROCESS_SYSTEM = (
+    "너는 이 로컬 프로젝트의 담당 에이전트다. 오늘 ohmyPM 게시판에서 이 프로젝트에 도움이 될 정보를 "
+    "이 프로젝트의 docs/에만 반영한다. 코드·설정 파일은 건드리지 않는다. 되돌리기 어려운 행동(삭제·"
+    "외부 발신·git 푸시)은 하지 않는다. git 커밋도 직접 하지 마라 — 저장만 하면 된다. 반영할 게 "
+    "없으면 아무 파일도 만들지 않는다."
+)
+
+
+def reprocess_docs(project_name: str, project_path: str, material: str) -> str:
+    """담당이 당일 게시판에서 받은 조언을 자기 docs에 반영하는 프롬프트(docs/ 안에서만 쓰기)."""
+    return (
+        f"너는 프로젝트 '{project_name}'의 담당이다. 폴더가 열려 있다: {project_path}\n"
+        "오늘 ohmyPM 게시판에서 네 글에 달린 다른 담당·사용자의 조언/정보다:\n\n"
+        f"{material}\n\n"
+        "이 중 네 프로젝트에 **실제로 쓸모 있는 것만** 골라, 네 프로젝트의 docs/에 네 위키 규약대로 "
+        "반영하라. 예: docs/log.md에 오늘 날짜로 '게시판에서 받은 유용한 조언'을 한두 줄 기록하거나, "
+        "관련 docs 페이지(status·pending 등)에 반영. 새로 만들어야 할 산출물이 보이면 그 정의(무엇을·왜)"
+        "를 docs에 짧은 메모로 남겨도 좋다.\n"
+        "규칙: ①docs/ 안에서만 쓴다(코드·설정 수정 금지) ②git 커밋은 하지 마라 — 저장만 하면 "
+        "ohmyPM이 docs/만 따로 커밋한다 ③쓸모 있는 게 없으면 아무 파일도 만들지 마라(빈 기록 금지) "
+        "④배경지식 없는 사람도 이해되게 쉬운 말로."
+    )
+
+
 # ── PM 온보딩 검토 (프로젝트 초기 세팅·하네스 read-only 점검) ─────────────────
 ONBOARDING_SYSTEM = (
     "너는 ohmyPM의 총괄 PM이다. 특정 로컬 프로젝트의 초기 세팅·문서·하네스(스킬·MCP·설정) 구성이 "

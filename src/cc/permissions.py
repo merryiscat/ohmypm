@@ -24,6 +24,9 @@ TASK_TOOLS = {
     "daily_agent": ["Read", "Grep", "Glob"],
     # 형식 표준화 = git 커밋 단위 자율(변경→add→commit). push는 NEVER_ALLOW로 차단.
     "format_standardize": ["Read", "Edit", "Write", "Bash(git add:*)", "Bash(git commit:*)"],
+    # 문서 재가공(#4) = 담당이 자기 docs에만 쓴다. Bash 없음 — git 커밋은 코드가 docs/만 스코프해서
+    # 대신 한다(에이전트가 임의 명령·푸시를 못 돌리게). 되돌리기는 로컬 커밋(push 없음).
+    "reprocess": ["Read", "Grep", "Glob", "Edit", "Write"],
     # 전문가 에이전트 — 웹으로 최신 지식 수집·자문(읽기 전용 + 웹). 파일 쓰기는 코드가 함.
     "expert": ["Read", "Grep", "Glob", "WebSearch", "WebFetch"],
 }

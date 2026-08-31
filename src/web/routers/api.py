@@ -397,3 +397,16 @@ def trigger_post_feedback(background: BackgroundTasks, cfg: BoardDiscussionReq |
 
     background.add_task(run_post_feedback, paths=cfg.paths)
     return {"ok": True, "started": True}
+
+
+@router.post("/reprocess")
+def trigger_reprocess(background: BackgroundTasks, cfg: BoardDiscussionReq | None = None) -> dict:
+    """문서 재가공(#4) 수동 트리거 — 담당이 당일 게시판 조언을 자기 docs에 반영(git 커밋, push 안 함).
+
+    게시판 원본 글·댓글은 남는다. 에이전트는 Write/Edit만, 커밋은 코드가 docs/만 스코프.
+    """
+    cfg = cfg or BoardDiscussionReq()
+    from src.cc.reprocess import run_reprocess
+
+    background.add_task(run_reprocess, paths=cfg.paths)
+    return {"ok": True, "started": True}

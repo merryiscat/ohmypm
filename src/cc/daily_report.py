@@ -430,9 +430,11 @@ def run_nightly() -> dict:
     """01:00 cron 진입점 — 총괄 관리자가 지휘하는 하루.
 
     ① 관리자 아침 계획(저널+현황→프로젝트별 지침) ② 일간보고(지침 주입, 병렬, 소프트마감 03시)
-    ③ 게시판 토론 ④ 글쓴이 반응 ⑤ 보상 처리 ⑥ 관리자 저녁 종합(저널 갱신) → 요약 저장(07시 발송).
+    ③ 게시판 토론 ④ 글쓴이 반응 ⑤ 문서 재가공(받은 조언을 자기 docs에, git 커밋·push 안 함)
+    ⑥ 보상 처리 ⑦ 관리자 저녁 종합(저널 갱신) → 요약 저장(07시 발송).
     """
     from src.cc import manager
+    from src.cc.reprocess import run_reprocess
     from src.cc.rewards import run_rewards
     from src.db import alerts as alerts_db
     from src.scan.discover import discover_projects
@@ -449,11 +451,12 @@ def run_nightly() -> dict:
                               notify=False, guidance_by_path=guidance)   # ②
     board = run_board_discussion(deadline_ts=_at(settings.discussion_until_hour))    # ③
     feedback = run_post_feedback(deadline_ts=_at(settings.discussion_until_hour))    # ④
-    rewards = run_rewards()                                       # ⑤ 보상
-    synthesis = manager.close_day(date, report.get("results", []))   # ⑥ 저녁 종합
+    reprocess = run_reprocess()                                   # ⑤ 문서 재가공(docs 커밋·push 안 함)
+    rewards = run_rewards()                                       # ⑥ 보상
+    synthesis = manager.close_day(date, report.get("results", []))   # ⑦ 저녁 종합
     # 아침 발송용 요약 = 관리자 종합(없으면 기본 텔레그램 텍스트)
     alerts_db.set_setting(f"daily_summary:{date}", synthesis or report.get("telegram_preview", ""))
-    return {"report": report, "board": board, "feedback": feedback,
+    return {"report": report, "board": board, "feedback": feedback, "reprocess": reprocess,
             "rewards": rewards, "synthesis_chars": len(synthesis or "")}
 
 
