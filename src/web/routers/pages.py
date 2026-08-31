@@ -168,6 +168,10 @@ _HTML = r"""<!doctype html>
   .ptable .up{color:var(--green);font-weight:700} .ptable .down{color:var(--muted)}
   .ptable .pid{color:var(--muted);font-size:11.5px}
   .ptable .del{color:var(--red);cursor:pointer;font-size:12px}
+  .pbtn{font-size:11.5px;font-weight:700;padding:3px 10px;border-radius:12px;border:1px solid var(--line);cursor:pointer;margin-right:4px}
+  .pbtn.start{background:#e7f3ec;color:#1f7a44;border-color:#bcdcc7}
+  .pbtn.stop{background:#fdecec;color:#b23b3b;border-color:#f0cdcd}
+  .pbtn:disabled{opacity:.55;cursor:default}
   .pform{display:flex;gap:8px;align-items:center;margin-top:16px;flex-wrap:wrap;max-width:840px}
   .pform-h{font-size:12px;color:var(--muted);font-weight:700;width:100%}
   .pform select,.pform input{padding:8px 10px;border:1px solid var(--line);border-radius:8px;font-size:13px;font-family:inherit}
@@ -637,12 +641,13 @@ function renderPorts(){
   setHeader('포트', {summary:false, actions:false});
   const opts = PROJECTS.map(p=>`<option value="${escAttr(p.path)}">${esc(p.name)}</option>`).join('');
   document.getElementById('view').innerHTML =
-    '<div class="note-line" style="padding-bottom:12px">프로젝트가 점유하는 로컬 포트를 등록해 지금 떠 있는지·충돌 여부를 봅니다. 실행 관리(start/stop)는 다음 단계.</div>'+
+    '<div class="note-line" style="padding-bottom:12px">프로젝트가 점유하는 로컬 포트를 등록해 지금 떠 있는지·충돌 여부를 봅니다. 실행 명령(start_cmd)을 함께 등록하면 여기서 서버를 켜고(등록 명령만) 끌 수 있습니다.</div>'+
     '<div id="ports">불러오는 중…</div>'+
     `<div class="pform"><div class="pform-h">포트 등록</div>`+
       `<select id="pf-proj">${opts}</select>`+
       `<input id="pf-port" type="number" placeholder="포트(예: 8000)" style="width:150px">`+
-      `<input id="pf-label" class="grow" placeholder="용도(예: 웹 대시보드)">`+
+      `<input id="pf-label" placeholder="용도(예: 웹 대시보드)" style="width:180px">`+
+      `<input id="pf-cmd" class="grow" placeholder="실행 명령(선택, 예: uv run uvicorn ...)">`+
       `<button onclick="addPort()">등록</button></div>`;
   fillPorts();
   clearInterval(pollTimer);
@@ -665,8 +670,15 @@ async function fillPorts(){
         const st = r.up
           ? `<span class="up">● 떠 있음</span> <span class="pid">${esc(r.proc||'')} #${r.pid}</span>`
           : '<span class="down">○ 멈춤</span>';
+        // 실행 관리: 떠 있으면 중지(확인창), 멈춰 있고 실행명령 있으면 시작(등록명령만)
+        let act = '';
+        if(r.up){
+          act = `<button class="pbtn stop" onclick="stopPort(${r.id},${r.port},'${escAttr(r.proc||'')}',${r.pid})">중지</button>`;
+        } else if(r.start_cmd){
+          act = `<button class="pbtn start" onclick="startPort(${r.id},this)">시작</button>`;
+        }
         return `<tr><td>${esc(r.name)}</td><td class="port">${r.port}</td><td>${esc(r.label||'')}</td>`+
-          `<td>${st}</td><td><span class="del" onclick="delPort(${r.id})">삭제</span></td></tr>`;
+          `<td>${st}</td><td>${act} <span class="del" onclick="delPort(${r.id})">삭제</span></td></tr>`;
       }).join('')+'</tbody></table>';
   } else {
     html += '<div class="empty" style="padding:20px">등록된 포트가 없습니다 — 아래 감지된 포트에서 등록하거나 직접 추가하세요</div>';
@@ -690,6 +702,7 @@ function inlineReg(port, el){
   const opts = PROJECTS.map(p=>`<option value="${escAttr(p.path)}">${esc(p.name)}</option>`).join('');
   td.innerHTML = `<select class="ireg-proj">${opts}</select>`+
     `<input class="ireg-label" placeholder="용도(선택)">`+
+    `<input class="ireg-cmd" placeholder="실행 명령(선택)">`+
     `<button onclick="saveInlineReg(${port}, this)">저장</button>`+
     `<span class="del" onclick="cancelInlineReg()">취소</span>`;
   td.querySelector('.ireg-proj').focus();
@@ -698,8 +711,9 @@ async function saveInlineReg(port, btn){
   const td = btn.closest('td');
   const project = td.querySelector('.ireg-proj').value;
   const label = td.querySelector('.ireg-label').value;
+  const start_cmd = (td.querySelector('.ireg-cmd')||{}).value || '';
   await fetch('/api/ports',{method:'POST',headers:{'Content-Type':'application/json'},
-    body:JSON.stringify({project, port, label})});
+    body:JSON.stringify({project, port, label, start_cmd})});
   portEditing = false;
   fillPorts();   // 등록되면 위 '등록 포트' 표로 올라가고 감지 목록에서 빠짐
 }
@@ -802,14 +816,34 @@ async function addPort(){
   const project = document.getElementById('pf-proj').value;
   const port = parseInt(document.getElementById('pf-port').value, 10);
   const label = document.getElementById('pf-label').value;
+  const start_cmd = document.getElementById('pf-cmd').value;
   if(!port) return;
   await fetch('/api/ports',{method:'POST',headers:{'Content-Type':'application/json'},
-    body:JSON.stringify({project, port, label})});
+    body:JSON.stringify({project, port, label, start_cmd})});
   document.getElementById('pf-port').value = ''; document.getElementById('pf-label').value = '';
+  document.getElementById('pf-cmd').value = '';
   fillPorts();
 }
 async function delPort(id){
   await fetch('/api/ports/'+id,{method:'DELETE'});
+  fillPorts();
+}
+
+// 서버 켜기 — 등록된 start_cmd만 실행(화이트리스트). 확인 없이 바로.
+async function startPort(id, btn){
+  if(btn){ btn.disabled = true; btn.textContent = '시작 중…'; }
+  let r = {};
+  try{ r = await fetch('/api/ports/'+id+'/start',{method:'POST'}).then(x=>x.json()); }catch(e){}
+  if(r && r.ok === false) alert('시작 못 함: ' + (r.reason||'알 수 없음'));
+  setTimeout(fillPorts, 1500);   // 뜨는 데 잠깐 걸린다
+}
+// 서버 끄기 — 되돌리기 어려운 행동이라 대상(PID·프로세스명)을 보여주고 확인받는다
+async function stopPort(id, port, proc, pid){
+  const ok = confirm('포트 '+port+' 를 점유한 프로세스를 강제 종료합니다.\n\n대상: '+(proc||'(이름 미상)')+' (PID '+pid+')\n\n저장하지 않은 작업이 있으면 유실될 수 있습니다. 정말 종료할까요?');
+  if(!ok) return;
+  let r = {};
+  try{ r = await fetch('/api/ports/'+id+'/stop',{method:'POST'}).then(x=>x.json()); }catch(e){}
+  if(r && r.ok === false) alert('종료 못 함: ' + (r.reason||'알 수 없음'));
   fillPorts();
 }
 

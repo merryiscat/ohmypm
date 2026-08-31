@@ -304,6 +304,22 @@ def delete_port(port_id: int) -> dict:
     return {"ok": True}
 
 
+@router.post("/ports/{port_id}/start")
+def start_port_api(port_id: int) -> dict:
+    """등록된 start_cmd로 서버 켜기(화이트리스트 — 등록 명령만 실행)."""
+    from src.portctl import start_port
+
+    return start_port(port_id)
+
+
+@router.post("/ports/{port_id}/stop")
+def stop_port_api(port_id: int) -> dict:
+    """포트 점유 프로세스 종료. 화면에서 대상(PID·프로세스명) 확인 게이트를 거친 뒤 호출된다."""
+    from src.portctl import stop_port
+
+    return stop_port(port_id)
+
+
 class DailyReportReq(BaseModel):
     paths: list[str] | None = None   # 지정 시 그 프로젝트만(테스트). None=전체
     max_rounds: int = 8
