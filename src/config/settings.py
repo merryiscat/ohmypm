@@ -37,6 +37,9 @@ class Settings(BaseSettings):
     daily_soft_deadline_hour: int = 3
     discussion_until_hour: int = 4
     telegram_hour: int = 7   # 일간보고 요약 텔레그램 발송 시각(생성은 새벽, 발송은 아침)
+    # 전문가 위키 정기 수집 — 매주 지정 요일·시각(웹 조사라 자주 돌릴 필요 없음)
+    expert_collect_weekday: int = 0   # 0=월요일 … 6=일요일
+    expert_collect_hour: int = 5      # 새벽(일간보고 흐름과 겹치지 않게)
 
     # --- 텔레그램 (비우면 알림 no-op) ---
     telegram_bot_token: str = ""

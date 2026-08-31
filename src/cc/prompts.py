@@ -273,10 +273,17 @@ ONBOARDING_SYSTEM = (
 )
 
 
-def onboarding_review(project_name: str, project_path: str) -> str:
-    """PM이 프로젝트 온보딩(초기 세팅·하네스)을 진단하는 프롬프트. 마크다운 리포트만."""
+def onboarding_review(project_name: str, project_path: str, expert_ref: str = "") -> str:
+    """PM이 프로젝트 온보딩(초기 세팅·하네스)을 진단하는 프롬프트. 마크다운 리포트만.
+
+    expert_ref: 하네스 전문가 위키 발췌(자동 자문) — 권장 조치의 근거로 삼게 한다.
+    """
+    ref_block = (
+        f"\n[하네스 전문가 참고 지식 — 권장 조치의 근거로 활용]\n{expert_ref}\n" if expert_ref else ""
+    )
     return (
         f"너는 프로젝트 '{project_name}'의 온보딩을 점검하는 PM이다. 폴더가 열려 있다: {project_path}\n"
+        f"{ref_block}"
         "아래를 Read/Grep/Glob으로 **직접 확인**해 초기 세팅이 잘 됐는지 진단하라(읽기 전용):\n"
         "- CLAUDE.md: 있는지, 지침이 충분·명확한지(언어·패키지매니저·컨벤션·프로젝트 개요)\n"
         "- docs/: 위키·기획 문서 구조(status·plan·log 등)가 있고 살아있는지\n"

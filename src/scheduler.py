@@ -71,6 +71,23 @@ async def _run_telegram_job() -> None:
         logger.error(f"[스케줄러] 텔레그램 발송 실패: {e}")
 
 
+async def _run_expert_collect_job() -> None:
+    """매주 — 전 도메인 전문가 위키를 웹으로 최신화(정기 수집). headless라 to_thread."""
+    if "expert_collect" in _running:
+        return
+    _running.add("expert_collect")
+    try:
+        import asyncio
+
+        from src.cc.expert import collect_all
+
+        await asyncio.to_thread(collect_all)
+    except Exception as e:
+        logger.error(f"[스케줄러] 전문가 정기수집 실패: {e}")
+    finally:
+        _running.discard("expert_collect")
+
+
 async def _heartbeat_job() -> None:
     """heartbeat: 기한 임박·신규 이슈 감지 골격. 상담(케이스4)·화이트리스트 자율은 다음 관문."""
     try:
@@ -101,6 +118,12 @@ def start_scheduler() -> None:
         replace_existing=True,
     )
     scheduler.add_job(
+        _run_expert_collect_job,
+        CronTrigger(day_of_week=settings.expert_collect_weekday, hour=settings.expert_collect_hour, minute=0),
+        id="expert_collect",
+        replace_existing=True,
+    )
+    scheduler.add_job(
         _heartbeat_job,
         IntervalTrigger(seconds=settings.heartbeat_sec),
         id="heartbeat",
@@ -109,7 +132,8 @@ def start_scheduler() -> None:
     scheduler.start()
     logger.info(
         f"[스케줄러] 시작 — 스캔 {settings.scan_hour}:00, 일간보고 {settings.daily_report_hour}:00, "
-        f"텔레그램 {settings.telegram_hour}:00, heartbeat {settings.heartbeat_sec}초"
+        f"텔레그램 {settings.telegram_hour}:00, 전문가수집 매주 {settings.expert_collect_weekday}요일 "
+        f"{settings.expert_collect_hour}:00, heartbeat {settings.heartbeat_sec}초"
     )
 
 
