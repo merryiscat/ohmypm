@@ -77,19 +77,48 @@ def refresh_scores(name_by_project: dict[str, str]) -> None:
     db.commit()
 
 
-def take_reward(project: str, name: str, reward: str) -> None:
-    """1000점 보상 택1 — 현재 게시판 누적을 baseline으로 밀어 점수 리셋 + 보상 기록."""
+def set_held(project: str, held: bool) -> None:
+    db = get_db()
+    db.execute("UPDATE agent_profiles SET held = ? WHERE project = ?", (int(held), project))
+    db.commit()
+
+
+def take_reward(project: str, name: str, reward: str,
+                new_name: str | None = None, persona: str | None = None) -> None:
+    """1000점 보상 택1 — 현재 게시판 누적을 baseline으로 밀어 점수 리셋 + 보상 기록.
+
+    reward='이름'이면 new_name, '페르소나'면 persona를 프로필에 반영(연속성 주입용).
+    """
     scores = compute_scores()
     earned = scores.get(name, 0)
     db = get_db()
     prof = get_profile(project) or {}
     hist = (prof.get("rewards") or "")
-    db.execute(
-        "UPDATE agent_profiles SET baseline = ?, points = 0, reward = ?, "
-        "rewards = ?, updated_at = datetime('now') WHERE project = ?",
-        (earned, reward, (hist + "\n" + reward).strip(), project),
-    )
+    fields = ["baseline = ?", "points = 0", "held = 0", "reward = ?", "rewards = ?",
+              "updated_at = datetime('now')"]
+    params: list = [earned, reward, (hist + "\n" + reward).strip()]
+    if new_name:
+        fields.append("name = ?"); params.append(new_name)
+    if persona:
+        fields.append("persona = ?"); params.append(persona)
+    params.append(project)
+    db.execute(f"UPDATE agent_profiles SET {', '.join(fields)} WHERE project = ?", params)
     db.commit()
+
+
+def persona_prefix(project: str) -> str:
+    """담당 프롬프트 앞에 붙일 정체성 한 줄(연속성). 이름·페르소나 없으면 빈 문자열."""
+    prof = get_profile(project)
+    if not prof:
+        return ""
+    bits = []
+    if prof.get("name"):
+        bits.append(f"너는 '{prof['name']}'라는 이름의 담당이다")
+    if prof.get("persona"):
+        bits.append(f"페르소나: {prof['persona']}")
+    if prof.get("reward") == "멘토" or (prof.get("rewards") and "멘토" in prof["rewards"]):
+        bits.append("너는 멘토로 승격된 담당이다")
+    return ("[정체성] " + ". ".join(bits) + ".\n") if bits else ""
 
 
 def grant_wish(project: str, name: str, wish: str) -> None:

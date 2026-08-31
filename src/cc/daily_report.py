@@ -33,6 +33,7 @@ from src.cc.prompts import (
 )
 from src.cc.room_agent import _neutral_cwd
 from src.config.settings import settings
+from src.db import agents as agents_db
 from src.db import board as board_db
 from src.db import issues as issues_db
 from src.db import messages as messages_db
@@ -167,7 +168,7 @@ def _apply_updates(updates: list, valid_ids: set[int]) -> int:
 
 def _agent_call(name: str, path: str, question: str, history: str) -> str:
     r = run_headless(
-        prompt=daily_agent_answer(name, path, question, history),
+        prompt=agents_db.persona_prefix(path) + daily_agent_answer(name, path, question, history),
         cwd=_neutral_cwd(),
         allowed_tools=tools_for("daily_agent")[0],
         disallowed_tools=tools_for("daily_agent")[1],
@@ -178,13 +179,17 @@ def _agent_call(name: str, path: str, question: str, history: str) -> str:
     return (r or "").strip() or "(담당 응답 없음)"
 
 
-def report_one_project(path: str, name: str, date: str, max_rounds: int = MAX_ROUNDS) -> dict:
+def report_one_project(path: str, name: str, date: str, guidance: str = "",
+                       max_rounds: int = MAX_ROUNDS) -> dict:
     """한 프로젝트의 PM↔담당 1:1 일간 점검. (날짜·프로젝트)별 방에 대화 저장. 결과 dict 반환.
 
+    guidance: 총괄 관리자가 오늘 이 프로젝트에 준 지침(있으면 PM 팩트에 얹는다).
     저장 방 = daily::{date}::{path}. PM 발화 author='pm'(화면 오른쪽), 담당 author='agent'(왼쪽).
     """
     room = _daily_room(date, path)
     facts = build_facts(path)
+    if guidance:
+        facts = f"[총괄 관리자의 오늘 지침] {guidance}\n\n" + facts
     # PM이 상태·기한을 갱신할 수 있게 이슈를 id와 함께 목록화
     issue_rows = _project_issues(path)
     valid_ids = {i["id"] for i in issue_rows}
@@ -222,6 +227,7 @@ def run_daily_report(
     concurrency: int = CONCURRENCY,
     deadline_ts: float | None = None,
     notify: bool = True,
+    guidance_by_path: dict[str, str] | None = None,
 ) -> dict:
     """전(또는 지정) 프로젝트 일간보고. 병렬 + 소프트 마감. 끝나면 텔레그램 종합 발송.
 
@@ -235,6 +241,7 @@ def run_daily_report(
         wanted = set(paths)
         projects = [p for p in projects if p["path"] in wanted]
     date = datetime.now().strftime("%Y-%m-%d")
+    guidance_by_path = guidance_by_path or {}
 
     done_results: list[dict] = []
     skipped: list[str] = []
@@ -243,7 +250,8 @@ def run_daily_report(
         if deadline_ts and time.time() > deadline_ts:
             return {"name": p["name"], "path": p["path"], "skipped": True}
         try:
-            return report_one_project(p["path"], p["name"], date, max_rounds)
+            return report_one_project(p["path"], p["name"], date,
+                                      guidance_by_path.get(p["path"], ""), max_rounds)
         except Exception as e:  # 한 프로젝트 실패가 전체를 안 멈춤
             logger.warning(f"[일간보고] {p['name']} 실패: {e}")
             return {"name": p["name"], "path": p["path"], "skipped": False,
@@ -268,12 +276,12 @@ def run_daily_report(
 
         sent = send_telegram_sync(telegram_text)
     return {"date": date, "completed": len(done_results), "skipped": skipped,
-            "telegram_sent": sent, "telegram_preview": telegram_text}
+            "telegram_sent": sent, "telegram_preview": telegram_text, "results": done_results}
 
 
 def _assemble_telegram(date: str, results: list[dict], skipped: list[str]) -> str:
     """직후 종합 1회 텔레그램 본문 — 헤드라인 3줄 + 프로젝트별 요약 + 미처리."""
-    lines = [f"<b>📋 ohmyPM 일간보고 {date}</b>"]
+    lines = [f"<b>ohmyPM 일간보고 {date}</b>"]
     # 헤드라인: 요약 첫 줄이 있는 프로젝트 상위 3개
     heads = [r for r in results if r.get("summary") and "요약 없음" not in r["summary"]][:3]
     if heads:
@@ -287,7 +295,7 @@ def _assemble_telegram(date: str, results: list[dict], skipped: list[str]) -> st
         lines.append(f"<b>{r['name']}</b>\n{r.get('summary', '')}")
     if skipped:
         lines.append("─────")
-        lines.append(f"⚠ 미처리 {len(skipped)}개(마감 초과): {', '.join(skipped)}")
+        lines.append(f"[미처리] {len(skipped)}개(마감 초과): {', '.join(skipped)}")
     return "\n".join(lines)
 
 
@@ -346,7 +354,7 @@ def run_board_discussion(paths: list[str] | None = None, deadline_ts: float | No
         if deadline_ts and time.time() > deadline_ts:
             break
         out = run_headless(
-            prompt=board_comment(p["name"], p["path"], board_text),
+            prompt=agents_db.persona_prefix(p["path"]) + board_comment(p["name"], p["path"], board_text),
             cwd=_neutral_cwd(),
             allowed_tools=allowed,
             disallowed_tools=disallowed,
@@ -386,7 +394,7 @@ def run_post_feedback(paths: list[str] | None = None, deadline_ts: float | None 
         cids = {c["id"] for c in top}
         ctext = "\n".join(f"[{c['id']}] {c['author']}: {(c['body'] or '')[:200]}" for c in top)
         out = run_headless(
-            prompt=post_feedback(post["author"], post["project"], post["title"], post["body"], ctext),
+            prompt=agents_db.persona_prefix(post["project"]) + post_feedback(post["author"], post["project"], post["title"], post["body"], ctext),
             cwd=_neutral_cwd(),
             allowed_tools=allowed, disallowed_tools=disallowed,
             timeout=BOARD_TIMEOUT, append_system_prompt=FEEDBACK_SYSTEM,
@@ -419,12 +427,15 @@ def run_post_feedback(paths: list[str] | None = None, deadline_ts: float | None 
 
 
 def run_nightly() -> dict:
-    """01:00 cron 진입점 — 일간보고(소프트마감 03시) → 게시판 토론(마감 04시).
+    """01:00 cron 진입점 — 총괄 관리자가 지휘하는 하루.
 
-    텔레그램은 여기서 안 보낸다 — 요약을 저장만 하고 아침(07시) 별도 cron이 발송한다.
-    headless 블로킹이라 스케줄러는 이걸 asyncio.to_thread로 돌린다(루프 안 막게).
+    ① 관리자 아침 계획(저널+현황→프로젝트별 지침) ② 일간보고(지침 주입, 병렬, 소프트마감 03시)
+    ③ 게시판 토론 ④ 글쓴이 반응 ⑤ 보상 처리 ⑥ 관리자 저녁 종합(저널 갱신) → 요약 저장(07시 발송).
     """
+    from src.cc import manager
+    from src.cc.rewards import run_rewards
     from src.db import alerts as alerts_db
+    from src.scan.discover import discover_projects
 
     now = datetime.now()
     date = now.strftime("%Y-%m-%d")
@@ -432,13 +443,18 @@ def run_nightly() -> dict:
     def _at(hour: int) -> float:
         return now.replace(hour=hour, minute=0, second=0, microsecond=0).timestamp()
 
-    report = run_daily_report(deadline_ts=_at(settings.daily_soft_deadline_hour), notify=False)
-    board = run_board_discussion(deadline_ts=_at(settings.discussion_until_hour))
-    # 글쓴이가 자기 글 댓글에 반응(좋아요/싫어요/대댓글) — 강화학습 보상 신호
-    feedback = run_post_feedback(deadline_ts=_at(settings.discussion_until_hour))
-    # 아침 발송용으로 요약 텍스트를 저장(발송은 telegram cron이)
-    alerts_db.set_setting(f"daily_summary:{date}", report.get("telegram_preview", ""))
-    return {"report": report, "board": board, "feedback": feedback}
+    projects = discover_projects()
+    guidance = manager.plan_day(projects)                        # ① 아침 계획
+    report = run_daily_report(deadline_ts=_at(settings.daily_soft_deadline_hour),
+                              notify=False, guidance_by_path=guidance)   # ②
+    board = run_board_discussion(deadline_ts=_at(settings.discussion_until_hour))    # ③
+    feedback = run_post_feedback(deadline_ts=_at(settings.discussion_until_hour))    # ④
+    rewards = run_rewards()                                       # ⑤ 보상
+    synthesis = manager.close_day(date, report.get("results", []))   # ⑥ 저녁 종합
+    # 아침 발송용 요약 = 관리자 종합(없으면 기본 텔레그램 텍스트)
+    alerts_db.set_setting(f"daily_summary:{date}", synthesis or report.get("telegram_preview", ""))
+    return {"report": report, "board": board, "feedback": feedback,
+            "rewards": rewards, "synthesis_chars": len(synthesis or "")}
 
 
 def send_daily_telegram(date: str | None = None) -> bool:

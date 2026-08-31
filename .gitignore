@@ -39,3 +39,4 @@ docs/_*.html
 
 # 전문가 에이전트 자동 생성 지식 위키(런타임 캐시)
 docs/experts/
+docs/manager/

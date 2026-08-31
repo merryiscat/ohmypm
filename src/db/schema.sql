@@ -86,6 +86,7 @@ CREATE TABLE IF NOT EXISTS agent_profiles (
     persona    TEXT,               -- 획득한 페르소나
     points     INTEGER DEFAULT 0,  -- 현재 점수 = 누적(게시판) − baseline
     baseline   INTEGER DEFAULT 0,  -- 보상으로 소진한 점수(1000 택1·2000 소원권 시 현재점수 리셋용)
+    held       INTEGER DEFAULT 0,  -- 1000점에서 '참고 2000 향해' 선택하면 1(재질문 방지)
     rewards    TEXT,               -- 지금까지 받은 보상 이력(줄바꿈 구분)
     reward     TEXT,               -- 최근 선택 보상 키
     wish       TEXT,               -- 소원권 내용(이력)

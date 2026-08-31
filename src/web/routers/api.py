@@ -42,6 +42,15 @@ def get_agents() -> list[dict]:
     return out
 
 
+@router.post("/rewards")
+def trigger_rewards(background: BackgroundTasks) -> dict:
+    """보상 처리 수동 트리거 — 1000점↑ 담당에게 보상 선택, 2000점↑ 소원권."""
+    from src.cc.rewards import run_rewards
+
+    background.add_task(run_rewards)
+    return {"ok": True, "started": True}
+
+
 class ProjectPath(BaseModel):
     path: str
 

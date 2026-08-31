@@ -58,3 +58,10 @@ def _migrate(db: sqlite3.Connection) -> None:
         ("likes", "likes INTEGER DEFAULT 0"),
         ("dislikes", "dislikes INTEGER DEFAULT 0"),
     ))
+    _ensure("agent_profiles", (
+        ("baseline", "baseline INTEGER DEFAULT 0"),
+        ("held", "held INTEGER DEFAULT 0"),
+        ("rewards", "rewards TEXT"),
+        ("persona", "persona TEXT"),
+        ("wish", "wish TEXT"),
+    ))
