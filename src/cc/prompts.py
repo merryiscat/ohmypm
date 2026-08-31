@@ -240,6 +240,30 @@ def manager_close(journal: str, results_digest: str, best_text: str = "") -> str
     )
 
 
+# ── PM 온보딩 검토 (프로젝트 초기 세팅·하네스 read-only 점검) ─────────────────
+ONBOARDING_SYSTEM = (
+    "너는 ohmyPM의 총괄 PM이다. 특정 로컬 프로젝트의 초기 세팅·문서·하네스(스킬·MCP·설정) 구성이 "
+    "잘 됐는지 read-only로 점검한다. 파일을 고치거나 명령을 실행하지 않는다. 결과는 한국어 마크다운 "
+    "리포트로만 낸다(인사·설명 없이)."
+)
+
+
+def onboarding_review(project_name: str, project_path: str) -> str:
+    """PM이 프로젝트 온보딩(초기 세팅·하네스)을 진단하는 프롬프트. 마크다운 리포트만."""
+    return (
+        f"너는 프로젝트 '{project_name}'의 온보딩을 점검하는 PM이다. 폴더가 열려 있다: {project_path}\n"
+        "아래를 Read/Grep/Glob으로 **직접 확인**해 초기 세팅이 잘 됐는지 진단하라(읽기 전용):\n"
+        "- CLAUDE.md: 있는지, 지침이 충분·명확한지(언어·패키지매니저·컨벤션·프로젝트 개요)\n"
+        "- docs/: 위키·기획 문서 구조(status·plan·log 등)가 있고 살아있는지\n"
+        "- 하네스: .claude/(skills·settings·hooks)·.mcp.json 등 도구 구성이 있는지\n"
+        "- 기본기: README, .gitignore(.env·키 차단), 실행·테스트 방법이 명시됐는지\n\n"
+        "출력은 마크다운 리포트만. 구조: '## 한줄 진단'(세팅 성숙도 상/중/하 + 근거) → "
+        "'## 잘 된 것' → '## 빠졌거나 약한 것' → '## 권장 조치'(구체적으로 우선순위 순). "
+        "배경지식 없는 사용자도 이해되게 쉬운 말로."
+        + GATE
+    )
+
+
 # ── PM 대화 패널 (사용자 ↔ 총괄 PM, 일간보고 화면 오른쪽) ─────────────────────
 # 일간보고의 PM_SYSTEM은 JSON 강제라 대화에 못 쓴다 → 대화 전용 시스템 프롬프트.
 PM_CHAT_SYSTEM = (

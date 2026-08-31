@@ -180,6 +180,23 @@ def pm_chat_api(m: PmChatMsg, background: BackgroundTasks) -> dict:
     return {"ok": True, "started": True, "room": PM_CHAT_ROOM}
 
 
+# ── PM 온보딩 검토 (프로젝트 초기 세팅·하네스 read-only 점검) ─────────────────
+class OnboardReq(BaseModel):
+    path: str
+
+
+@router.post("/onboarding")
+def trigger_onboarding(req: OnboardReq, background: BackgroundTasks) -> dict:
+    """PM이 그 프로젝트 세팅·하네스를 read-only로 점검(백그라운드). 리포트는 담당 방에 뜬다."""
+    proj = next((p for p in projects_db.list_projects() if p["path"] == req.path), None)
+    if not proj:
+        return {"ok": False, "error": "unknown project"}
+    from src.cc.onboarding import review_project
+
+    background.add_task(review_project, proj["path"], proj["name"])
+    return {"ok": True, "started": True}
+
+
 # ── 전문가 에이전트 (ohmyPM 상주, 웹 지식수집 + PM 자문) ────────────────────
 @router.get("/experts")
 def get_experts() -> list[dict]:

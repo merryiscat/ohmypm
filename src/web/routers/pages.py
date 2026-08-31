@@ -93,7 +93,10 @@ _HTML = r"""<!doctype html>
   .room-main{flex:1;min-width:0;min-height:0;overflow-y:auto}
   .room-main>section{margin-bottom:0}
   .room-side{width:420px;flex:0 0 420px;display:flex;flex-direction:column;min-height:0}
-  .room-side .side-h{font-size:12px;color:var(--muted);font-weight:700;text-transform:uppercase;letter-spacing:.02em;margin:0 2px 8px}
+  .room-side .side-h{font-size:12px;color:var(--muted);font-weight:700;text-transform:uppercase;letter-spacing:.02em;margin:0 2px 8px;display:flex;align-items:center;justify-content:space-between;gap:8px}
+  .mini-btn{font-size:11px;font-weight:700;padding:4px 10px;border:1px solid var(--line);border-radius:14px;background:var(--card);color:#3a52a8;cursor:pointer;text-transform:none;letter-spacing:0}
+  .mini-btn:hover:not(:disabled){background:#eef1fb}
+  .mini-btn:disabled{opacity:.55;cursor:default}
   @media(max-width:1000px){.room-layout{flex-direction:column}.room-side{width:auto;flex:none}}
   /* 달력 */
   .cal{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:12px;margin-bottom:14px}
@@ -824,12 +827,21 @@ function renderRoom(path){
     `<div class="room-layout">`+
       `<div class="room-main" id="room-main"></div>`+
       `<div class="room-side">`+
-        `<div class="side-h">${esc(name)} 담당 에이전트</div>`+
+        `<div class="side-h">${esc(name)} 담당 에이전트`+
+          `<button class="mini-btn" data-onboard="${escAttr(path)}">온보딩 검토</button>`+
+        `</div>`+
         chatMarkup()+
       `</div>`+
     `</div>`;
   fillRoomMain(path);
   bindChat(path, true);   // 프로젝트 룸 = 담당 에이전트 방
+}
+
+// PM 온보딩 검토 요청 — 결과는 담당 방에 PM 메시지로 뜬다(채팅 폴링이 잡는다)
+async function requestOnboarding(path, btn){
+  if(btn){ btn.disabled = true; btn.textContent = '검토 중… (1~2분)'; }
+  try{ await fetch('/api/onboarding',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({path})}); }catch(e){}
+  setTimeout(()=>{ if(btn){ btn.disabled = false; btn.textContent = '온보딩 검토'; } }, 90000);
 }
 
 // 왼쪽(달력+칸반)만 다시 그린다 — 상태 이동·달력 넘김에서 채팅은 안 건드리게 분리
@@ -931,7 +943,10 @@ function route(){
 }
 window.addEventListener('hashchange', route);
 // 프로젝트 룸 진입 — data-room 을 가진 요소(사이드바 룸·카드 '룸 열기') 위임 처리
+// 온보딩 검토(data-onboard)도 여기서 위임 — 경로에 역슬래시가 있어 onclick 인라인은 못 쓴다
 document.addEventListener('click', e=>{
+  const ob = e.target.closest('[data-onboard]');
+  if(ob){ requestOnboarding(ob.getAttribute('data-onboard'), ob); return; }
   const el = e.target.closest('[data-room]');
   if(el) go('#/room/'+encodeURIComponent(el.getAttribute('data-room')));
 });
