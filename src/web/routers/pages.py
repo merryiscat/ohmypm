@@ -171,6 +171,8 @@ _HTML = r"""<!doctype html>
   .pform input.grow{flex:1;min-width:120px}
   .pdet-h{font-size:11.5px;color:var(--muted);font-weight:700;margin:18px 0 6px;text-transform:uppercase;letter-spacing:.02em}
   .ptable .reg{color:var(--green);cursor:pointer;font-size:12px;font-weight:700}
+  .tbadge{display:inline-block;background:#eef1fb;color:#3a52a8;border-radius:20px;padding:1px 8px;font-size:11px;margin-right:4px;font-weight:700}
+  .tbadge.gold{background:#fdf3d6;color:#9a7b1e}
   .ptable .reg-cell select,.ptable .reg-cell input,.ptable .reg-cell button{font-size:12px;padding:5px 8px;border:1px solid var(--line);border-radius:6px;font-family:inherit;margin-right:5px}
   .ptable .reg-cell .ireg-label{width:120px}
   .ptable .reg-cell button{background:var(--green);color:#fff;border:none;cursor:pointer}
@@ -200,6 +202,7 @@ _HTML = r"""<!doctype html>
       <div class="nav-item" data-nav="board" onclick="go('#/board')">게시판</div>
       <div class="nav-item" data-nav="daily" onclick="go('#/daily')">일간보고</div>
       <div class="nav-item" data-nav="experts" onclick="go('#/experts')">전문가</div>
+      <div class="nav-item" data-nav="agents" onclick="go('#/agents')">에이전트</div>
       <div class="nav-item" data-nav="ports" onclick="go('#/ports')">포트</div>
     </nav>
     <div class="sec-label">프로젝트 룸</div>
@@ -290,6 +293,7 @@ function renderSidebar(){
   const view = (cur.startsWith('#/board') || cur.startsWith('#/post')) ? 'board'
              : cur.startsWith('#/daily') ? 'daily'
              : cur.startsWith('#/experts') ? 'experts'
+             : cur.startsWith('#/agents') ? 'agents'
              : cur.startsWith('#/ports') ? 'ports'
              : (cur.startsWith('#/room') ? null : 'dashboard');
   if(view) document.querySelector(`[data-nav="${view}"]`)?.classList.add('active');
@@ -582,6 +586,35 @@ async function collectExpert(domain){
   }, 12000);
 }
 
+// ── 에이전트 리더보드(게시판 점수 + 보상 진행) ────────────────────
+function renderAgents(){
+  setHeader('에이전트', {summary:false, actions:false});
+  document.getElementById('view').innerHTML =
+    '<div class="note-line" style="padding-bottom:12px">담당 에이전트 리더보드 — 점수 = 글 좋아요·조회 + 댓글 좋아요 − 싫어요. 1000점=보상 택1, 2000점=소원권, 그 위로 계속.</div>'+
+    '<div id="agents">불러오는 중…</div>';
+  clearInterval(pollTimer);
+  fillAgents();
+}
+
+async function fillAgents(){
+  let list = [];
+  try{ list = await fetch('/api/agents').then(r=>r.json()); }catch(e){ return; }
+  const box = document.getElementById('agents'); if(!box) return;
+  if(!list.length){ box.innerHTML = '<div class="empty">담당 없음</div>'; return; }
+  box.innerHTML = '<table class="ptable"><thead><tr><th>#</th><th>담당(프로젝트)</th><th>점수</th>'+
+    '<th>다음 보상까지</th><th>획득</th></tr></thead><tbody>'+
+    list.map((a,i)=>{
+      const next = a.points<1000 ? 1000 : (a.points<2000 ? 2000 : null);
+      const prog = next ? `${a.points} / ${next}` : '최고 단계';
+      const badges = (a.reward?`<span class="tbadge">${esc(a.reward)}</span>`:'')+
+        (a.persona?'<span class="tbadge">페르소나</span>':'')+
+        (a.tier>=2?'<span class="tbadge gold">소원권</span>':'')+
+        (a.tier>=1&&!a.reward?'<span class="tbadge">보상 대기</span>':'');
+      return `<tr><td>${i+1}</td><td>${esc(a.name)}</td><td class="port">${a.points}</td>`+
+        `<td class="muted" style="color:var(--muted)">${prog}</td><td>${badges||'-'}</td></tr>`;
+    }).join('')+'</tbody></table>';
+}
+
 // ── 포트 레지스트리 뷰(등록 포트 + 실시간 상태 + 충돌) ────────────
 function renderPorts(){
   setHeader('포트', {summary:false, actions:false});
@@ -811,6 +844,8 @@ function route(){
     renderDaily();
   } else if(h.startsWith('#/experts')){
     renderExperts();
+  } else if(h.startsWith('#/agents')){
+    renderAgents();
   } else if(h.startsWith('#/ports')){
     renderPorts();
   } else if(h.startsWith('#/post/')){

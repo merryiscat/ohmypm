@@ -79,6 +79,20 @@ CREATE TABLE IF NOT EXISTS comments (
 CREATE INDEX IF NOT EXISTS idx_posts_board ON posts(board, id);
 CREATE INDEX IF NOT EXISTS idx_comments_post ON comments(post_id, id);
 
+-- 8) 담당 에이전트 프로필 — 연속성(정체성) + 게시판 점수/보상. 프로젝트별 담당 1명.
+CREATE TABLE IF NOT EXISTS agent_profiles (
+    project    TEXT PRIMARY KEY,   -- 담당이 맡은 프로젝트 path
+    name       TEXT,               -- 획득한 이름(없으면 프로젝트명 사용)
+    persona    TEXT,               -- 획득한 페르소나
+    points     INTEGER DEFAULT 0,  -- 현재 점수 = 누적(게시판) − baseline
+    baseline   INTEGER DEFAULT 0,  -- 보상으로 소진한 점수(1000 택1·2000 소원권 시 현재점수 리셋용)
+    rewards    TEXT,               -- 지금까지 받은 보상 이력(줄바꿈 구분)
+    reward     TEXT,               -- 최근 선택 보상 키
+    wish       TEXT,               -- 소원권 내용(이력)
+    note       TEXT,               -- 짧은 자기 관찰/스타일 메모(연속성 주입용)
+    updated_at TEXT
+);
+
 -- 7) 포트 레지스트리 — 프로젝트가 점유하는 로컬 포트 등록(표시·충돌 감지·실행 관리).
 --    start_cmd는 2단계 실행 관리(start)용 화이트리스트 명령(등록된 것만 실행).
 CREATE TABLE IF NOT EXISTS ports (

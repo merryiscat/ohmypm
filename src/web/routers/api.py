@@ -18,6 +18,30 @@ def get_projects() -> list[dict]:
     return projects_db.list_projects()
 
 
+@router.get("/agents")
+def get_agents() -> list[dict]:
+    """담당 에이전트 리더보드 — 게시판 점수 재계산 + 프로필(이름·페르소나·보상). 점수 높은 순."""
+    from src.db import agents as agents_db
+
+    projs = projects_db.list_projects(enabled_only=True)
+    agents_db.refresh_scores({p["path"]: p["name"] for p in projs})
+    out = []
+    for p in projs:
+        prof = agents_db.get_profile(p["path"]) or {}
+        pts = prof.get("points", 0) or 0
+        out.append({
+            "project": p["path"],
+            "name": prof.get("name") or p["name"],
+            "points": pts,
+            "persona": prof.get("persona"),
+            "reward": prof.get("reward"),
+            "wish": prof.get("wish"),
+            "tier": 2 if pts >= agents_db.MILESTONE_WISH else (1 if pts >= agents_db.MILESTONE_MENU else 0),
+        })
+    out.sort(key=lambda x: x["points"], reverse=True)
+    return out
+
+
 class ProjectPath(BaseModel):
     path: str
 
