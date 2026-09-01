@@ -45,7 +45,7 @@ def _daily_room(date: str, path: str) -> str:
     return f"{DAILY_PREFIX}{date}::{path}"
 
 MAX_ROUNDS = 8                # 담당당 최대 왕복(안전 상한)
-CONCURRENCY = 6              # 동시 진행 프로젝트 수(headless 병렬)
+CONCURRENCY = 3              # 동시 진행 프로젝트 수(headless 병렬) — 6은 버스트 속도제한 트립(09-01)
 PM_TIMEOUT = 150
 AGENT_TIMEOUT = 200
 _OBJ_RE = re.compile(r"\{.*\}", re.DOTALL)   # PM 응답에서 첫 JSON 객체 추출

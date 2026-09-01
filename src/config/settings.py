@@ -32,10 +32,11 @@ class Settings(BaseSettings):
     # --- 스케줄 ---
     scan_hour: int = 8       # 매일 정시 스캔 시각(24시간)
     heartbeat_sec: int = 300  # 이슈 감지 heartbeat 주기(초)
-    # 일간보고(멀티에이전트) — 01:00 시작, 보고 소프트마감 03:00, 게시판 토론 마감 04:00
-    daily_report_hour: int = 1
-    daily_soft_deadline_hour: int = 3
-    discussion_until_hour: int = 4
+    # 일간보고(멀티에이전트) — 03:00 시작(사용량 리셋 직후, 01시는 리셋 전이라 한도로 전량실패했음
+    # 2026-09-01), 보고 소프트마감 05:00, 게시판 토론 마감 06:00
+    daily_report_hour: int = 3
+    daily_soft_deadline_hour: int = 5
+    discussion_until_hour: int = 6
     telegram_hour: int = 7   # 일간보고 요약 텔레그램 발송 시각(생성은 새벽, 발송은 아침)
     # 전문가 위키 정기 수집 — 매주 지정 요일·시각(웹 조사라 자주 돌릴 필요 없음)
     expert_collect_weekday: int = 0   # 0=월요일 … 6=일요일
