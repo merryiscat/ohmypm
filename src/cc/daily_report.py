@@ -11,9 +11,10 @@ JSON으로 종료를 스스로 판정(담당당 최대 8왕복 안전상한). **
 
 import json
 import re
+import subprocess
 import time
 from concurrent.futures import ThreadPoolExecutor
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 
 from loguru import logger
 
@@ -54,6 +55,39 @@ _ARR_RE = re.compile(r"\[.*\]", re.DOTALL)   # 게시판 댓글 응답에서 JSO
 
 def _cancelled(title: str) -> bool:
     return bool(re.search(r"~~.+~~", title or ""))
+
+
+# 조용한 프로젝트(변화 없음)의 고정 요약 — LLM 없이 코드가 만든다.
+QUIET_SUMMARY = "작업 내용 없음(어제 이후 새 커밋·새 이슈 없음) — 점검 생략"
+
+
+def _has_activity(path: str) -> bool:
+    """어제 이후 '사람의 작업'이 있었는지 — 없으면 LLM을 아예 안 부른다(토큰 절약의 핵심).
+
+    변화 없는 프로젝트도 매일 PM↔담당 인터뷰를 돌면, 어제와 똑같은 보고를 어제와 같은
+    토큰을 들여 재생산한다(2026-09-02 사용자 지적). 신호 두 가지로 변화를 판정한다:
+      ① 최근 24시간 git 커밋 — 단, ohmyPM이 밤마다 만드는 자동 커밋(재가공 '(ohmyPM 담당)'·
+         하네스감사 '(ohmyPM)')은 제외. 안 그러면 매일 '변화 있음'으로 오탐한다.
+      ② 최근 24시간 새 이슈(정시 스캔이 docs에서 발견) — 커밋 없이 docs만 고쳐도 잡힌다.
+    git 확인이 실패하면 True(모르면 점검하는 쪽 — 놓침0 원칙).
+    """
+    try:
+        r = subprocess.run(
+            ["git", "-C", path, "log", "--since=24 hours ago", "--format=%s"],
+            capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=15,
+        )
+        if r.returncode != 0:
+            return True  # git 저장소가 아니거나 조회 실패 — 점검하는 쪽으로
+        if any(s.strip() and "ohmyPM" not in s for s in r.stdout.splitlines()):
+            return True  # 사람(또는 다른 도구)의 커밋이 있다
+    except Exception:
+        return True
+    # 새 이슈: issues.created_at은 SQLite datetime('now') = UTC 문자열 → UTC로 비교
+    cutoff = (datetime.now(timezone.utc) - timedelta(hours=24)).strftime("%Y-%m-%d %H:%M:%S")
+    return any(
+        i["project"] == path and (i.get("created_at") or "") >= cutoff
+        for i in issues_db.list_issues()
+    )
 
 
 def build_facts(path: str) -> str:
@@ -268,6 +302,12 @@ def run_daily_report(
         if deadline_ts and time.time() > deadline_ts:
             return {"name": p["name"], "path": p["path"], "skipped": True}
         try:
+            # ★ 변화 없는 프로젝트는 LLM 콜 0회 — 코드가 '작업 내용 없음' 한 줄로 끝낸다.
+            #   (매일 같은 보고를 재생산하며 한도를 태우던 낭비 제거, 2026-09-02)
+            if not _has_activity(p["path"]):
+                messages_db.add_message(_daily_room(date, p["path"]), "pm", QUIET_SUMMARY)
+                return {"name": p["name"], "path": p["path"], "skipped": False, "quiet": True,
+                        "rounds": 0, "summary": QUIET_SUMMARY, "headline": "", "updates_applied": 0}
             return report_one_project(p["path"], p["name"], date,
                                       guidance_by_path.get(p["path"], ""), max_rounds)
         except Exception as e:  # 한 프로젝트 실패가 전체를 안 멈춤
@@ -281,10 +321,17 @@ def run_daily_report(
 
     ok_results = [r for r in done_results if not _is_failed(r)]
     failed_n = len(done_results) - len(ok_results)
-    logger.info(f"[일간보고] 완료 {len(ok_results)}개 · 실패 {failed_n}개 · 미처리 {len(skipped)}개")
+    quiet_n = sum(1 for r in ok_results if r.get("quiet"))
+    logger.info(
+        f"[일간보고] 완료 {len(ok_results)}개(점검 {len(ok_results) - quiet_n}·변화없음 {quiet_n}) "
+        f"· 실패 {failed_n}개 · 미처리 {len(skipped)}개"
+    )
     # 각 프로젝트 요약을 게시판 글로 올린다 — 제목은 PM이 뽑은 눈길 끄는 헤드라인.
     # ★ 실패/빈 결과(headless 한도 등)는 글로 올리지 않는다 — '(PM 응답 없음)' 쓰레기 글 방지.
+    # ★ 변화없음(quiet)도 글로 안 올린다 — '작업 내용 없음' 글 18개가 게시판을 덮는 것 방지.
     for r in ok_results:
+        if r.get("quiet"):
+            continue
         title = r.get("headline") or f"{r['name']}: {(r.get('summary') or '').splitlines()[0][:35]}"
         board_db.add_post(
             author=r["name"], title=title,
@@ -301,19 +348,26 @@ def run_daily_report(
 
 
 def _assemble_telegram(date: str, results: list[dict], skipped: list[str]) -> str:
-    """직후 종합 1회 텔레그램 본문 — 헤드라인 3줄 + 프로젝트별 요약 + 미처리."""
+    """직후 종합 1회 텔레그램 본문 — 헤드라인 3줄 + 프로젝트별 요약 + 변화없음 묶음 + 미처리."""
+    active = [r for r in results if not r.get("quiet")]
+    quiet = [r for r in results if r.get("quiet")]
     lines = [f"<b>ohmyPM 일간보고 {date}</b>"]
     # 헤드라인: 요약 첫 줄이 있는 프로젝트 상위 3개
-    heads = [r for r in results if r.get("summary") and "요약 없음" not in r["summary"]][:3]
+    heads = [r for r in active if r.get("summary") and "요약 없음" not in r["summary"]][:3]
     if heads:
         lines.append("")
         for r in heads:
             first = r["summary"].splitlines()[0][:120]
             lines.append(f"• <b>{r['name']}</b> — {first}")
-    lines.append("")
-    lines.append("─────")
-    for r in sorted(results, key=lambda x: x["name"].lower()):
-        lines.append(f"<b>{r['name']}</b>\n{r.get('summary', '')}")
+    if active:
+        lines.append("")
+        lines.append("─────")
+        for r in sorted(active, key=lambda x: x["name"].lower()):
+            lines.append(f"<b>{r['name']}</b>\n{r.get('summary', '')}")
+    if quiet:
+        lines.append("─────")
+        names = ", ".join(sorted(r["name"] for r in quiet))
+        lines.append(f"[변화 없음] {len(quiet)}개: {names}")
     if skipped:
         lines.append("─────")
         lines.append(f"[미처리] {len(skipped)}개(마감 초과): {', '.join(skipped)}")
@@ -479,8 +533,17 @@ def run_nightly() -> dict:
         logger.error(f"[일간보고] {msg}")
         alerts_db.set_setting(f"daily_summary:{date}", f"<b>ohmyPM {date}</b>\n{msg}")
         return {"report": report, "aborted": True, "reason": msg}
-    board = run_board_discussion(deadline_ts=_at(settings.discussion_until_hour))    # ③
-    feedback = run_post_feedback(deadline_ts=_at(settings.discussion_until_hour))    # ④
+    # ★ 게시판 토론·반응은 '변화 있던' 프로젝트 담당만 — 조용한 프로젝트 담당까지 부르면
+    #   콜 수가 도로 프로젝트 수만큼 늘어 절약이 무의미해진다. (재가공은 글 있는 프로젝트만이라 자동 제외)
+    active_paths = [r["path"] for r in report.get("results", []) if not r.get("quiet")]
+    if active_paths:
+        board = run_board_discussion(paths=active_paths,
+                                     deadline_ts=_at(settings.discussion_until_hour))    # ③
+        feedback = run_post_feedback(paths=active_paths,
+                                     deadline_ts=_at(settings.discussion_until_hour))    # ④
+    else:
+        board = {"commented": 0, "note": "변화 있는 프로젝트 없음"}
+        feedback = {"reacted": 0}
     reprocess = run_reprocess()                                   # ⑤ 문서 재가공(docs 커밋·push 안 함)
     rewards = run_rewards()                                       # ⑥ 보상
     synthesis = manager.close_day(date, report.get("results", []))   # ⑦ 저녁 종합
