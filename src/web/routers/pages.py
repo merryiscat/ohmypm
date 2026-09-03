@@ -879,6 +879,7 @@ function renderRoom(path){
       `<div class="room-side">`+
         `<div class="side-h">${esc(name)} 담당 에이전트`+
           `<button class="mini-btn" data-onboard="${escAttr(path)}">온보딩 검토</button>`+
+          `<button class="mini-btn" data-exclude="${escAttr(path)}">관리 제외</button>`+
         `</div>`+
         chatMarkup()+
       `</div>`+
@@ -997,9 +998,27 @@ window.addEventListener('hashchange', route);
 document.addEventListener('click', e=>{
   const ob = e.target.closest('[data-onboard]');
   if(ob){ requestOnboarding(ob.getAttribute('data-onboard'), ob); return; }
+  const ex = e.target.closest('[data-exclude]');
+  if(ex){ excludeProject(ex.getAttribute('data-exclude')); return; }
   const el = e.target.closest('[data-room]');
   if(el) go('#/room/'+encodeURIComponent(el.getAttribute('data-room')));
 });
+
+// 프로젝트를 관리에서 제외 — 폴더는 안 건드리고, 이슈·게시판 글/댓글·대화만 정리된다.
+// 재스캔에도 다시 안 올라온다(enabled=0). 데이터가 지워지므로 확인창을 거친다.
+async function excludeProject(path){
+  const name = nameOfPath(path);
+  if(!confirm(`'${name}' 프로젝트를 관리에서 제외할까요?\n\n`+
+    `- 프로젝트 폴더는 그대로 둡니다\n`+
+    `- ohmyPM의 이슈·게시판 글/댓글·대화 기록은 삭제됩니다\n`+
+    `- 재스캔해도 다시 올라오지 않습니다`)) return;
+  const r = await fetch('/api/projects/remove',{method:'POST',
+    headers:{'Content-Type':'application/json'}, body:JSON.stringify({path})})
+    .then(r=>r.json()).catch(()=>({ok:false}));
+  if(!r.ok){ alert('제외 실패: '+(r.error||'알 수 없는 오류')); return; }
+  await loadData();
+  go('#/');
+}
 
 // ── 상단 액션 버튼 ──────────────────────────────────────
 async function doScan(){
