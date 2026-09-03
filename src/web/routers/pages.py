@@ -44,6 +44,16 @@ _HTML = r"""<!doctype html>
   aside .room-item .rc + .rx{margin-left:6px}
   aside .room-item:hover .rx{display:block}
   aside .room-item .rx:hover{color:#fff}
+  /* 확인/알림 모달 — 브라우저 기본 confirm/alert 대신 화면 톤에 맞춘 팝업 */
+  .modal-bg{position:fixed;inset:0;background:rgba(15,18,24,.45);display:flex;align-items:center;justify-content:center;z-index:100}
+  .modal{background:var(--card);border:1px solid var(--line);border-radius:10px;min-width:320px;max-width:440px;padding:18px 20px;box-shadow:0 12px 40px rgba(0,0,0,.18)}
+  .modal .m-title{font-size:14.5px;font-weight:700;margin-bottom:10px}
+  .modal .m-body{font-size:13px;line-height:1.6;white-space:pre-line;color:var(--ink);margin-bottom:16px}
+  .modal .m-btns{display:flex;justify-content:flex-end;gap:8px}
+  .modal button{font:inherit;font-size:12.5px;padding:6px 14px;border-radius:8px;border:1px solid var(--line);background:#fff;color:var(--ink);cursor:pointer}
+  .modal button:hover{background:var(--bg)}
+  .modal button.danger{background:var(--red);border-color:var(--red);color:#fff}
+  .modal button.danger:hover{opacity:.9}
   /* 본문 */
   .body{flex:1;min-width:0;display:flex;flex-direction:column}
   header{position:sticky;top:0;background:var(--card);border-bottom:1px solid var(--line);padding:12px 22px;display:flex;align-items:center;gap:18px;z-index:10}
@@ -274,6 +284,30 @@ const clean = s => (s||'').replace(/~~/g,'').trim();          // 취소선 마�
 const isCancelled = s => /~~.+~~/.test(s||'');                 // ~~...~~ = 취소 → 제외
 const todayStr = () => new Date().toISOString().slice(0,10);
 function daysTo(due){ return Math.round((new Date(due)-new Date(todayStr()))/86400000); }
+
+// ── 화면 톤에 맞춘 확인/알림 모달(브라우저 confirm/alert 대체) ──────────
+// appConfirm({title, body, okText, danger}) → Promise<boolean> / appAlert(title, body)
+function appModal({title, body, okText='확인', cancel=true, danger=false}){
+  return new Promise(res=>{
+    const bg = document.createElement('div'); bg.className = 'modal-bg';
+    bg.innerHTML = '<div class="modal"><div class="m-title"></div><div class="m-body"></div>'+
+      '<div class="m-btns">'+(cancel?'<button class="m-cancel">취소</button>':'')+
+      '<button class="m-ok'+(danger?' danger':'')+'"></button></div></div>';
+    bg.querySelector('.m-title').textContent = title || '';
+    bg.querySelector('.m-body').textContent = body || '';
+    bg.querySelector('.m-ok').textContent = okText;
+    const done = v=>{ bg.remove(); document.removeEventListener('keydown', esc); res(v); };
+    const esc = e=>{ if(e.key==='Escape') done(false); };
+    bg.addEventListener('click', e=>{ if(e.target===bg) done(false); });   // 바깥 클릭 = 취소
+    bg.querySelector('.m-ok').onclick = ()=>done(true);
+    const c = bg.querySelector('.m-cancel'); if(c) c.onclick = ()=>done(false);
+    document.addEventListener('keydown', esc);
+    document.body.appendChild(bg);
+    bg.querySelector('.m-ok').focus();
+  });
+}
+const appConfirm = o => appModal(o);
+const appAlert = (title, body) => appModal({title, body, cancel:false});
 
 let PROJECTS = [], ISSUES = [];        // 마지막 로드 캐시
 let pollTimer = null;                   // 채팅 자동 새로고침 타이머
@@ -653,7 +687,7 @@ async function setAgentModel(idx, model){
   const r = await fetch('/api/agents/model',{method:'POST',
     headers:{'Content-Type':'application/json'}, body:JSON.stringify({project, model})})
     .then(r=>r.json()).catch(()=>({ok:false}));
-  if(!r.ok) alert('모델 변경 실패: '+(r.error||'알 수 없는 오류'));
+  if(!r.ok) appAlert('모델 변경 실패', r.error||'알 수 없는 오류');
   fillAgents();
 }
 
@@ -855,16 +889,18 @@ async function startPort(id, btn){
   if(btn){ btn.disabled = true; btn.textContent = '시작 중…'; }
   let r = {};
   try{ r = await fetch('/api/ports/'+id+'/start',{method:'POST'}).then(x=>x.json()); }catch(e){}
-  if(r && r.ok === false) alert('시작 못 함: ' + (r.reason||'알 수 없음'));
+  if(r && r.ok === false) appAlert('시작 못 함', r.reason||'알 수 없음');
   setTimeout(fillPorts, 1500);   // 뜨는 데 잠깐 걸린다
 }
 // 서버 끄기 — 되돌리기 어려운 행동이라 대상(PID·프로세스명)을 보여주고 확인받는다
 async function stopPort(id, port, proc, pid){
-  const ok = confirm('포트 '+port+' 를 점유한 프로세스를 강제 종료합니다.\n\n대상: '+(proc||'(이름 미상)')+' (PID '+pid+')\n\n저장하지 않은 작업이 있으면 유실될 수 있습니다. 정말 종료할까요?');
+  const ok = await appConfirm({title:'포트 '+port+' 프로세스 종료', okText:'종료', danger:true,
+    body:'대상: '+(proc||'(이름 미상)')+' (PID '+pid+')\n\n'+
+         '저장하지 않은 작업이 있으면 유실될 수 있습니다. 정말 종료할까요?'});
   if(!ok) return;
   let r = {};
   try{ r = await fetch('/api/ports/'+id+'/stop',{method:'POST'}).then(x=>x.json()); }catch(e){}
-  if(r && r.ok === false) alert('종료 못 함: ' + (r.reason||'알 수 없음'));
+  if(r && r.ok === false) appAlert('종료 못 함', r.reason||'알 수 없음');
   fillPorts();
 }
 
@@ -1012,14 +1048,15 @@ document.addEventListener('click', e=>{
 // 재스캔에도 다시 안 올라온다(enabled=0). 데이터가 지워지므로 확인창을 거친다.
 async function excludeProject(path){
   const name = nameOfPath(path);
-  if(!confirm(`'${name}' 프로젝트를 관리에서 제외할까요?\n\n`+
-    `- 프로젝트 폴더는 그대로 둡니다\n`+
-    `- ohmyPM의 이슈·게시판 글/댓글·대화 기록은 삭제됩니다\n`+
-    `- 재스캔해도 다시 올라오지 않습니다`)) return;
+  const ok = await appConfirm({title:`'${name}' 관리 제외`, okText:'제외', danger:true,
+    body:'프로젝트 폴더는 그대로 둡니다.\n'+
+         'ohmyPM의 이슈·게시판 글/댓글·대화 기록은 삭제됩니다.\n'+
+         '재스캔해도 다시 올라오지 않습니다.'});
+  if(!ok) return;
   const r = await fetch('/api/projects/remove',{method:'POST',
     headers:{'Content-Type':'application/json'}, body:JSON.stringify({path})})
     .then(r=>r.json()).catch(()=>({ok:false}));
-  if(!r.ok){ alert('제외 실패: '+(r.error||'알 수 없는 오류')); return; }
+  if(!r.ok){ appAlert('제외 실패', r.error||'알 수 없는 오류'); return; }
   await loadData();
   go('#/');
 }
