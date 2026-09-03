@@ -40,6 +40,10 @@ _HTML = r"""<!doctype html>
   aside .room-item .dot.u{background:var(--amber)} aside .room-item .dot.d{background:var(--red)}
   aside .room-item .rname{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
   aside .room-item .rc{margin-left:auto;font-size:10.5px;color:#7a808b}
+  aside .room-item .rx{margin-left:auto;font-size:11px;color:#7a808b;display:none;padding:0 3px;line-height:1}
+  aside .room-item .rc + .rx{margin-left:6px}
+  aside .room-item:hover .rx{display:block}
+  aside .room-item .rx:hover{color:#fff}
   /* 본문 */
   .body{flex:1;min-width:0;display:flex;flex-direction:column}
   header{position:sticky;top:0;background:var(--card);border-bottom:1px solid var(--line);padding:12px 22px;display:flex;align-items:center;gap:18px;z-index:10}
@@ -307,7 +311,8 @@ function renderSidebar(){
     const active = cur === '#/room/'+p.path ? ' active':'';
     return `<div class="room-item${active}" data-room="${escAttr(p.path)}">`+
            `<span class="dot ${dot}"></span><span class="rname">${esc(p.name)}</span>`+
-           (items.length?`<span class="rc">${items.length}</span>`:'')+`</div>`;
+           (items.length?`<span class="rc">${items.length}</span>`:'')+
+           `<span class="rx" data-exclude="${escAttr(p.path)}" title="관리 제외">x</span></div>`;
   }).join('') || '<div style="color:#7a808b;font-size:12px;padding:8px 18px">스캔을 눌러보세요</div>';
   // 사이드바 상단 nav 활성화 표시
   document.querySelectorAll('[data-nav]').forEach(el=>el.classList.remove('active'));
@@ -879,7 +884,6 @@ function renderRoom(path){
       `<div class="room-side">`+
         `<div class="side-h">${esc(name)} 담당 에이전트`+
           `<button class="mini-btn" data-onboard="${escAttr(path)}">온보딩 검토</button>`+
-          `<button class="mini-btn" data-exclude="${escAttr(path)}">관리 제외</button>`+
         `</div>`+
         chatMarkup()+
       `</div>`+
