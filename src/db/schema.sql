@@ -91,6 +91,7 @@ CREATE TABLE IF NOT EXISTS agent_profiles (
     reward     TEXT,               -- 최근 선택 보상 키
     wish       TEXT,               -- 소원권 내용(이력)
     note       TEXT,               -- 짧은 자기 관찰/스타일 메모(연속성 주입용)
+    model      TEXT,               -- 이 담당의 headless 모델 별칭(opus/sonnet/haiku, NULL=기본)
     updated_at TEXT
 );
 

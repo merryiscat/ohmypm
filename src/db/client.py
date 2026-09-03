@@ -64,4 +64,5 @@ def _migrate(db: sqlite3.Connection) -> None:
         ("rewards", "rewards TEXT"),
         ("persona", "persona TEXT"),
         ("wish", "wish TEXT"),
+        ("model", "model TEXT"),
     ))

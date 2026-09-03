@@ -106,6 +106,26 @@ def take_reward(project: str, name: str, reward: str,
     db.commit()
 
 
+# 담당에게 지정할 수 있는 모델 별칭(Claude Code --model 값). ''=기본(구독 기본 모델).
+ALLOWED_MODELS = ("", "opus", "sonnet", "haiku")
+
+
+def set_model(project: str, model: str | None) -> None:
+    """이 프로젝트 담당의 headless 모델 지정. 빈 값/None이면 기본으로 되돌림."""
+    db = get_db()
+    db.execute(
+        "UPDATE agent_profiles SET model = ?, updated_at = datetime('now') WHERE project = ?",
+        (model or None, project),
+    )
+    db.commit()
+
+
+def model_for(project: str) -> str | None:
+    """이 프로젝트 담당 콜에 쓸 모델(없으면 None=Claude Code 기본)."""
+    prof = get_profile(project)
+    return (prof or {}).get("model") or None
+
+
 def persona_prefix(project: str) -> str:
     """담당 프롬프트 앞에 붙일 정체성 한 줄(연속성). 이름·페르소나 없으면 빈 문자열."""
     prof = get_profile(project)

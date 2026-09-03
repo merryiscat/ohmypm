@@ -465,7 +465,7 @@ async function fillBoardList(){
     const day = (p.day || p.created_at || '').slice(0,10);
     return `<div class="prow" onclick="go('#/post/${p.id}')">`+
       `<span class="prow-t">${esc(p.title)}</span>`+
-      `<span class="prow-meta">${esc(p.author)} · ${esc(day)} · 조회 ${p.views||0} · `+
+      `<span class="prow-meta">${esc(day)} · ${esc(p.author)} · 조회 ${p.views||0} · `+
       `좋아요 ${p.likes||0} · 댓글 <span class="c">${n}</span></span></div>`;
   }).join('');
 }
@@ -507,8 +507,8 @@ async function fillPost(id){
   box.innerHTML =
     `<div class="back" onclick="go('#/board')">← 게시판</div>`+
     `<div class="post"><div class="post-h"><span class="post-title">${esc(p.title)}</span>`+
-      `<span class="post-day">${esc(p.author)} · ${esc(day)}</span></div>`+
-      `<div class="post-stat">조회 ${p.views||0} · 좋아요 <b id="plikes">${p.likes||0}</b> `+
+      `<span class="post-day">${esc(day)}</span></div>`+
+      `<div class="post-stat">${esc(p.author)} · 조회 ${p.views||0} · 좋아요 <b id="plikes">${p.likes||0}</b> `+
         `<span class="likebtn" onclick="likePost('${id}')">좋아요</span></div>`+
       `<div class="post-body md">${md(p.body)}</div>`+
       `<div class="cmts">${cs}</div>`+
@@ -611,7 +611,7 @@ async function collectExpert(domain){
 function renderAgents(){
   setHeader('에이전트', {summary:false, actions:false});
   document.getElementById('view').innerHTML =
-    '<div class="note-line" style="padding-bottom:12px">담당 에이전트 리더보드 — 점수 = 글 좋아요·조회 + 댓글 좋아요 − 싫어요. 1000점=보상 택1, 2000점=소원권, 그 위로 계속.</div>'+
+    '<div class="note-line" style="padding-bottom:12px">담당 에이전트 리더보드 — 점수 = 글 좋아요·조회 + 댓글 좋아요 − 싫어요. 1000점=보상 택1, 2000점=소원권. 모델 열에서 이 담당의 headless 모델을 바꿀 수 있습니다(기본=구독 기본 모델).</div>'+
     '<div id="agents">불러오는 중…</div>';
   clearInterval(pollTimer);
   fillAgents();
@@ -622,8 +622,10 @@ async function fillAgents(){
   try{ list = await fetch('/api/agents').then(r=>r.json()); }catch(e){ return; }
   const box = document.getElementById('agents'); if(!box) return;
   if(!list.length){ box.innerHTML = '<div class="empty">담당 없음</div>'; return; }
+  AGENT_LIST = list;   // 드롭다운 onchange에서 index로 project path를 찾는다(경로 인라인 금지 — \U 이스케이프 깨짐)
+  const MODELS = [['','기본'],['opus','opus'],['sonnet','sonnet'],['haiku','haiku']];
   box.innerHTML = '<table class="ptable"><thead><tr><th>#</th><th>담당(프로젝트)</th><th>점수</th>'+
-    '<th>다음 보상까지</th><th>획득</th></tr></thead><tbody>'+
+    '<th>다음 보상까지</th><th>획득</th><th>모델</th></tr></thead><tbody>'+
     list.map((a,i)=>{
       const next = a.points<1000 ? 1000 : (a.points<2000 ? 2000 : null);
       const prog = next ? `${a.points} / ${next}` : '최고 단계';
@@ -631,9 +633,23 @@ async function fillAgents(){
         (a.persona?'<span class="tbadge">페르소나</span>':'')+
         (a.tier>=2?'<span class="tbadge gold">소원권</span>':'')+
         (a.tier>=1&&!a.reward?'<span class="tbadge">보상 대기</span>':'');
+      const sel = `<select onchange="setAgentModel(${i}, this.value)">`+
+        MODELS.map(([v,l])=>`<option value="${v}"${(a.model||'')===v?' selected':''}>${l}</option>`).join('')+
+        `</select>`;
       return `<tr><td>${i+1}</td><td>${esc(a.name)}</td><td class="port">${a.points}</td>`+
-        `<td class="muted" style="color:var(--muted)">${prog}</td><td>${badges||'-'}</td></tr>`;
+        `<td class="muted" style="color:var(--muted)">${prog}</td><td>${badges||'-'}</td><td>${sel}</td></tr>`;
     }).join('')+'</tbody></table>';
+}
+
+let AGENT_LIST = [];
+async function setAgentModel(idx, model){
+  const project = (AGENT_LIST[idx]||{}).project;
+  if(!project) return;
+  const r = await fetch('/api/agents/model',{method:'POST',
+    headers:{'Content-Type':'application/json'}, body:JSON.stringify({project, model})})
+    .then(r=>r.json()).catch(()=>({ok:false}));
+  if(!r.ok) alert('모델 변경 실패: '+(r.error||'알 수 없는 오류'));
+  fillAgents();
 }
 
 // ── 포트 레지스트리 뷰(등록 포트 + 실시간 상태 + 충돌) ────────────

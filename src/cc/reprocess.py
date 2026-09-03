@@ -29,7 +29,11 @@ def _git(path: str, *args: str, timeout: int = 30) -> subprocess.CompletedProces
 
 
 def _material_for(path: str, posts: list[dict]) -> str:
-    """이 프로젝트가 쓴 글 + 그 글에 달린 (남들이 준) 조언 댓글/대댓글을 텍스트로."""
+    """이 프로젝트가 쓴 글 + 그 글에 달린 조언을 스레드(댓글→답글) 구조로 텍스트화.
+
+    왕복(대댓글·대대댓글)까지 이어진 논의는 결론이 아래쪽에 있으므로, 들여쓰기로
+    흐름이 보이게 해서 에이전트가 '정리된 결론'을 집어내기 쉽게 한다.
+    """
     own = [p for p in posts if p.get("project") == path]
     lines: list[str] = []
     for p in own:
@@ -37,9 +41,17 @@ def _material_for(path: str, posts: list[dict]) -> str:
         if not cmts:
             continue
         lines.append(f"[내 글] {p['title']}\n{(p['body'] or '')[:400]}")
-        for c in cmts:
-            who = "사용자" if c["author"] == "user" else c["author"]
-            lines.append(f"  - 조언({who}): {(c['body'] or '')[:300]}")
+        def _who(c: dict) -> str:
+            return "사용자" if c["author"] == "user" else c["author"]
+        def _thread(parent_id: int | None, depth: int) -> None:
+            for c in cmts:
+                if c.get("parent_id") != parent_id:
+                    continue
+                pad = "  " * (depth + 1)
+                label = "조언" if depth == 0 else "답글"
+                lines.append(f"{pad}- {label}({_who(c)}): {(c['body'] or '')[:300]}")
+                _thread(c["id"], depth + 1)
+        _thread(None, 0)
     return "\n".join(lines)
 
 
@@ -67,6 +79,8 @@ def reprocess_one(path: str, name: str, posts: list[dict], date: str) -> dict:
     if not material.strip():
         return {"name": name, "path": path, "skipped": True, "reason": "받은 조언 없음"}
     allowed, disallowed = tools_for("reprocess")
+    from src.db import agents as agents_db
+
     run_headless(
         prompt=reprocess_docs(name, path, material),
         cwd=path,
@@ -75,6 +89,7 @@ def reprocess_one(path: str, name: str, posts: list[dict], date: str) -> dict:
         permission_mode="acceptEdits",   # 파일 저장 자동 승인(코드 밖 쓰기는 애초에 도구가 없음)
         timeout=REPROCESS_TIMEOUT,
         append_system_prompt=REPROCESS_SYSTEM,
+        model=agents_db.model_for(path),
     )
     result = _commit_docs(path, date)
     return {"name": name, "path": path, "skipped": False, **result}

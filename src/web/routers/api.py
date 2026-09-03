@@ -36,10 +36,32 @@ def get_agents() -> list[dict]:
             "persona": prof.get("persona"),
             "reward": prof.get("reward"),
             "wish": prof.get("wish"),
+            "model": prof.get("model") or "",   # ''=기본(구독 기본 모델)
             "tier": 2 if pts >= agents_db.MILESTONE_WISH else (1 if pts >= agents_db.MILESTONE_MENU else 0),
         })
     out.sort(key=lambda x: x["points"], reverse=True)
     return out
+
+
+class AgentModel(BaseModel):
+    project: str   # 프로젝트 path
+    model: str     # ''(기본) | opus | sonnet | haiku
+
+
+@router.post("/agents/model")
+def set_agent_model(req: AgentModel) -> dict:
+    """담당 에이전트의 headless 모델 교체. 빈 값이면 기본(구독 기본 모델)으로."""
+    from src.db import agents as agents_db
+
+    m = req.model.strip()
+    if m not in agents_db.ALLOWED_MODELS:
+        return {"ok": False, "error": f"모델은 {'/'.join(x or '기본' for x in agents_db.ALLOWED_MODELS)} 중 하나"}
+    proj = next((p for p in projects_db.list_projects() if p["path"] == req.project), None)
+    if not proj:
+        return {"ok": False, "error": "unknown project"}
+    agents_db.upsert_profile(req.project, proj["name"])   # 프로필 없으면 생성
+    agents_db.set_model(req.project, m)
+    return {"ok": True, "project": req.project, "model": m}
 
 
 @router.post("/rewards")

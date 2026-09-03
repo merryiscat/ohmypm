@@ -11,6 +11,7 @@ from pathlib import Path
 from src.cc.client import run_headless
 from src.cc.permissions import tools_for
 from src.cc.prompts import ROOM_SYSTEM, room_chat
+from src.db import agents as agents_db
 from src.db import messages as messages_db
 
 AGENT_AUTHOR = "agent"      # 담당 에이전트 발화의 author (화면에서 왼쪽 버블)
@@ -48,6 +49,7 @@ def reply_in_room(project_path: str, name: str) -> None:
         timeout=CHAT_TIMEOUT,
         append_system_prompt=ROOM_SYSTEM,
         add_dirs=[project_path],      # 대상 CLAUDE.md·docs를 읽기 허용
+        model=agents_db.model_for(project_path),   # 담당별 지정 모델(없으면 기본)
     )
     body = (result or "").strip() or "(지금은 답을 만들지 못했어 — 잠시 후 다시 시도해줘)"
     messages_db.add_message(project_path, AGENT_AUTHOR, body)

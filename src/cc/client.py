@@ -33,6 +33,7 @@ def run_headless(
     timeout: int = 300,
     append_system_prompt: str | None = None,
     add_dirs: list[str] | None = None,
+    model: str | None = None,
 ) -> str | None:
     """claude -p 실행 → 최종 텍스트(result) 반환. 실패는 None.
 
@@ -50,6 +51,8 @@ def run_headless(
         "--permission-mode",
         permission_mode,
     ]
+    if model:
+        cmd += ["--model", model]   # 담당별 모델(opus/sonnet/haiku). 없으면 구독 기본
     if append_system_prompt:
         cmd += ["--append-system-prompt", append_system_prompt]
     for d in add_dirs or []:

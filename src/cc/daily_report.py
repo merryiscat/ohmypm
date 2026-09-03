@@ -23,10 +23,12 @@ from src.cc.permissions import tools_for
 from src.cc.prompts import (
     BOARD_SYSTEM,
     FEEDBACK_SYSTEM,
+    FOLLOWUP_SYSTEM,
     MANAGE_SYSTEM,
     PM_SYSTEM,
     ROOM_SYSTEM,
     board_comment,
+    comment_followup,
     daily_agent_answer,
     pm_manage,
     post_feedback,
@@ -222,6 +224,7 @@ def _agent_call(name: str, path: str, question: str, history: str) -> str:
         timeout=AGENT_TIMEOUT,
         append_system_prompt=ROOM_SYSTEM,
         add_dirs=[path],
+        model=agents_db.model_for(path),   # 담당별 지정 모델(없으면 기본)
     )
     return (r or "").strip() or "(담당 응답 없음)"
 
@@ -436,8 +439,14 @@ def run_board_discussion(paths: list[str] | None = None, deadline_ts: float | No
             timeout=BOARD_TIMEOUT,
             append_system_prompt=BOARD_SYSTEM,
             add_dirs=[p["path"]],
+            model=agents_db.model_for(p["path"]),
         )
         own = own_post_ids.get(p["path"])
+        if out is not None:
+            # 담당이 게시판 전체를 읽었다 = 자기 글 빼고 조회수 +1 (인센티브 조회 카운팅)
+            for post in posts:
+                if post["id"] != own:
+                    board_db.increment_views(post["id"])
         for it in _parse_comments(out, valid_ids):
             if it["post_id"] == own:      # 자기 글엔 안 단다
                 continue
@@ -474,6 +483,7 @@ def run_post_feedback(paths: list[str] | None = None, deadline_ts: float | None 
             allowed_tools=allowed, disallowed_tools=disallowed,
             timeout=BOARD_TIMEOUT, append_system_prompt=FEEDBACK_SYSTEM,
             add_dirs=[post["project"]],
+            model=agents_db.model_for(post["project"]),
         )
         if not out:
             continue
@@ -499,6 +509,94 @@ def run_post_feedback(paths: list[str] | None = None, deadline_ts: float | None 
                 board_db.add_comment(post["id"], post["author"], rep, parent_id=cid)
     logger.info(f"[게시판 피드백] 반응 {reacted}건")
     return {"reacted": reacted}
+
+
+def run_reply_followup(paths: list[str] | None = None, deadline_ts: float | None = None) -> dict:
+    """대대댓글(선택) — 글쓴이의 대댓글을 받은 담당이 **덧붙일 말이 있을 때만** 한 번 더 답한다.
+
+    규칙(사용자 확정 2026-09-03): 댓글이 달리면 글쓴이 대댓글은 필수(run_post_feedback),
+    그 대댓글에 대한 원 댓글 작성자의 대대댓글은 선택. 담당당 headless 1콜(자기 스레드 묶음).
+    오늘 글만 대상 + 이미 대대댓글 단 스레드는 제외(재실행돼도 중복 안 생김).
+    """
+    from src.scan.discover import discover_projects
+
+    date = datetime.now().strftime("%Y-%m-%d")
+    posts = [p for p in board_db.list_posts(board_db.DAILY_BOARD) if p.get("day") == date]
+    if not posts:
+        return {"replied": 0, "note": "오늘 글 없음"}
+
+    # 담당 이름 → 프로젝트 path (보상으로 개명했을 수 있어 프로필 이름 우선)
+    projects = discover_projects()
+    if paths:
+        wanted = set(paths)
+        projects = [p for p in projects if p["path"] in wanted]
+    path_by_name: dict[str, str] = {}
+    for p in projects:
+        prof = agents_db.get_profile(p["path"]) or {}
+        path_by_name[prof.get("name") or p["name"]] = p["path"]
+
+    # 글쓴이의 대댓글을 '원 댓글 작성자(담당)'별로 모은다
+    threads_by_agent: dict[str, list[str]] = {}
+    post_of_reply: dict[int, int] = {}          # 대댓글 id → 글 id (대대댓글 달 위치)
+    valid_by_agent: dict[str, set[int]] = {}
+    for post in posts:
+        cmts = post.get("comments", [])
+        by_id = {c["id"]: c for c in cmts}
+        for r in cmts:
+            parent = by_id.get(r.get("parent_id") or 0)
+            if not parent:
+                continue
+            # 글쓴이가 남의 댓글에 단 대댓글만(사용자 댓글·자기 글엔 해당 없음)
+            if r["author"] != post["author"] or parent["author"] in ("user", post["author"]):
+                continue
+            if parent["author"] not in path_by_name:
+                continue
+            # 이미 대대댓글이 달린 스레드는 제외(중복 방지)
+            if any(c.get("parent_id") == r["id"] for c in cmts):
+                continue
+            agent = parent["author"]
+            threads_by_agent.setdefault(agent, []).append(
+                f"[대댓글#{r['id']}] 글 '{(post['title'] or '')[:60]}'\n"
+                f"  내 댓글: {(parent['body'] or '')[:200]}\n"
+                f"  글쓴이({post['author']}) 답글: {(r['body'] or '')[:200]}"
+            )
+            post_of_reply[r["id"]] = post["id"]
+            valid_by_agent.setdefault(agent, set()).add(r["id"])
+
+    allowed, disallowed = tools_for("daily_agent")
+    replied = 0
+    for agent, threads in threads_by_agent.items():
+        if deadline_ts and time.time() > deadline_ts:
+            break
+        path = path_by_name[agent]
+        out = run_headless(
+            prompt=agents_db.persona_prefix(path) + comment_followup(agent, path, "\n\n".join(threads)),
+            cwd=_neutral_cwd(),
+            allowed_tools=allowed, disallowed_tools=disallowed,
+            timeout=BOARD_TIMEOUT, append_system_prompt=FOLLOWUP_SYSTEM,
+            add_dirs=[path], model=agents_db.model_for(path),
+        )
+        if not out:
+            continue
+        m = _ARR_RE.search(out)
+        if not m:
+            continue
+        try:
+            items = json.loads(m.group(0))
+        except json.JSONDecodeError:
+            continue
+        for it in items if isinstance(items, list) else []:
+            try:
+                rid = int(it["reply_id"])
+            except (KeyError, ValueError, TypeError):
+                continue
+            body = (it.get("comment") or "").strip()
+            if rid not in valid_by_agent.get(agent, set()) or not body or body.lower() == "null":
+                continue
+            board_db.add_comment(post_of_reply[rid], agent, body, parent_id=rid)
+            replied += 1
+    logger.info(f"[대대댓글] {replied}건")
+    return {"replied": replied}
 
 
 def run_nightly() -> dict:
@@ -540,17 +638,20 @@ def run_nightly() -> dict:
         board = run_board_discussion(paths=active_paths,
                                      deadline_ts=_at(settings.discussion_until_hour))    # ③
         feedback = run_post_feedback(paths=active_paths,
-                                     deadline_ts=_at(settings.discussion_until_hour))    # ④
+                                     deadline_ts=_at(settings.discussion_until_hour))    # ④ 대댓글 필수
+        followup = run_reply_followup(paths=active_paths,
+                                      deadline_ts=_at(settings.discussion_until_hour))   # ④b 대대댓글 선택
     else:
         board = {"commented": 0, "note": "변화 있는 프로젝트 없음"}
         feedback = {"reacted": 0}
+        followup = {"replied": 0}
     reprocess = run_reprocess()                                   # ⑤ 문서 재가공(docs 커밋·push 안 함)
     rewards = run_rewards()                                       # ⑥ 보상
     synthesis = manager.close_day(date, report.get("results", []))   # ⑦ 저녁 종합
     # 아침 발송용 요약 = 관리자 종합(없으면 기본 텔레그램 텍스트)
     alerts_db.set_setting(f"daily_summary:{date}", synthesis or report.get("telegram_preview", ""))
-    return {"report": report, "board": board, "feedback": feedback, "reprocess": reprocess,
-            "rewards": rewards, "synthesis_chars": len(synthesis or "")}
+    return {"report": report, "board": board, "feedback": feedback, "followup": followup,
+            "reprocess": reprocess, "rewards": rewards, "synthesis_chars": len(synthesis or "")}
 
 
 def send_daily_telegram(date: str | None = None) -> bool:
