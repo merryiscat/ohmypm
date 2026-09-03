@@ -335,7 +335,8 @@ def run_daily_report(
     for r in ok_results:
         if r.get("quiet"):
             continue
-        title = r.get("headline") or f"{r['name']}: {(r.get('summary') or '').splitlines()[0][:35]}"
+        # 제목에 프로젝트명 접두어를 안 붙인다 — 작성자가 메타줄(조회수 옆)에 따로 표시됨
+        title = r.get("headline") or (r.get("summary") or "").splitlines()[0][:35]
         board_db.add_post(
             author=r["name"], title=title,
             body=r.get("summary", ""), project=r.get("path"), day=date,

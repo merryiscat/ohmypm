@@ -121,7 +121,8 @@ def run_harness_audit(paths: list[str] | None = None,
         for r in ok:
             first = (r.get("report") or "").splitlines()
             head = next((l for l in first if l.strip() and not l.startswith("#")), "")
-            title = f"{r['name']}: 하네스 점검 — {head[:30] or '완료'}"
+            # 제목에 프로젝트명 접두어 없음 — 작성자가 메타줄(조회수 옆)에 따로 표시됨
+            title = f"하네스 점검 — {head[:30] or '완료'}"
             board_db.add_post(author=r["name"], title=title,
                               body=r.get("report", ""), project=r.get("path"), day=date)
     return {"date": date, "audited": len(ok), "committed": committed,
