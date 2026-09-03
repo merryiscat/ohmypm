@@ -1080,5 +1080,6 @@ async function doJudge(){
 
 
 @router.get("/", response_class=HTMLResponse)
-def dashboard() -> str:
-    return _HTML
+def dashboard() -> HTMLResponse:
+    # no-store: SPA 전체가 이 HTML 하나라, 캐시가 옛 JS를 재사용하면 새 기능이 반영 안 된다
+    return HTMLResponse(_HTML, headers={"Cache-Control": "no-store"})
