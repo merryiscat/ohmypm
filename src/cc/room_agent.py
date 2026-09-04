@@ -30,6 +30,26 @@ def _neutral_cwd() -> str:
     return _NEUTRAL_CWD
 
 
+def _latest_daily_context(project_path: str) -> str:
+    """가장 최근 일간보고 대화를 배경 텍스트로 — 밤의 보고 맥락이 룸 대화로 이어지게.
+
+    일간보고는 별도 방(daily::날짜::path)에 쌓여서, 이걸 안 주면 담당이 자기가
+    어젯밤 PM에게 보고한 내용을 룸에서 모른다(2026-09-04 사용자 지적).
+    """
+    rooms = [r for r in messages_db.list_rooms_like("daily::") if r.endswith("::" + project_path)]
+    if not rooms:
+        return ""
+    latest = max(rooms)                      # daily::YYYY-MM-DD::path — 사전순 최대 = 최신 날짜
+    date = latest.split("::")[1]
+    msgs = messages_db.list_messages(latest, limit=12)
+    if not msgs:
+        return ""
+    lines = "\n".join(
+        f"{'PM' if m['author'] == 'pm' else '담당(나)'}: {(m['body'] or '')[:300]}" for m in msgs
+    )
+    return f"[참고 — {date} 일간보고에서 PM과 나눈 대화]\n{lines}\n\n"
+
+
 def reply_in_room(project_path: str, name: str) -> None:
     """방(room=project_path)의 최근 대화를 담당 에이전트가 읽고, 답 한 줄을 방에 남긴다.
 
@@ -38,7 +58,7 @@ def reply_in_room(project_path: str, name: str) -> None:
     """
     history = messages_db.list_messages(project_path, limit=HISTORY_LIMIT)
     hist_txt = "\n".join(f"{m['author']}: {m['body']}" for m in history)
-    prompt = room_chat(name, project_path, hist_txt)
+    prompt = _latest_daily_context(project_path) + room_chat(name, project_path, hist_txt)
     allowed, disallowed = tools_for("room_chat")
     result = run_headless(
         prompt=prompt,
