@@ -263,11 +263,16 @@ def report_one_project(path: str, name: str, date: str, guidance: str = "",
         summary = pm["summary"] or summary
         headline = pm["headline"] or headline
         pm_body = summary + (f"\n▸ 담당에게: {pm['ask']}" if pm["ask"] and not pm["done"] else "")
-        messages_db.add_message(room, "pm", pm_body.strip())
+        pm_out = pm_body.strip()
+        messages_db.add_message(room, "pm", pm_out)
+        # ★ 룸 피드에도 그대로 흘린다 — 일간보고가 프로젝트 룸 대화로 곧장 이어지게
+        #   (2026-09-04 사용자 확정). 첫 발화에만 날짜 태그를 붙여 어디부터가 보고인지 표시.
+        messages_db.add_message(path, "pm", (f"[일간보고 {date}]\n" if rounds == 1 else "") + pm_out)
         if pm["done"] or not pm["ask"]:
             break
         ans = _agent_call(name, path, pm["ask"], hist)
         messages_db.add_message(room, "agent", ans)
+        messages_db.add_message(path, "agent", ans)
         turns.append((pm["ask"], ans))
     # 대화 종료 후: PM이 칸반 상태·일정을 확정해 실제 반영(전용 관리 호출)
     transcript = "\n".join(f"PM: {q}\n담당: {a}" for q, a in turns) or summary
