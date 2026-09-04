@@ -1076,6 +1076,11 @@ async function doJudge(){
 
 // 시작
 (async ()=>{ await loadData(); if(!location.hash) location.hash='#/dashboard'; route(); })();
+
+// 늘 열어두는 대시보드라 수동 새로고침 없이도 사이드바(프로젝트·이슈 뱃지)가 스스로 갱신되게:
+// 탭으로 돌아올 때 + 5분마다 목록을 다시 불러온다. 본문 뷰는 안 건드린다(채팅 입력 등 보호).
+window.addEventListener('focus', ()=>loadData());
+setInterval(loadData, 300000);
 </script></body></html>"""
 
 
