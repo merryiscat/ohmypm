@@ -625,6 +625,19 @@ def run_nightly() -> dict:
         return now.replace(hour=hour, minute=0, second=0, microsecond=0).timestamp()
 
     projects = discover_projects()
+    # ⓪ 관리 계약 파일(status.md·pending.md) 없는 프로젝트는 골격부터 만든다 —
+    #    프로젝트를 처음 들일 때 관리 구조를 깔아두는 건 ohmyPM 책임(2026-09-05 사용자 확정).
+    #    새로 발견된 프로젝트는 첫 야간에 자동으로 이 단계를 거치고, 그다음 스캔부터 칸반이 찬다.
+    from pathlib import Path
+
+    from src.cc.harness_audit import run_harness_audit
+
+    need_skeleton = [
+        p["path"] for p in projects
+        if not ((Path(p["path"]) / "docs" / "status.md").exists()
+                and (Path(p["path"]) / "docs" / "pending.md").exists())
+    ]
+    skeleton = run_harness_audit(paths=need_skeleton) if need_skeleton else {"audited": 0}
     guidance = manager.plan_day(projects)                        # ① 아침 계획
     report = run_daily_report(deadline_ts=_at(settings.daily_soft_deadline_hour),
                               notify=False, guidance_by_path=guidance)   # ②
@@ -657,7 +670,8 @@ def run_nightly() -> dict:
     # 아침 발송용 요약 = 관리자 종합(없으면 기본 텔레그램 텍스트)
     alerts_db.set_setting(f"daily_summary:{date}", synthesis or report.get("telegram_preview", ""))
     return {"report": report, "board": board, "feedback": feedback, "followup": followup,
-            "reprocess": reprocess, "rewards": rewards, "synthesis_chars": len(synthesis or "")}
+            "reprocess": reprocess, "rewards": rewards, "skeleton": skeleton,
+            "synthesis_chars": len(synthesis or "")}
 
 
 def send_daily_telegram(date: str | None = None) -> bool:
