@@ -948,9 +948,9 @@ function renderRoom(path){
 async function requestSkeleton(path, btn){
   const name = nameOfPath(path);
   const ok = await appConfirm({title:`'${name}' 골격 생성`, okText:'생성',
-    body:'PM이 빠진 기본기를 실제 파일로 만듭니다:\n'+
-         '- docs/status.md·pending.md·index.md 등 계약 파일(없는 것만)\n'+
-         '- .gitignore·CLAUDE.md(없을 때만 생성, 기존 파일은 무수정)\n'+
+    body:'PM이 빠진 기본기를 만들고, 낡은 것은 고칩니다:\n'+
+         '- docs/status.md·pending.md·index.md 등 계약 파일\n'+
+         '- .gitignore·CLAUDE.md (파일 삭제·통째 재작성은 금지)\n'+
          '- 변경은 git 커밋으로 남습니다(push 없음 — 되돌리기 가능)\n\n'+
          '먼저 "세팅 점검" 리포트를 확인하셨나요? 1~2분 걸립니다.'});
   if(!ok) return;
