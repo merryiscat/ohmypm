@@ -44,6 +44,11 @@ _HTML = r"""<!doctype html>
   aside .room-item .rc + .rx{margin-left:6px}
   aside .room-item:hover .rx{display:block}
   aside .room-item .rx:hover{color:#fff}
+  /* 전문가 탭(여러 전문가 전환) */
+  .etabs{display:flex;gap:6px;margin-bottom:8px;flex-wrap:wrap}
+  .etab{padding:3px 11px;border:1px solid var(--line);border-radius:14px;cursor:pointer;font-size:12px;color:var(--muted);background:#fff}
+  .etab:hover{color:var(--ink)}
+  .etab.on{background:var(--sb);color:#fff;border-color:var(--sb)}
   /* 확인/알림 모달 — 브라우저 기본 confirm/alert 대신 화면 톤에 맞춘 팝업 */
   .modal-bg{position:fixed;inset:0;background:rgba(15,18,24,.45);display:flex;align-items:center;justify-content:center;z-index:100}
   .modal{background:var(--card);border:1px solid var(--line);border-radius:10px;min-width:320px;max-width:440px;padding:18px 20px;box-shadow:0 12px 40px rgba(0,0,0,.18)}
@@ -603,13 +608,19 @@ function renderExperts(){
 
 const expertRoom = d => 'expert::'+d;
 
+let EXPERT_IDX = 0;   // 전문가 탭 선택(여럿을 전환해 본다 — 이전엔 첫 명만 보이던 한계 해소)
 async function loadExpert(){
   let list = [];
   try{ list = await fetch('/api/experts').then(r=>r.json()); }catch(e){}
   const top = document.getElementById('expert-top'); if(!top) return;
   if(!list.length){ top.textContent = '전문가가 없습니다'; return; }
-  const e = list[0];
-  top.innerHTML = `<b style="color:var(--ink);font-size:14px">${esc(e.name)}</b> — ${esc(e.topic)} `+
+  if(EXPERT_IDX >= list.length) EXPERT_IDX = 0;
+  const e = list[EXPERT_IDX];
+  const tabs = list.map((x,i)=>
+    `<span class="etab${i===EXPERT_IDX?' on':''}" onclick="EXPERT_IDX=${i};loadExpert()">${esc(x.name)}</span>`
+  ).join('');
+  top.innerHTML = `<div class="etabs">${tabs}</div>`+
+    `<b style="color:var(--ink);font-size:14px">${esc(e.name)}</b> — ${esc(e.topic)} `+
     `· 위키 ${e.wiki_chars}자 <button id="collect-btn" onclick="collectExpert('${e.domain}')">웹으로 지식 수집</button>`;
   const w = await fetch('/api/experts/'+e.domain+'/wiki').then(r=>r.json()).catch(()=>({wiki:''}));
   const wikiBox = document.getElementById('expert-wiki');
@@ -618,7 +629,8 @@ async function loadExpert(){
             : '<div class="empty" style="padding:20px">아직 비어 있음 — "웹으로 지식 수집"을 눌러 채우세요</div>');
   const input = document.getElementById('msg-input');
   if(input){
-    input.addEventListener('keydown', ev=>{ if(ev.key==='Enter' && !ev.shiftKey){ ev.preventDefault(); sendExpertQ(e.domain); }});
+    // 탭 전환 때마다 불리므로 addEventListener(누적)가 아니라 대입으로 교체 — 옛 도메인으로 중복 전송 방지
+    input.onkeydown = ev=>{ if(ev.key==='Enter' && !ev.shiftKey){ ev.preventDefault(); sendExpertQ(e.domain); }};
     input.focus({preventScroll:true});
   }
   loadMessages(expertRoom(e.domain), false, true);
