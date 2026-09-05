@@ -67,8 +67,10 @@ def audit_one(path: str, name: str, date: str) -> dict:
     # ★ 중립 cwd + add_dir로 연다(cwd=대상으로 두면 그 프로젝트의 블로킹 Stop 훅·대화체 CLAUDE.md가
     #   최종 출력을 뭉개고, '할 일 없음'일 때 턴 종료를 막아 타임아웃난다 — bobusang에서 실증).
     #   쓰기는 add_dir 안의 절대경로로 하고, git 커밋은 코드가 git -C로 한다.
+    from src.cc.onboarding import meta_block
+
     report = run_headless(
-        prompt=harness_audit_prompt(name, path, BASELINE_NOTE),
+        prompt=harness_audit_prompt(name, path, BASELINE_NOTE, meta_block(path)),
         cwd=_neutral_cwd(),
         add_dirs=[path],
         allowed_tools=allowed,

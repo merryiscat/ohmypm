@@ -922,13 +922,30 @@ function renderRoom(path){
       `<div class="room-main" id="room-main"></div>`+
       `<div class="room-side">`+
         `<div class="side-h">${esc(name)} 담당 에이전트`+
-          `<button class="mini-btn" data-onboard="${escAttr(path)}" title="PM이 이 프로젝트의 초기 세팅(CLAUDE.md·docs·스킬 구성·기본기)을 읽기 전용으로 점검해 이 방에 리포트를 남깁니다">세팅 점검</button>`+
+          `<button class="mini-btn" data-onboard="${escAttr(path)}" title="PM이 하네스 전문가 자문을 끼고 이 프로젝트의 초기 세팅을 읽기 전용으로 점검해 이 방에 리포트를 남깁니다(파일 생성 없음)">세팅 점검</button>`+
+          `<button class="mini-btn" data-skeleton="${escAttr(path)}" title="검토 리포트를 승인하는 행위 — PM이 빠진 기본기(docs 계약 파일·.gitignore 등)를 실제 파일로 만들고 git 커밋합니다(push 없음)">골격 생성</button>`+
         `</div>`+
         chatMarkup()+
       `</div>`+
     `</div>`;
   fillRoomMain(path);
   bindChat(path, true);   // 프로젝트 룸 = 담당 에이전트 방
+}
+
+// 골격 생성(승인 실행) — 검토 리포트를 보고 사용자가 확인하면 하네스 감사(쓰기)를 돌린다
+async function requestSkeleton(path, btn){
+  const name = nameOfPath(path);
+  const ok = await appConfirm({title:`'${name}' 골격 생성`, okText:'생성',
+    body:'PM이 빠진 기본기를 실제 파일로 만듭니다:\n'+
+         '- docs/status.md·pending.md·index.md 등 계약 파일(없는 것만)\n'+
+         '- .gitignore·CLAUDE.md(없을 때만 생성, 기존 파일은 무수정)\n'+
+         '- 변경은 git 커밋으로 남습니다(push 없음 — 되돌리기 가능)\n\n'+
+         '먼저 "세팅 점검" 리포트를 확인하셨나요? 1~2분 걸립니다.'});
+  if(!ok) return;
+  if(btn){ btn.disabled = true; btn.textContent = '생성 중… (1~2분)'; }
+  try{ await fetch('/api/harness-audit',{method:'POST',headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({paths:[path]})}); }catch(e){}
+  setTimeout(()=>{ if(btn){ btn.disabled = false; btn.textContent = '골격 생성'; } }, 120000);
 }
 
 // PM 온보딩 검토 요청 — 결과는 담당 방에 PM 메시지로 뜬다(채팅 폴링이 잡는다)
@@ -1053,6 +1070,8 @@ document.addEventListener('click', e=>{
   if(ob){ requestOnboarding(ob.getAttribute('data-onboard'), ob); return; }
   const ex = e.target.closest('[data-exclude]');
   if(ex){ excludeProject(ex.getAttribute('data-exclude')); return; }
+  const sk = e.target.closest('[data-skeleton]');
+  if(sk){ requestSkeleton(sk.getAttribute('data-skeleton'), sk); return; }
   const el = e.target.closest('[data-room]');
   if(el) go('#/room/'+encodeURIComponent(el.getAttribute('data-room')));
 });

@@ -629,22 +629,31 @@ def run_nightly() -> dict:
         return now.replace(hour=hour, minute=0, second=0, microsecond=0).timestamp()
 
     projects = discover_projects()
-    # ⓪ 관리 계약 파일(status.md·pending.md) 없는 프로젝트는 골격부터 만든다 —
-    #    프로젝트를 처음 들일 때 관리 구조를 깔아두는 건 ohmyPM 책임(2026-09-05 사용자 확정).
-    #    새로 발견된 프로젝트는 첫 야간에 자동으로 이 단계를 거치고, 그다음 스캔부터 칸반이 찬다.
+    # ⓪ 신규 편입 검토(2026-09-06 사용자 확정: "처음 등록된 프로젝트는 PM-하네스 전문가 검토 방식")
+    #    계약 파일(status.md·pending.md) 없는 프로젝트는 **쓰기 없이** PM+전문가 검토 리포트만 낸다
+    #    (분류·시크릿은 코드가 결정론 판정해 주입 — 전문가 자문 P0). 골격 생성은 사용자가 리포트를
+    #    보고 룸의 '골격 생성' 버튼으로 승인할 때만. 검토는 프로젝트당 1회(마커)·밤당 상한.
     from pathlib import Path
 
-    from src.cc.harness_audit import run_harness_audit
+    from src.cc.onboarding import review_project
 
-    #    git 저장소인 폴더만 — 감사 커밋(롤백 단위)이 가능해야 파일 생성이 안전하다.
-    #    비git 폴더는 발견·표시만 되고, 사용자가 git init하거나 제외할 때까지 건드리지 않는다.
-    need_skeleton = [
-        p["path"] for p in projects
-        if (Path(p["path"]) / ".git").exists()
-        and not ((Path(p["path"]) / "docs" / "status.md").exists()
-                 and (Path(p["path"]) / "docs" / "pending.md").exists())
+    REVIEWS_PER_NIGHT = 6
+    unreviewed = [
+        p for p in projects
+        if not ((Path(p["path"]) / "docs" / "status.md").exists()
+                and (Path(p["path"]) / "docs" / "pending.md").exists())
+        and not alerts_db.get_setting(f"onboard_reviewed:{p['path']}")
     ]
-    skeleton = run_harness_audit(paths=need_skeleton) if need_skeleton else {"audited": 0}
+    todo, deferred = unreviewed[:REVIEWS_PER_NIGHT], unreviewed[REVIEWS_PER_NIGHT:]
+    for p in todo:
+        try:
+            review_project(p["path"], p["name"], post_board=True)
+            alerts_db.set_setting(f"onboard_reviewed:{p['path']}", date)
+        except Exception as e:
+            logger.warning(f"[신규검토] {p['name']} 실패: {e}")
+    if deferred:
+        logger.info(f"[신규검토] 오늘 {len(todo)}개 검토, {len(deferred)}개는 다음 밤으로 이월")
+    skeleton = {"reviewed": len(todo), "deferred": len(deferred)}
     guidance = manager.plan_day(projects)                        # ① 아침 계획
     report = run_daily_report(deadline_ts=_at(settings.daily_soft_deadline_hour),
                               notify=False, guidance_by_path=guidance)   # ②
