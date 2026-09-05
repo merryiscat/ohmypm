@@ -9,10 +9,11 @@ from src.db import projects as projects_db
 
 
 def discover_projects() -> list[dict]:
-    """projects_root 하위 1차 폴더 중 docs/ 있는 것을 관리 대상으로 upsert.
+    """projects_root 하위 1차 폴더 **전부**를 관리 대상으로 upsert.
 
-    MVP: docs 위키 있는 것만 등록(없는 건 케이스 14 온보딩 대상).
-    숨김 폴더(.venv 등)는 제외.
+    발견 조건은 폴더 존재뿐 — 관리 여부는 사용자가 x(제외)로 정한다(2026-09-05 사용자 확정,
+    docs 없는 프로젝트야말로 세팅 대상이라 docs 조건을 없앰). 숨김 폴더(.venv 등)와
+    사용자 제외 폴더만 건너뛴다. docs 유무는 has_wiki로 기록해 후속 단계가 참고한다.
     """
     root = Path(settings.projects_root)
     found: list[dict] = []
@@ -27,10 +28,8 @@ def discover_projects() -> list[dict]:
         if str(child) in excluded:
             continue  # 관리 제외됨 (예: 안 쓰는 프로젝트)
         has_wiki = (child / "docs").is_dir()
-        if not has_wiki:
-            continue  # MVP는 위키 있는 것만
         projects_db.upsert_project(str(child), child.name, has_wiki)
         found.append({"path": str(child), "name": child.name, "has_wiki": has_wiki})
 
-    logger.info(f"[발견] 위키 있는 프로젝트 {len(found)}개")
+    logger.info(f"[발견] 프로젝트 {len(found)}개 (위키 있음 {sum(1 for f in found if f['has_wiki'])}개)")
     return found

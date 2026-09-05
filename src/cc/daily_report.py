@@ -73,17 +73,21 @@ def _has_activity(path: str) -> bool:
       ② 최근 24시간 새 이슈(정시 스캔이 docs에서 발견) — 커밋 없이 docs만 고쳐도 잡힌다.
     git 확인이 실패하면 True(모르면 점검하는 쪽 — 놓침0 원칙).
     """
-    try:
-        r = subprocess.run(
-            ["git", "-C", path, "log", "--since=24 hours ago", "--format=%s"],
-            capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=15,
-        )
-        if r.returncode != 0:
-            return True  # git 저장소가 아니거나 조회 실패 — 점검하는 쪽으로
-        if any(s.strip() and "ohmyPM" not in s for s in r.stdout.splitlines()):
-            return True  # 사람(또는 다른 도구)의 커밋이 있다
-    except Exception:
-        return True
+    from pathlib import Path as _P
+
+    if (_P(path) / ".git").exists():
+        try:
+            r = subprocess.run(
+                ["git", "-C", path, "log", "--since=24 hours ago", "--format=%s"],
+                capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=15,
+            )
+            if r.returncode != 0:
+                return True  # git 조회 실패 — 모르면 점검하는 쪽으로
+            if any(s.strip() and "ohmyPM" not in s for s in r.stdout.splitlines()):
+                return True  # 사람(또는 다른 도구)의 커밋이 있다
+        except Exception:
+            return True
+    # 비git 폴더는 커밋 신호가 없다 — 매일 점검(콜 낭비) 대신 새 이슈 신호만 본다
     # 새 이슈: issues.created_at은 SQLite datetime('now') = UTC 문자열 → UTC로 비교
     cutoff = (datetime.now(timezone.utc) - timedelta(hours=24)).strftime("%Y-%m-%d %H:%M:%S")
     return any(
@@ -632,10 +636,13 @@ def run_nightly() -> dict:
 
     from src.cc.harness_audit import run_harness_audit
 
+    #    git 저장소인 폴더만 — 감사 커밋(롤백 단위)이 가능해야 파일 생성이 안전하다.
+    #    비git 폴더는 발견·표시만 되고, 사용자가 git init하거나 제외할 때까지 건드리지 않는다.
     need_skeleton = [
         p["path"] for p in projects
-        if not ((Path(p["path"]) / "docs" / "status.md").exists()
-                and (Path(p["path"]) / "docs" / "pending.md").exists())
+        if (Path(p["path"]) / ".git").exists()
+        and not ((Path(p["path"]) / "docs" / "status.md").exists()
+                 and (Path(p["path"]) / "docs" / "pending.md").exists())
     ]
     skeleton = run_harness_audit(paths=need_skeleton) if need_skeleton else {"audited": 0}
     guidance = manager.plan_day(projects)                        # ① 아침 계획
