@@ -131,6 +131,9 @@ _HTML = r"""<!doctype html>
   .kcol>h3 .n{background:#d9dde3;color:#555;border-radius:20px;padding:0 7px;font-size:11px}
   .kcard{background:#fff;border:1px solid var(--line);border-radius:8px;padding:8px 9px;margin-bottom:7px;font-size:12.5px;line-height:1.45;color:#3a3f47}
   .kcard .due{color:var(--red);font-weight:700;font-size:11px}
+  .kcard .kdue{color:var(--red);font-weight:700;font-size:11px;margin-bottom:3px}
+  .kcard .kt{font-weight:600;margin-bottom:3px}
+  .kcard .kb{font-size:11.5px;color:var(--muted)}
   .kcard .mv{display:flex;gap:6px;margin-top:7px}
   .kcard .mv button{padding:1px 9px;font-size:12px;background:#f1f3f6;color:var(--ink);border:1px solid var(--line);border-radius:5px}
   .kcol .col-empty{color:var(--muted);font-size:12px;padding:8px 4px}
@@ -280,7 +283,7 @@ function md(src){
   close();
   return out.join('');
 }
-const clean = s => (s||'').replace(/~~/g,'').trim();          // 취소선 마크 제거
+const clean = s => (s||'').replace(/~~/g,'').replace(/\*\*|__|`/g,'').trim();  // 취소선·굵게·코드 마크다운 기호 제거(카드에선 원문 그대로 못 그린다)
 const isCancelled = s => /~~.+~~/.test(s||'');                 // ~~...~~ = 취소 → 제외
 const todayStr = () => new Date().toISOString().slice(0,10);
 function daysTo(due){ return Math.round((new Date(due)-new Date(todayStr()))/86400000); }
@@ -919,7 +922,7 @@ function renderRoom(path){
       `<div class="room-main" id="room-main"></div>`+
       `<div class="room-side">`+
         `<div class="side-h">${esc(name)} 담당 에이전트`+
-          `<button class="mini-btn" data-onboard="${escAttr(path)}">온보딩 검토</button>`+
+          `<button class="mini-btn" data-onboard="${escAttr(path)}" title="PM이 이 프로젝트의 초기 세팅(CLAUDE.md·docs·스킬 구성·기본기)을 읽기 전용으로 점검해 이 방에 리포트를 남깁니다">세팅 점검</button>`+
         `</div>`+
         chatMarkup()+
       `</div>`+
@@ -978,9 +981,19 @@ function kanbanMarkup(items){
       const idx = KORDER.indexOf(st);
       const prev = idx>0 ? `<button onclick="moveIssue(${i.id},'${KORDER[idx-1]}')" title="${KCOLS[idx-1][1]}로">‹</button>` : '';
       const next = idx<KORDER.length-1 ? `<button onclick="moveIssue(${i.id},'${KORDER[idx+1]}')" title="${KCOLS[idx+1][1]}로">›</button>` : '';
+      // 카드 = 기한 / 제목 / 내용 — 긴 원문을 첫 구분자(— 또는 :)에서 갈라 처음 보는 사람도 읽게
+      const t = clean(i.title);
+      const m = t.match(/^(.{4,70}?)(?:\s+—\s+|:\s+)([\s\S]+)$/);
+      const head = m ? m[1] : t, body = m ? m[2] : '';
+      // 판정 표식은 한글로 — reclass 같은 내부 용어를 화면에 내보내지 않는다
+      const vlabel = {keep:'판정 확인', reclass:'재분류'}[i.verdict];
+      const vtitle = {keep:'판정 에이전트가 원래 분류가 맞다고 확인함',
+                      reclass:'판정 에이전트가 성격을 바로잡음(예: 기한이 아니라 조건부 보류)'}[i.verdict];
       return `<div class="kcard">`+
-        (i.due?`<span class="due">${i.due}</span> `:'')+esc(clean(i.title))+
-        (i.verdict?` <span class="badge ${i.verdict==='drop'?'d':'u'}">${i.verdict}</span>`:'')+
+        (i.due?`<div class="kdue">기한 ${i.due}</div>`:'')+
+        `<div class="kt">${esc(head)}`+
+        (vlabel?` <span class="badge u" title="${vtitle}">${vlabel}</span>`:'')+`</div>`+
+        (body?`<div class="kb">${esc(body)}</div>`:'')+
         `<div class="mv">${prev}${next}</div></div>`;
     }).join('') || `<div class="col-empty">없음</div>`;
     return `<div class="kcol"><h3>${label}<span class="n">${list.length}</span></h3>${cards}</div>`;

@@ -176,10 +176,12 @@ def get_daily() -> list[dict]:
         except ValueError:
             continue
         by_date.setdefault(date, []).append(
-            {"project": path, "name": names.get(path, path), "room": room}
+            {"project": path, "name": names.get(path, path), "room": room,
+             "msgs": len(messages_db.list_messages(room))}
         )
+    # 정렬: 그날 이슈 얘기가 많았던(대화 메시지 수) 순 — 조용한 프로젝트는 뒤로
     return [
-        {"date": d, "projects": sorted(by_date[d], key=lambda x: x["name"].lower())}
+        {"date": d, "projects": sorted(by_date[d], key=lambda x: (-x["msgs"], x["name"].lower()))}
         for d in sorted(by_date, reverse=True)
     ]
 
