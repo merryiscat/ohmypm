@@ -6,8 +6,11 @@
 """
 
 import json
+import re
 import shutil
 import subprocess
+import time
+from datetime import datetime, timedelta
 from pathlib import Path
 
 from loguru import logger
@@ -16,6 +19,41 @@ from src.config.settings import settings
 
 # PreToolUse 훅(인자 레벨 방어 L3) — ohmyPM 안에 둔다(대상 에이전트가 자기 게이트를 못 고치게)
 GUARD_HOOK = Path(__file__).resolve().parents[2] / "scripts" / "pretooluse_guard.ps1"
+
+# ── 사용량 한도 감지 — 429 메시지의 리셋 시각을 붙잡아 야간 배치가 재개 시점을 안다 ──
+# 예: "You've hit your session limit · resets 3am (Asia/Seoul)" / "resets 11:40am"
+_LIMIT_RESET_AT: float | None = None
+_RESET_RE = re.compile(r"resets (\d{1,2})(?::(\d{2}))?\s*(am|pm)", re.IGNORECASE)
+
+
+def limit_reset_at() -> float | None:
+    """마지막으로 감지된 한도 리셋 시각(epoch). 감지 없으면 None."""
+    return _LIMIT_RESET_AT
+
+
+def clear_limit() -> None:
+    global _LIMIT_RESET_AT
+    _LIMIT_RESET_AT = None
+
+
+def _capture_limit(text: str) -> None:
+    """429 한도 메시지에서 리셋 시각을 파싱해 기억한다(로컬 시간대 = Asia/Seoul 가정)."""
+    global _LIMIT_RESET_AT
+    if "session limit" not in text and '"api_error_status":429' not in text:
+        return
+    m = _RESET_RE.search(text)
+    if not m:
+        return
+    hour, minute, ampm = int(m.group(1)), int(m.group(2) or 0), m.group(3).lower()
+    if ampm == "pm" and hour != 12:
+        hour += 12
+    if ampm == "am" and hour == 12:
+        hour = 0
+    at = datetime.now().replace(hour=hour, minute=minute, second=0, microsecond=0)
+    if at.timestamp() <= time.time():
+        at += timedelta(days=1)      # 이미 지난 시각이면 내일의 그 시각
+    _LIMIT_RESET_AT = at.timestamp()
+    logger.info(f"[한도] 세션 한도 감지 — 리셋 {at:%m-%d %H:%M}")
 
 
 def _resolve_bin() -> str:
@@ -75,6 +113,8 @@ def run_headless(
         if r.returncode != 0:
             # ★ 실패 원인은 stderr가 비고 stdout(JSON)에 담기는 경우가 많다(사용량·속도 한도 등).
             #   둘 다 로깅해야 사후 진단이 된다(2026-09-01 야간 전량 실패를 stderr 빈 값이라 놓침).
+            full = (r.stdout or "") + (r.stderr or "")
+            _capture_limit(full)   # 한도 429면 리셋 시각을 기억 — 야간 배치가 재개에 쓴다
             detail = ((r.stderr or "").strip() or (r.stdout or "").strip())[:300]
             logger.warning(f"[headless] 종료코드 {r.returncode}: {detail}")
             return None

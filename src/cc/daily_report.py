@@ -309,6 +309,7 @@ def run_daily_report(
 
     done_results: list[dict] = []
     skipped: list[str] = []
+    skipped_paths: list[str] = []
 
     def worker(p: dict) -> dict:
         if deadline_ts and time.time() > deadline_ts:
@@ -329,7 +330,11 @@ def run_daily_report(
 
     with ThreadPoolExecutor(max_workers=concurrency) as ex:
         for res in ex.map(worker, projects):
-            (skipped.append(res["name"]) if res.get("skipped") else done_results.append(res))
+            if res.get("skipped"):
+                skipped.append(res["name"])
+                skipped_paths.append(res["path"])
+            else:
+                done_results.append(res)
 
     ok_results = [r for r in done_results if not _is_failed(r)]
     failed_n = len(done_results) - len(ok_results)
@@ -357,7 +362,10 @@ def run_daily_report(
 
         sent = send_telegram_sync(telegram_text)
     return {"date": date, "completed": len(ok_results), "failed": failed_n, "skipped": skipped,
-            "telegram_sent": sent, "telegram_preview": telegram_text, "results": ok_results}
+            "telegram_sent": sent, "telegram_preview": telegram_text, "results": ok_results,
+            # 한도 재개용 — 실패(무응답 포함)·마감초과 프로젝트의 경로(재실행 대상)
+            "failed_paths": [r["path"] for r in done_results if _is_failed(r)],
+            "skipped_paths": skipped_paths}
 
 
 def _assemble_telegram(date: str, results: list[dict], skipped: list[str]) -> str:
@@ -657,6 +665,25 @@ def run_nightly() -> dict:
     guidance = manager.plan_day(projects)                        # ① 아침 계획
     report = run_daily_report(deadline_ts=_at(settings.daily_soft_deadline_hour),
                               notify=False, guidance_by_path=guidance)   # ②
+    # ★ 한도 재개(2026-09-06 사용자 확정: "3시에 남은 양 소진하고, 리셋되면 마저 해") —
+    #   한도(429)로 실패·미처리가 남았고 리셋 시각이 감지됐으면, 그때까지 기다렸다가 이어 돈다.
+    from src.cc import client as cc_client
+
+    resume_paths = (report.get("failed_paths") or []) + (report.get("skipped_paths") or [])
+    reset_at = cc_client.limit_reset_at()
+    if resume_paths and reset_at:
+        wait = min(max(reset_at - time.time(), 0) + 120, 6 * 3600)   # 리셋 +2분 버퍼, 최대 6시간
+        logger.info(f"[야간] 한도 소진 — 남은 {len(resume_paths)}개, {wait / 60:.0f}분 뒤 리셋에 재개")
+        time.sleep(wait)
+        cc_client.clear_limit()
+        r2 = run_daily_report(paths=resume_paths, notify=False,
+                              guidance_by_path=guidance, deadline_ts=None)
+        report["results"] = report.get("results", []) + r2.get("results", [])
+        report["completed"] = report.get("completed", 0) + r2.get("completed", 0)
+        report["failed"] = r2.get("failed", 0)
+        report["skipped"] = r2.get("skipped", [])
+        report["telegram_preview"] = _assemble_telegram(date, report["results"], r2.get("skipped", []))
+        logger.info(f"[야간] 재개 완료 — 추가 {r2.get('completed', 0)}개, 잔여 실패 {report['failed']}개")
     # ★ 대량 실패 가드 — 무응답(사용량/속도 한도 등)으로 성공 0이면 하위 단계를 통째로 건너뛴다.
     #   (안 그러면 빈 게시판 글·헛 재가공 커밋·헛 보상까지 이어져 쓰레기가 번진다 — 09-01 사고)
     attempted = report.get("completed", 0) + report.get("failed", 0)
@@ -669,13 +696,14 @@ def run_nightly() -> dict:
     # ★ 게시판 토론·반응은 '변화 있던' 프로젝트 담당만 — 조용한 프로젝트 담당까지 부르면
     #   콜 수가 도로 프로젝트 수만큼 늘어 절약이 무의미해진다. (재가공은 글 있는 프로젝트만이라 자동 제외)
     active_paths = [r["path"] for r in report.get("results", []) if not r.get("quiet")]
+    # 재개로 새벽 마감(4시)을 이미 넘겼으면 마감 없이 진행 — 사용량이 리셋 직후라 여유가 있다
+    disc_deadline: float | None = _at(settings.discussion_until_hour)
+    if time.time() > disc_deadline:
+        disc_deadline = None
     if active_paths:
-        board = run_board_discussion(paths=active_paths,
-                                     deadline_ts=_at(settings.discussion_until_hour))    # ③
-        feedback = run_post_feedback(paths=active_paths,
-                                     deadline_ts=_at(settings.discussion_until_hour))    # ④ 대댓글 필수
-        followup = run_reply_followup(paths=active_paths,
-                                      deadline_ts=_at(settings.discussion_until_hour))   # ④b 대대댓글 선택
+        board = run_board_discussion(paths=active_paths, deadline_ts=disc_deadline)      # ③
+        feedback = run_post_feedback(paths=active_paths, deadline_ts=disc_deadline)      # ④ 대댓글 필수
+        followup = run_reply_followup(paths=active_paths, deadline_ts=disc_deadline)     # ④b 대대댓글 선택
     else:
         board = {"commented": 0, "note": "변화 있는 프로젝트 없음"}
         feedback = {"reacted": 0}
@@ -685,6 +713,10 @@ def run_nightly() -> dict:
     synthesis = manager.close_day(date, report.get("results", []))   # ⑦ 저녁 종합
     # 아침 발송용 요약 = 관리자 종합(없으면 기본 텔레그램 텍스트)
     alerts_db.set_setting(f"daily_summary:{date}", synthesis or report.get("telegram_preview", ""))
+    # 재개 대기로 아침 발송 시각(07시)을 넘겨 끝났으면 즉시 발송 — 그날 07시 cron은 요약이
+    # 아직 없어 빈손으로 지나갔으므로 중복 발송이 아니다.
+    if time.time() > _at(settings.telegram_hour):
+        send_daily_telegram(date)
     return {"report": report, "board": board, "feedback": feedback, "followup": followup,
             "reprocess": reprocess, "rewards": rewards, "skeleton": skeleton,
             "synthesis_chars": len(synthesis or "")}
