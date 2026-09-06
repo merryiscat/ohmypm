@@ -31,5 +31,8 @@ def run_scan() -> dict:
                 total_issues += 1
         except Exception as e:  # 한 프로젝트 파싱 실패 → 로그만, 다음 계속
             logger.warning(f"[스캔] {p['name']} 파싱 실패: {e}")
-    logger.info(f"[스캔] 프로젝트 {len(projects)}개, 이슈 {total_issues}건 적재")
-    return {"projects": len(projects), "issues": total_issues}
+    # ★ 날짜 없는 활성 이슈에 기본 재확인일(+14일)을 채운다(2026-09-06 사용자 확정:
+    #   "날짜 없으면 묻힌다"). PM이 일간보고에서 더 좋은 날짜를 잡으면 그걸로 덮인다.
+    filled = issues_db.fill_default_due(days=14)
+    logger.info(f"[스캔] 프로젝트 {len(projects)}개, 이슈 {total_issues}건 적재, 재확인일 부여 {filled}건")
+    return {"projects": len(projects), "issues": total_issues, "due_filled": filled}

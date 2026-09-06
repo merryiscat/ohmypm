@@ -56,6 +56,23 @@ def set_status(issue_id: int, status: str) -> None:
     db.commit()
 
 
+def fill_default_due(days: int = 14) -> int:
+    """날짜 없는 활성 이슈(open·consulting)에 기본 재확인일(오늘+days)을 채운다.
+
+    "날짜 없는 카드는 묻힌다"(2026-09-06 사용자 확정) — 모든 활성 이슈가 달력·정렬에
+    잡히게 하는 결정론 안전망. PM·판정이 잡은 날짜는 건드리지 않는다(NULL만 채움).
+    """
+    db = get_db()
+    cur = db.execute(
+        "UPDATE issues SET due = date('now', ?) "
+        "WHERE due IS NULL AND status IN ('open', 'consulting') "
+        "AND (verdict IS NULL OR verdict != 'drop')",
+        (f"+{days} days",),
+    )
+    db.commit()
+    return cur.rowcount
+
+
 def set_due(issue_id: int, due: str | None) -> None:
     """이슈 목표일(기한) 설정/해제 — PM이 일정 정리 시 사용."""
     db = get_db()

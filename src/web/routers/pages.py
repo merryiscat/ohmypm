@@ -137,6 +137,7 @@ _HTML = r"""<!doctype html>
   .kcard{background:#fff;border:1px solid var(--line);border-radius:8px;padding:8px 9px;margin-bottom:7px;font-size:12.5px;line-height:1.45;color:#3a3f47}
   .kcard .due{color:var(--red);font-weight:700;font-size:11px}
   .kcard .kdue{color:var(--red);font-weight:700;font-size:11px;margin-bottom:3px}
+  .kcard .kdue.soft{color:var(--muted);font-weight:600}   /* 재확인일 — 마감처럼 위협적이지 않게 */
   .kcard .kt{font-weight:600;margin-bottom:3px}
   .kcard .kb{font-size:11.5px;color:var(--muted)}
   .kcard .mv{display:flex;gap:6px;margin-top:7px}
@@ -1019,8 +1020,11 @@ function kanbanMarkup(items){
       const vlabel = {keep:'판정 확인', reclass:'재분류'}[i.verdict];
       const vtitle = {keep:'판정 에이전트가 원래 분류가 맞다고 확인함',
                       reclass:'판정 에이전트가 성격을 바로잡음(예: 기한이 아니라 조건부 보류)'}[i.verdict];
+      // 진짜 마감(deadline)은 빨간 '기한', 그 외의 날짜는 회색 '재확인'(묻힘 방지용 점검일)
+      const dueLabel = i.kind === 'deadline' ? `<div class="kdue">기한 ${i.due}</div>`
+                                             : `<div class="kdue soft">재확인 ${i.due}</div>`;
       return `<div class="kcard">`+
-        (i.due?`<div class="kdue">기한 ${i.due}</div>`:'')+
+        (i.due?dueLabel:'')+
         `<div class="kt">${esc(head)}`+
         (vlabel?` <span class="badge u" title="${vtitle}">${vlabel}</span>`:'')+`</div>`+
         (body?`<div class="kb">${esc(body)}</div>`:'')+
