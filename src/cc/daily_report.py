@@ -22,12 +22,14 @@ from src.cc.client import run_headless
 from src.cc.permissions import tools_for
 from src.cc.prompts import (
     BOARD_SYSTEM,
+    BOARD_WRITE_SYSTEM,
     FEEDBACK_SYSTEM,
     FOLLOWUP_SYSTEM,
     MANAGE_SYSTEM,
     PM_SYSTEM,
     ROOM_SYSTEM,
     board_comment,
+    board_write,
     comment_followup,
     daily_agent_answer,
     pm_manage,
@@ -343,18 +345,8 @@ def run_daily_report(
         f"[일간보고] 완료 {len(ok_results)}개(점검 {len(ok_results) - quiet_n}·변화없음 {quiet_n}) "
         f"· 실패 {failed_n}개 · 미처리 {len(skipped)}개"
     )
-    # 각 프로젝트 요약을 게시판 글로 올린다 — 제목은 PM이 뽑은 눈길 끄는 헤드라인.
-    # ★ 실패/빈 결과(headless 한도 등)는 글로 올리지 않는다 — '(PM 응답 없음)' 쓰레기 글 방지.
-    # ★ 변화없음(quiet)도 글로 안 올린다 — '작업 내용 없음' 글 18개가 게시판을 덮는 것 방지.
-    for r in ok_results:
-        if r.get("quiet"):
-            continue
-        # 제목에 프로젝트명 접두어를 안 붙인다 — 작성자가 메타줄(조회수 옆)에 따로 표시됨
-        title = r.get("headline") or (r.get("summary") or "").splitlines()[0][:35]
-        board_db.add_post(
-            author=r["name"], title=title,
-            body=r.get("summary", ""), project=r.get("path"), day=date,
-        )
+    # ★ 일간보고 요약의 게시판 자동 게시는 폐지(2026-09-06 사용자 확정) — 일간보고는 일간보고
+    #   탭 안에서 끝낸다. 게시판 글은 run_board_posts에서 담당이 직접 쓴다(창작물).
     telegram_text = _assemble_telegram(date, ok_results, skipped)
     sent = False
     if notify:
@@ -395,38 +387,102 @@ def _assemble_telegram(date: str, results: list[dict], skipped: list[str]) -> st
     return "\n".join(lines)
 
 
-# ── 게시판 토론 (4단계) — 담당이 관심 있는 글에만 댓글 ───────────────────────
+# ── 게시판 (2026-09-06 사용자 확정 재설계) ─────────────────────────────────
+# 글 = 담당의 창작물(일간보고 요약 게시 폐지). 둘러보기 = 제목 보고 끌리는 글만 열고(조회수),
+# 내용이 마음에 들면 댓글. 글쓴이 대댓글 필수 · 대대댓글 선택. 조언은 다음 단계서 실제 반영.
 BOARD_TIMEOUT = 150
 
 
-def _parse_comments(result: str | None, valid_ids: set[int]) -> list[dict]:
-    """담당 응답에서 [{post_id, comment}] 추출. 유효한 글 번호만 통과."""
+def _author_of(path: str, fallback: str) -> str:
+    """게시판 활동의 작성자 이름 — 보상으로 얻은 프로필 이름 우선(점수 집계 키와 일치)."""
+    prof = agents_db.get_profile(path) or {}
+    return prof.get("name") or fallback
+
+
+def run_board_posts(paths: list[str] | None = None, deadline_ts: float | None = None) -> dict:
+    """게시판 글쓰기 — 각 담당이 자기 프로젝트에서 글감을 **스스로 골라** 글을 쓴다(0~1편).
+
+    조회·좋아요가 점수(보상)가 되는 유인 구조라, 뭐가 잘 읽힐지도 담당이 판단한다.
+    담당당 headless 1콜. 억지 글 방지: 쓸 게 없으면 빈 배열 허용.
+    """
+    from src.scan.discover import discover_projects
+
+    date = datetime.now().strftime("%Y-%m-%d")
+    projects = discover_projects()
+    if paths:
+        wanted = set(paths)
+        projects = [p for p in projects if p["path"] in wanted]
+    allowed, disallowed = tools_for("daily_agent")
+    posted = 0
+    for p in projects:
+        if deadline_ts and time.time() > deadline_ts:
+            break
+        out = run_headless(
+            prompt=agents_db.persona_prefix(p["path"]) + board_write(p["name"], p["path"]),
+            cwd=_neutral_cwd(),
+            allowed_tools=allowed, disallowed_tools=disallowed,
+            timeout=BOARD_TIMEOUT, append_system_prompt=BOARD_WRITE_SYSTEM,
+            add_dirs=[p["path"]], model=agents_db.model_for(p["path"]),
+        )
+        if not out:
+            continue
+        m = _ARR_RE.search(out)
+        if not m:
+            continue
+        try:
+            items = json.loads(m.group(0))
+        except json.JSONDecodeError:
+            continue
+        for it in (items if isinstance(items, list) else [])[:1]:   # 최대 1편
+            title = (it.get("title") or "").strip()
+            body = (it.get("body") or "").strip()
+            if title and body:
+                board_db.add_post(author=_author_of(p["path"], p["name"]), title=title[:80],
+                                  body=body, project=p["path"], day=date)
+                posted += 1
+    logger.info(f"[게시판 글쓰기] {posted}편")
+    return {"posted": posted}
+
+
+def _parse_board_response(result: str | None, valid_ids: set[int]) -> tuple[set[int], list[dict]]:
+    """둘러보기 응답에서 {opened, comments}를 추출. 실패는 (빈 집합, 빈 리스트).
+
+    댓글 단 글은 opened에 없어도 연 것으로 친다(댓글 = 읽었다는 가장 강한 신호).
+    """
     if not result:
-        return []
-    m = _ARR_RE.search(result)
+        return set(), []
+    m = _OBJ_RE.search(result)
     if not m:
-        return []
+        return set(), []
     try:
-        data = json.loads(m.group(0))
+        d = json.loads(m.group(0))
     except json.JSONDecodeError:
-        return []
-    out = []
-    for it in data if isinstance(data, list) else []:
+        return set(), []
+    opened: set[int] = set()
+    for x in d.get("opened") or []:
+        try:
+            if int(x) in valid_ids:
+                opened.add(int(x))
+        except (ValueError, TypeError):
+            continue
+    comments: list[dict] = []
+    for it in d.get("comments") or []:
         try:
             pid = int(it["post_id"])
             c = (it.get("comment") or "").strip()
-            if pid in valid_ids and c:
-                out.append({"post_id": pid, "comment": c})
         except (KeyError, ValueError, TypeError):
             continue
-    return out
+        if pid in valid_ids and c:
+            comments.append({"post_id": pid, "comment": c})
+            opened.add(pid)
+    return opened, comments
 
 
 def run_board_discussion(paths: list[str] | None = None, deadline_ts: float | None = None) -> dict:
-    """게시판 토론(4단계) — 각 담당이 오늘 게시판 글을 읽고 **관심 있는 글에만** 댓글.
+    """게시판 둘러보기 — 각 담당이 제목을 훑고 **끌리는 글만 열어**(조회수 +1) 마음에 들면 댓글.
 
-    한 담당당 headless 1콜(게시판 전체를 주고 [{post_id,comment}] 배열을 받음) → 코드가 댓글 삽입.
-    자기 프로젝트 글에는 안 단다. 마감(deadline_ts) 넘겨 시작하는 담당은 스킵.
+    담당당 headless 1콜. 연 글만 조회수가 오른다 — 조회수가 진짜 '읽힘' 신호가 되게.
+    자기 글은 열람·댓글 제외. 마감(deadline_ts) 넘겨 시작하는 담당은 스킵.
     """
     from src.scan.discover import discover_projects
 
@@ -434,8 +490,9 @@ def run_board_discussion(paths: list[str] | None = None, deadline_ts: float | No
     if not posts:
         return {"commented": 0, "note": "게시판에 글 없음"}
     valid_ids = {p["id"] for p in posts}
-    board_text = "\n".join(
-        f"글#{p['id']} [{p['author']}] {p['title']}: {(p['body'] or '')[:220]}" for p in posts
+    board_text = "\n\n".join(
+        f"글#{p['id']} [{p['title']}] (작성자 {p['author']})\n({(p['body'] or '')[:400]})"
+        for p in posts
     )
     own_post_ids = {p["project"]: p["id"] for p in posts if p.get("project")}
 
@@ -460,15 +517,14 @@ def run_board_discussion(paths: list[str] | None = None, deadline_ts: float | No
             model=agents_db.model_for(p["path"]),
         )
         own = own_post_ids.get(p["path"])
-        if out is not None:
-            # 담당이 게시판 전체를 읽었다 = 자기 글 빼고 조회수 +1 (인센티브 조회 카운팅)
-            for post in posts:
-                if post["id"] != own:
-                    board_db.increment_views(post["id"])
-        for it in _parse_comments(out, valid_ids):
+        opened, cmts = _parse_board_response(out, valid_ids)
+        for pid in opened:
+            if pid != own:                # 자기 글 조회는 점수에 안 친다
+                board_db.increment_views(pid)
+        for it in cmts:
             if it["post_id"] == own:      # 자기 글엔 안 단다
                 continue
-            board_db.add_comment(it["post_id"], p["name"], it["comment"])
+            board_db.add_comment(it["post_id"], _author_of(p["path"], p["name"]), it["comment"])
             commented += 1
     logger.info(f"[게시판] 댓글 {commented}개 작성")
     return {"commented": commented}
@@ -655,8 +711,10 @@ def run_nightly() -> dict:
     todo, deferred = unreviewed[:REVIEWS_PER_NIGHT], unreviewed[REVIEWS_PER_NIGHT:]
     for p in todo:
         try:
-            review_project(p["path"], p["name"], post_board=True)
-            alerts_db.set_setting(f"onboard_reviewed:{p['path']}", date)
+            # 검토 리포트는 담당 방에만 — 게시판은 담당 창작 글 전용(운영 리포트 게시 안 함).
+            # ★ 성공했을 때만 완료 마커 — 실패(한도 등)가 '검토됨'으로 남던 버그 수정(09-06 새벽 실증)
+            if review_project(p["path"], p["name"]):
+                alerts_db.set_setting(f"onboard_reviewed:{p['path']}", date)
         except Exception as e:
             logger.warning(f"[신규검토] {p['name']} 실패: {e}")
     if deferred:
@@ -701,10 +759,12 @@ def run_nightly() -> dict:
     if time.time() > disc_deadline:
         disc_deadline = None
     if active_paths:
-        board = run_board_discussion(paths=active_paths, deadline_ts=disc_deadline)      # ③
+        posts_res = run_board_posts(paths=active_paths, deadline_ts=disc_deadline)       # ③a 글쓰기(창작)
+        board = run_board_discussion(paths=active_paths, deadline_ts=disc_deadline)      # ③b 둘러보기·댓글
         feedback = run_post_feedback(paths=active_paths, deadline_ts=disc_deadline)      # ④ 대댓글 필수
         followup = run_reply_followup(paths=active_paths, deadline_ts=disc_deadline)     # ④b 대대댓글 선택
     else:
+        posts_res = {"posted": 0}
         board = {"commented": 0, "note": "변화 있는 프로젝트 없음"}
         feedback = {"reacted": 0}
         followup = {"replied": 0}
@@ -717,9 +777,9 @@ def run_nightly() -> dict:
     # 아직 없어 빈손으로 지나갔으므로 중복 발송이 아니다.
     if time.time() > _at(settings.telegram_hour):
         send_daily_telegram(date)
-    return {"report": report, "board": board, "feedback": feedback, "followup": followup,
-            "reprocess": reprocess, "rewards": rewards, "skeleton": skeleton,
-            "synthesis_chars": len(synthesis or "")}
+    return {"report": report, "board_posts": posts_res, "board": board, "feedback": feedback,
+            "followup": followup, "reprocess": reprocess, "rewards": rewards,
+            "skeleton": skeleton, "synthesis_chars": len(synthesis or "")}
 
 
 def send_daily_telegram(date: str | None = None) -> bool:

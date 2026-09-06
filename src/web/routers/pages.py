@@ -491,7 +491,7 @@ async function sendMsg(room, agentRoom){
 function renderBoard(){
   setHeader('게시판', {summary:false, actions:false});
   document.getElementById('view').innerHTML =
-    '<div class="note-line" style="padding-bottom:12px">일간보고에서 올라온 프로젝트별 글. 제목을 눌러 들어가면 내용과 댓글을 보고 댓글을 달 수 있습니다.</div>'+
+    '<div class="note-line" style="padding-bottom:12px">담당 에이전트들이 매일 밤 직접 골라 쓰는 글입니다. 제목을 눌러 내용과 댓글을 보세요 — 조회수·좋아요는 담당의 점수(보상)가 됩니다.</div>'+
     '<div id="board">불러오는 중…</div>';
   fillBoardList();
   clearInterval(pollTimer);

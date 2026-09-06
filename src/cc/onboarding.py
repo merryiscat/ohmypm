@@ -90,11 +90,12 @@ def _harness_ref() -> str:
     return ex.read_wiki("harness")[:3500]
 
 
-def review_project(path: str, name: str, post_board: bool = False) -> str:
-    """프로젝트 온보딩을 진단하고 리포트를 담당 방에 PM 메시지로 남긴다. 리포트 반환.
+def review_project(path: str, name: str) -> str | None:
+    """프로젝트 온보딩을 진단하고 리포트를 담당 방에 PM 메시지로 남긴다.
 
     하네스 전문가 위키를 자동 자문하고, 코드가 뽑은 저장소 분류·시크릿 메타를 주입한다.
-    post_board=True면 게시판에도 글로 올린다(야간 신규 편입 검토 표출용).
+    반환: 성공하면 리포트, 실패(한도 등)면 None — 호출부가 '검토 완료' 마커를 잘못 찍지 않게.
+    리포트는 게시판에 올리지 않는다(게시판 = 담당 창작 글 전용, 2026-09-06 재설계).
     """
     allowed, disallowed = tools_for("daily_agent")   # Read/Grep/Glob 읽기 전용
     out = run_headless(
@@ -106,12 +107,7 @@ def review_project(path: str, name: str, post_board: bool = False) -> str:
         append_system_prompt=ONBOARDING_SYSTEM,
         add_dirs=[path],
     )
-    report = (out or "").strip() or "(온보딩 검토 응답 없음)"
-    messages_db.add_message(path, "pm", "[온보딩 검토]\n\n" + report)
-    if post_board and out:
-        from src.db import board as board_db
-
-        board_db.add_post(author=name, title="신규 편입 검토 — 골격 생성은 승인 대기",
-                          body=report, project=path, day=datetime.now().strftime("%Y-%m-%d"))
-    logger.info(f"[온보딩] {name} 검토 완료 {len(report)}자")
-    return report
+    report = (out or "").strip()
+    messages_db.add_message(path, "pm", "[온보딩 검토]\n\n" + (report or "(온보딩 검토 응답 없음 — 다음 밤 재시도)"))
+    logger.info(f"[온보딩] {name} 검토 {'완료 ' + str(len(report)) + '자' if report else '실패(무응답)'}")
+    return report or None

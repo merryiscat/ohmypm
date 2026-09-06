@@ -22,7 +22,7 @@ from src.cc.client import run_headless
 from src.cc.permissions import tools_for
 from src.cc.prompts import BASELINE_NOTE, HARNESS_AUDIT_SYSTEM, harness_audit_prompt
 from src.cc.room_agent import _neutral_cwd
-from src.db import board as board_db
+from src.db import messages as messages_db
 
 AUDIT_TIMEOUT = 360
 AUDIT_CONCURRENCY = 3          # 한도(속도/사용량) 폭주 방지 — 일간보고보다 보수적으로
@@ -88,11 +88,11 @@ def audit_one(path: str, name: str, date: str) -> dict:
 
 
 def run_harness_audit(paths: list[str] | None = None,
-                      concurrency: int = AUDIT_CONCURRENCY, post_board: bool = True) -> dict:
-    """전(또는 지정) 프로젝트 하네스 감사. 병렬(보수적) + 각 결과를 게시판 글로(일일보고 표출).
+                      concurrency: int = AUDIT_CONCURRENCY) -> dict:
+    """전(또는 지정) 프로젝트 하네스 감사. 병렬(보수적) + 리포트는 담당 방에 PM 메시지로.
 
-    paths: 지정 시 그 프로젝트만(검증·부분 실행). None이면 위키 있는 전 프로젝트.
-    post_board: True면 각 감사 리포트를 게시판 글로 올린다(일일보고 흐름).
+    paths: 지정 시 그 프로젝트만(검증·부분 실행·골격 생성 승인). None이면 전 프로젝트.
+    게시판에는 올리지 않는다 — 게시판은 담당 창작 글 전용(2026-09-06 재설계).
     """
     from src.scan.discover import discover_projects
 
@@ -119,13 +119,7 @@ def run_harness_audit(paths: list[str] | None = None,
     ok = [r for r in results if not r.get("failed")]
     logger.info(f"[하네스감사] 완료 {len(ok)}개 · 커밋 {committed}개 · 실패 {len(results) - len(ok)}개")
 
-    if post_board:
-        for r in ok:
-            first = (r.get("report") or "").splitlines()
-            head = next((l for l in first if l.strip() and not l.startswith("#")), "")
-            # 제목에 프로젝트명 접두어 없음 — 작성자가 메타줄(조회수 옆)에 따로 표시됨
-            title = f"하네스 점검 — {head[:30] or '완료'}"
-            board_db.add_post(author=r["name"], title=title,
-                              body=r.get("report", ""), project=r.get("path"), day=date)
+    for r in ok:
+        messages_db.add_message(r["path"], "pm", "[골격 생성 리포트]\n\n" + (r.get("report") or ""))
     return {"date": date, "audited": len(ok), "committed": committed,
             "failed": len(results) - len(ok), "results": results}
