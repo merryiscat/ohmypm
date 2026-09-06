@@ -214,6 +214,8 @@ _HTML = r"""<!doctype html>
   .dnav-proj{padding:7px 12px;font-size:12.5px;color:#3a3f47;cursor:pointer;border-radius:6px}
   .dnav-proj:hover{background:#f1f3f6}
   .dnav-proj.active{background:#e7f3ec;font-weight:600}
+  .dnav-proj.talked{color:var(--green);font-weight:600}   /* 실제 인터뷰 진행 */
+  .dnav-proj.quiet{color:var(--muted)}                    /* 변화없음·한도 등으로 생략 */
   .daily-main{flex:1;min-width:0;min-height:0;display:flex;flex-direction:column;background:var(--card);border:1px solid var(--line);border-radius:10px;overflow:hidden}
   .daily-h{padding:12px 16px;border-bottom:1px solid var(--line);font-weight:700;font-size:13.5px}
   .daily-main .stream{flex:1;overflow-y:auto;padding:16px 18px;display:flex;flex-direction:column;gap:10px}
@@ -621,9 +623,9 @@ async function loadExpert(){
   const tabs = list.map((x,i)=>
     `<span class="etab${i===EXPERT_IDX?' on':''}" onclick="EXPERT_IDX=${i};loadExpert()">${esc(x.name)}</span>`
   ).join('');
+  // 설명·수동 수집 버튼은 제거(2026-09-06) — 수집은 매주 정기 cron이 알아서 한다
   top.innerHTML = `<div class="etabs">${tabs}</div>`+
-    `<b style="color:var(--ink);font-size:14px">${esc(e.name)}</b> — ${esc(e.topic)} `+
-    `· 위키 ${e.wiki_chars}자 <button id="collect-btn" onclick="collectExpert('${e.domain}')">웹으로 지식 수집</button>`;
+    `<b style="color:var(--ink);font-size:14px">${esc(e.name)}</b> · 위키 ${e.wiki_chars}자`;
   const w = await fetch('/api/experts/'+e.domain+'/wiki').then(r=>r.json()).catch(()=>({wiki:''}));
   const wikiBox = document.getElementById('expert-wiki');
   if(wikiBox) wikiBox.innerHTML = '<div class="side-h">지식 위키</div>'+
@@ -824,8 +826,9 @@ function pickDate(di, el){
   document.querySelectorAll('.datechip').forEach(x=>x.classList.remove('active'));
   el.classList.add('active');
   const col = document.getElementById('daily-projcol');
+  // 실제 인터뷰가 돈 프로젝트(진하게)와 생략·스킵된 프로젝트(회색)를 색으로 구분
   col.innerHTML = DAILY_DATA[di].projects.map((p,pi)=>
-    `<div class="dnav-proj" onclick="openDaily(${di},${pi},this)">${esc(p.name)}</div>`
+    `<div class="dnav-proj${p.active?' talked':' quiet'}" onclick="openDaily(${di},${pi},this)">${esc(p.name)}</div>`
   ).join('') || '<div class="empty" style="padding:14px 8px;font-size:12px">이 날 보고 없음</div>';
   document.getElementById('daily-convo').innerHTML = '<div class="chat-empty">프로젝트를 골라 PM↔담당 대화를 보세요</div>';
 }
