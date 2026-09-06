@@ -168,20 +168,46 @@ def get_daily() -> list[dict]:
 
     방 키 daily::{date}::{path} 를 날짜·프로젝트로 묶는다. 대화는 /api/messages?room=<room>로.
     """
+    from datetime import date as date_cls, datetime
+
     names = {p["path"]: p["name"] for p in projects_db.list_projects(enabled_only=False)}
+    # 중요도 점수 재료 — 프로젝트별 활성 이슈(드랍 제외)
+    by_proj: dict[str, list[dict]] = {}
+    for i in issues_db.list_issues():
+        if i.get("verdict") != "drop":
+            by_proj.setdefault(i["project"], []).append(i)
+
+    def importance(path: str, msgs: int) -> int:
+        """중요도 점수(2026-09-06 사용자 확정 '중요도 순 정렬') — 결정론 기준:
+        7일 내(또는 지난) 기한 +100 / 기한 이슈 보유 +50 / 대화량 x10 / 이슈 수."""
+        items = by_proj.get(path, [])
+        score = msgs * 10 + len(items)
+        deadlines = [i for i in items if i["kind"] == "deadline" and i.get("due")]
+        if deadlines:
+            score += 50
+            today = date_cls.today()
+            for i in deadlines:
+                try:
+                    if (datetime.strptime(i["due"][:10], "%Y-%m-%d").date() - today).days <= 7:
+                        score += 100
+                        break
+                except ValueError:
+                    continue
+        return score
+
     by_date: dict[str, list[dict]] = {}
     for room in messages_db.list_rooms_like("daily::"):
         try:
             _, date, path = room.split("::", 2)
         except ValueError:
             continue
+        msgs = len(messages_db.list_messages(room))
         by_date.setdefault(date, []).append(
             {"project": path, "name": names.get(path, path), "room": room,
-             "msgs": len(messages_db.list_messages(room))}
+             "msgs": msgs, "importance": importance(path, msgs)}
         )
-    # 정렬: 그날 이슈 얘기가 많았던(대화 메시지 수) 순 — 조용한 프로젝트는 뒤로
     return [
-        {"date": d, "projects": sorted(by_date[d], key=lambda x: (-x["msgs"], x["name"].lower()))}
+        {"date": d, "projects": sorted(by_date[d], key=lambda x: (-x["importance"], x["name"].lower()))}
         for d in sorted(by_date, reverse=True)
     ]
 
