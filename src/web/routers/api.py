@@ -117,13 +117,18 @@ def trigger_scan() -> dict:
 
 @router.post("/judge")
 def trigger_judge() -> dict:
-    """수동 판정 트리거(대시보드 '판정' 버튼). 미판정 기한 후보를 에이전트가 가린다.
+    """수동 판정 트리거(대시보드 '판정' 버튼).
 
-    LLM 호출이라 느릴 수 있음 — 스캔과 분리해 즉시 피드백을 안 막는다.
+    ①완결 검증 — 담당이 새 이슈를 코드와 대조, 끝난 일은 완료 처리(2026-09-06)
+    ②판정 — 남은 미판정 기한 후보의 오탐을 가린다. 둘 다 LLM 호출이라 느릴 수 있다.
     """
+    from src.cc.issue_verify import run_issue_verification
     from src.cc.judge import run_judgment
 
-    return run_judgment()
+    verified = run_issue_verification()
+    result = run_judgment()
+    result["verified"] = verified
+    return result
 
 
 # ── 메시지 보드 (에이전트 채팅방 + 프로젝트 룸) ───────────────────────────

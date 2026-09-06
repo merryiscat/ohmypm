@@ -20,17 +20,24 @@ async def _run_scan_job() -> None:
         return
     _running.add("scan")
     try:
+        import asyncio
+
         from src.scan import run_scan
 
         result = run_scan()
-        # 결정론 수집 뒤 판정 에이전트가 후보의 오탐을 가린다(기한만 — 첫 관문).
+        # ①완결 검증(2026-09-06 사용자 확정) — 담당이 새 이슈를 실제 코드와 대조,
+        #   문서만 낡고 끝난 일은 완료 처리. ②그다음 판정 에이전트가 남은 후보의 오탐을 가린다.
+        #   둘 다 headless(느림)라 to_thread — 이벤트 루프(대시보드 응답)를 안 막는다.
+        from src.cc.issue_verify import run_issue_verification
         from src.cc.judge import run_judgment
 
-        judged = run_judgment()
+        verified = await asyncio.to_thread(run_issue_verification)
+        judged = await asyncio.to_thread(run_judgment)
         from src.bot.telegram_bot import send_telegram
 
         await send_telegram(
             f"<b>ohmyPM 일일 스캔</b>\n프로젝트 {result['projects']}개 · 이슈 {result['issues']}건 추적 중"
+            f"\n완결 확인: {verified['checked']}건 대조 · {verified['resolved']}건 완료 처리"
             f"\n판정: 기한 후보 {judged['candidates']}건 중 {judged['applied']}건 정리"
         )
     except Exception as e:
