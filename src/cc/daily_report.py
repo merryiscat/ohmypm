@@ -261,9 +261,12 @@ def report_one_project(path: str, name: str, date: str, guidance: str = "",
     for rounds in range(1, max_rounds + 1):
         hist = "\n".join(f"PM: {q}\n담당: {a}" for q, a in turns)
         pm = _pm_call(name, facts, hist, issue_list)
-        # ★ headless가 실패(None)했고 아직 대화가 없으면 = 그냥 못 돈 것. 방에 '응답없음'을 남기지
-        #   말고 실패로 반환(2026-09-01 야간 한도 전량실패가 게시판에 빈 글 18개를 만든 사고 방지).
+        # ★ headless가 실패(None)했고 아직 대화가 없으면 = 그냥 못 돈 것. 게시판에 빈 글은 안 만들되
+        #   (09-01 사고 항체), 일간보고 방에는 실패 한 줄을 남긴다 — 안 그러면 그날 목록에서
+        #   프로젝트가 통째로 사라져 '조용한 실패'가 된다(09-06 naverblog 미표시 실증).
         if pm.get("failed") and not turns:
+            messages_db.add_message(room, "pm",
+                                    "(사용량 한도·오류로 오늘 점검을 시작하지 못함 — 리셋 후 재개 예정)")
             return {"name": name, "path": path, "rounds": rounds, "summary": "(점검 실패: headless 무응답)",
                     "headline": "", "updates_applied": 0, "skipped": False, "failed": True}
         summary = pm["summary"] or summary
@@ -315,6 +318,9 @@ def run_daily_report(
 
     def worker(p: dict) -> dict:
         if deadline_ts and time.time() > deadline_ts:
+            # 미처리도 방에 흔적을 남긴다 — 그날 목록에서 사라지는 '조용한 실패' 방지
+            messages_db.add_message(_daily_room(date, p["path"]), "pm",
+                                    "(마감 초과로 오늘 순서가 오지 않음 — 재개 때 다시 시도)")
             return {"name": p["name"], "path": p["path"], "skipped": True}
         try:
             # ★ 변화 없는 프로젝트는 LLM 콜 0회 — 코드가 '작업 내용 없음' 한 줄로 끝낸다.
@@ -327,6 +333,7 @@ def run_daily_report(
                                       guidance_by_path.get(p["path"], ""), max_rounds)
         except Exception as e:  # 한 프로젝트 실패가 전체를 안 멈춤
             logger.warning(f"[일간보고] {p['name']} 실패: {e}")
+            messages_db.add_message(_daily_room(date, p["path"]), "pm", f"(점검 중 오류: {e})")
             return {"name": p["name"], "path": p["path"], "skipped": False,
                     "summary": f"(점검 실패: {e})", "rounds": 0}
 
