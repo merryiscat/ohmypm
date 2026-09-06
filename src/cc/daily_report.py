@@ -726,7 +726,27 @@ def run_nightly() -> dict:
             logger.warning(f"[신규검토] {p['name']} 실패: {e}")
     if deferred:
         logger.info(f"[신규검토] 오늘 {len(todo)}개 검토, {len(deferred)}개는 다음 밤으로 이월")
-    skeleton = {"reviewed": len(todo), "deferred": len(deferred)}
+    # ⓪b 골격 자동 생성(2026-09-06 사용자 확정 "버튼 없이 무조건 배치로만") —
+    #    검토 리포트가 나온 지 **하루 이상 지난** 프로젝트만 자동 생성. 그 사이 사용자가
+    #    리포트를 보고 x(제외)하면 자연히 빠진다(하루의 암묵 승인 창). '내 프로젝트' 분류만 —
+    #    외부 클론·보관용·비git엔 영원히 안 쓴다.
+    from src.cc.harness_audit import run_harness_audit
+    from src.cc.onboarding import project_meta
+
+    gen_paths = []
+    for p in projects:
+        if (Path(p["path"]) / "docs" / "status.md").exists() \
+                and (Path(p["path"]) / "docs" / "pending.md").exists():
+            continue   # 이미 계약 파일 있음
+        mark = alerts_db.get_setting(f"onboard_reviewed:{p['path']}")
+        if not mark or mark >= date:
+            continue   # 미검토거나 오늘 막 검토됨 — 리포트 열람 여유 하루
+        if project_meta(p["path"])["cls"] != "mine":
+            continue   # 내 저장소만 자동 생성
+        gen_paths.append(p["path"])
+    generated = run_harness_audit(paths=gen_paths) if gen_paths else {"audited": 0}
+    skeleton = {"reviewed": len(todo), "deferred": len(deferred),
+                "generated": generated.get("audited", 0)}
     guidance = manager.plan_day(projects)                        # ① 아침 계획
     report = run_daily_report(deadline_ts=_at(settings.daily_soft_deadline_hour),
                               notify=False, guidance_by_path=guidance)   # ②

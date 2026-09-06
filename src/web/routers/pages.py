@@ -938,10 +938,7 @@ function renderRoom(path){
     `<div class="room-layout">`+
       `<div class="room-main" id="room-main"></div>`+
       `<div class="room-side">`+
-        `<div class="side-h">${esc(name)} 담당 에이전트`+
-          `<button class="mini-btn" data-onboard="${escAttr(path)}" title="PM이 하네스 전문가 자문을 끼고 이 프로젝트의 초기 세팅을 읽기 전용으로 점검해 이 방에 리포트를 남깁니다(파일 생성 없음)">세팅 점검</button>`+
-          `<button class="mini-btn" data-skeleton="${escAttr(path)}" title="검토 리포트를 승인하는 행위 — PM이 빠진 기본기(docs 계약 파일·.gitignore 등)를 실제 파일로 만들고 git 커밋합니다(push 없음)">골격 생성</button>`+
-        `</div>`+
+        `<div class="side-h">${esc(name)} 담당 에이전트</div>`+
         chatMarkup()+
       `</div>`+
     `</div>`;
@@ -949,28 +946,8 @@ function renderRoom(path){
   bindChat(path, true);   // 프로젝트 룸 = 담당 에이전트 방
 }
 
-// 골격 생성(승인 실행) — 검토 리포트를 보고 사용자가 확인하면 하네스 감사(쓰기)를 돌린다
-async function requestSkeleton(path, btn){
-  const name = nameOfPath(path);
-  const ok = await appConfirm({title:`'${name}' 골격 생성`, okText:'생성',
-    body:'PM이 빠진 기본기를 만들고, 낡은 것은 고칩니다:\n'+
-         '- docs/status.md·pending.md·index.md 등 계약 파일\n'+
-         '- .gitignore·CLAUDE.md (파일 삭제·통째 재작성은 금지)\n'+
-         '- 변경은 git 커밋으로 남습니다(push 없음 — 되돌리기 가능)\n\n'+
-         '먼저 "세팅 점검" 리포트를 확인하셨나요? 1~2분 걸립니다.'});
-  if(!ok) return;
-  if(btn){ btn.disabled = true; btn.textContent = '생성 중… (1~2분)'; }
-  try{ await fetch('/api/harness-audit',{method:'POST',headers:{'Content-Type':'application/json'},
-    body:JSON.stringify({paths:[path]})}); }catch(e){}
-  setTimeout(()=>{ if(btn){ btn.disabled = false; btn.textContent = '골격 생성'; } }, 120000);
-}
-
-// PM 온보딩 검토 요청 — 결과는 담당 방에 PM 메시지로 뜬다(채팅 폴링이 잡는다)
-async function requestOnboarding(path, btn){
-  if(btn){ btn.disabled = true; btn.textContent = '검토 중… (1~2분)'; }
-  try{ await fetch('/api/onboarding',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({path})}); }catch(e){}
-  setTimeout(()=>{ if(btn){ btn.disabled = false; btn.textContent = '온보딩 검토'; } }, 90000);
-}
+// (세팅 점검·골격 생성 버튼 제거 — 2026-09-06 사용자 확정 "버튼 없이 무조건 배치로만".
+//  검토·골격 생성은 야간 배치 ⓪이 담당: 첫 밤 검토 리포트 → 다음 밤 자동 생성)
 
 // 왼쪽(달력+칸반)만 다시 그린다 — 상태 이동·달력 넘김에서 채팅은 안 건드리게 분리
 function fillRoomMain(path){
@@ -1086,12 +1063,8 @@ window.addEventListener('hashchange', route);
 // 프로젝트 룸 진입 — data-room 을 가진 요소(사이드바 룸·카드 '룸 열기') 위임 처리
 // 온보딩 검토(data-onboard)도 여기서 위임 — 경로에 역슬래시가 있어 onclick 인라인은 못 쓴다
 document.addEventListener('click', e=>{
-  const ob = e.target.closest('[data-onboard]');
-  if(ob){ requestOnboarding(ob.getAttribute('data-onboard'), ob); return; }
   const ex = e.target.closest('[data-exclude]');
   if(ex){ excludeProject(ex.getAttribute('data-exclude')); return; }
-  const sk = e.target.closest('[data-skeleton]');
-  if(sk){ requestSkeleton(sk.getAttribute('data-skeleton'), sk); return; }
   const el = e.target.closest('[data-room]');
   if(el) go('#/room/'+encodeURIComponent(el.getAttribute('data-room')));
 });
