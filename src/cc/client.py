@@ -92,7 +92,10 @@ def run_headless(
     if model:
         cmd += ["--model", model]   # 담당별 모델(opus/sonnet/haiku). 없으면 구독 기본
     if append_system_prompt:
-        cmd += ["--append-system-prompt", append_system_prompt]
+        # ★ argv로 가는 시스템 프롬프트에서 개행 제거 — Windows claude.CMD→cmd.exe 재파싱이
+        #   개행 뒤 인자(--add-dir 등)를 잘라먹는다(09-06 실증: 담당이 폴더를 못 열음).
+        #   08-31 '파이프 금지' 함정의 개행 변종. 프롬프트 파일은 여러 줄로 써도 여기서 안전해진다.
+        cmd += ["--append-system-prompt", " ".join(append_system_prompt.split())]
     for d in add_dirs or []:
         cmd += ["--add-dir", d]
     if allowed_tools:
