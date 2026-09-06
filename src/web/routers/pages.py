@@ -162,7 +162,8 @@ _HTML = r"""<!doctype html>
   .md .mh{font-weight:700;margin:6px 0 2px}
   .md ul{margin:4px 0;padding-left:18px} .md li{margin:1px 0}
   .md code{background:#eceef1;border-radius:4px;padding:0 3px;font-size:.9em;font-family:ui-monospace,SFMono-Regular,Consolas,monospace}
-  .md .mgap{height:5px} .md>div:first-child,.md>ul:first-child{margin-top:0}
+  .md>div{margin:0 0 6px} .md>div:last-child{margin-bottom:0}   /* 문단 사이 숨 쉴 간격 */
+  .md .mgap{height:6px} .md>div:first-child,.md>ul:first-child{margin-top:0}
   /* 게시판 목록(제목 행) → 클릭해 글 상세로 */
   .prow{display:flex;align-items:center;gap:12px;background:var(--card);border:1px solid var(--line);border-radius:8px;padding:11px 14px;margin-bottom:8px;cursor:pointer;max-width:920px}
   .prow:hover{border-color:var(--green)}
