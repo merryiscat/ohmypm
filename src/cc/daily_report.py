@@ -820,16 +820,17 @@ def run_nightly() -> dict:
         logger.error(f"[일간보고] {msg}")
         alerts_db.set_setting(f"daily_summary:{date}", f"<b>ohmyPM {date}</b>\n{msg}")
         return {"report": report, "aborted": True, "reason": msg}
-    # 글쓰기는 '변화 있던' 담당만(글감은 변화에서 나온다). 둘러보기·반응은 **위키 있는 전 담당**
-    #   참여(2026-09-07 사용자: "다른 에이전트들은 뭐해?" — 광장은 전원이 읽어야 산다).
-    active_paths = [r["path"] for r in report.get("results", []) if not r.get("quiet")]
+    # 글쓰기·둘러보기·반응 모두 **위키 있는 전 담당** 참여.
+    #   글쓰기를 '변화 있던 담당'으로 좁혔더니 사용자가 자주 안 건드리는 프로젝트는 글을 쓸 일이
+    #   영영 없었다(2026-09-08 사용자: "자주 안 만지면 게시판 글 올릴 일이 없잖아, 주제는 자유").
+    #   → 전원에게 기회를 주고 쓸지 말지는 담당이 판단한다(억지 글은 프롬프트가 막는다).
     wiki_paths = [p["path"] for p in projects if p.get("has_wiki")]
     # 재개로 새벽 마감(4시)을 이미 넘겼으면 마감 없이 진행 — 사용량이 리셋 직후라 여유가 있다
     disc_deadline: float | None = _at(settings.discussion_until_hour)
     if time.time() > disc_deadline:
         disc_deadline = None
-    posts_res = run_board_posts(paths=active_paths, deadline_ts=disc_deadline) \
-        if active_paths else {"posted": 0}                                           # ③a 글쓰기(창작)
+    posts_res = run_board_posts(paths=wiki_paths, deadline_ts=disc_deadline) \
+        if wiki_paths else {"posted": 0}                                             # ③a 글쓰기(창작)
     board = run_board_discussion(paths=wiki_paths, deadline_ts=disc_deadline)        # ③b 둘러보기·댓글
     feedback = run_post_feedback(paths=wiki_paths, deadline_ts=disc_deadline)        # ④ 대댓글 필수
     followup = run_reply_followup(paths=wiki_paths, deadline_ts=disc_deadline)       # ④b 대대댓글 선택
