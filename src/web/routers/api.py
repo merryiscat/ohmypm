@@ -237,7 +237,7 @@ def trigger_onboarding(req: OnboardReq, background: BackgroundTasks) -> dict:
 # ── 전문가 에이전트 (ohmyPM 상주, 웹 지식수집 + PM 자문) ────────────────────
 @router.get("/experts")
 def get_experts() -> list[dict]:
-    """사내 전문가 명부 + 위키 상태."""
+    """사내 전문가 명부 + 위키 상태. 고정 전문가 + 전문가개업 보상으로 승격된 담당 전문가."""
     from src.cc import expert as ex
 
     out = []
@@ -245,6 +245,10 @@ def get_experts() -> list[dict]:
         wiki = ex.read_wiki(domain)
         out.append({"domain": domain, "name": meta["name"], "topic": meta["topic"],
                     "wiki_chars": len(wiki)})
+    # 담당 전문가(전문가개업 보상) — 위키 대신 성장 기록에 기반해 자문
+    for a in ex.list_agent_experts():
+        out.append({"domain": a["domain"], "name": a["name"] + " (담당 전문가)",
+                    "topic": a["topic"], "wiki_chars": 0})
     return out
 
 
@@ -273,14 +277,27 @@ class ExpertQ(BaseModel):
 
 @router.post("/experts/{domain}/ask")
 def ask_expert_api(domain: str, q: ExpertQ, background: BackgroundTasks) -> dict:
-    """전문가에게 질문 — 질문은 즉시 방에 기록, 답변은 백그라운드(위키+웹)로."""
+    """전문가에게 질문 — 질문은 즉시 방에 기록, 답변은 백그라운드. 담당 전문가(agent::)도 라우팅."""
     from src.cc.expert import EXPERTS, ask_expert, expert_room
 
-    if domain not in EXPERTS:
-        return {"ok": False, "error": "unknown expert"}
     body = q.question.strip()
     if not body:
         return {"ok": False, "error": "빈 질문"}
+    # 담당 전문가(전문가개업) — agent::{path} 도메인은 그 담당을 열어 자문
+    if domain.startswith("agent::"):
+        path = domain[len("agent::"):]
+
+        def _ask_agent() -> None:
+            from src.cc.expert import consult_agent_expert
+
+            ans = consult_agent_expert(path, body)
+            messages_db.add_message(expert_room(domain), domain, ans or "(답변을 만들지 못했어)")
+
+        messages_db.add_message(expert_room(domain), "user", body)
+        background.add_task(_ask_agent)
+        return {"ok": True, "started": True}
+    if domain not in EXPERTS:
+        return {"ok": False, "error": "unknown expert"}
     messages_db.add_message(expert_room(domain), "user", body)
     background.add_task(ask_expert, domain, body)
     return {"ok": True, "started": True}

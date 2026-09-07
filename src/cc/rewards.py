@@ -60,13 +60,23 @@ def run_rewards() -> dict:
         elif pts >= agents_db.MILESTONE_MENU and not prof.get("held"):
             d = _ask(reward_choice(name))
             choice = d.get("choice")
-            if choice == "take" and d.get("reward") in REWARD_MENU:
+            reward = d.get("reward")
+            if choice == "take" and reward in REWARD_MENU:
                 agents_db.take_reward(
-                    p["path"], name, d["reward"],
+                    p["path"], name, reward,
                     new_name=(d.get("new_name") or "").strip() or None,
                     persona=(d.get("persona") or "").strip() or None,
+                    specialty=(d.get("specialty") or "").strip() or None,   # 전문가개업
                 )
-                logger.info(f"[보상] {name} → {d['reward']}")
+                # 후배지명 — 멘토(이 담당)가 지목한 후배 프로젝트에 상속 링크를 건다
+                if reward == "후배지명":
+                    junior = (d.get("junior_target") or "").strip()
+                    match = next((q for q in projs if junior and
+                                  (junior == q["name"] or junior == q["path"])), None)
+                    if match and match["path"] != p["path"]:
+                        agents_db.set_mentor_of(match["path"], p["path"])
+                        logger.info(f"[보상] {name} 후배지명 → {match['name']}")
+                logger.info(f"[보상] {name} → {reward}")
                 granted += 1
             else:
                 agents_db.set_held(p["path"], True)   # 참고 2000 향해

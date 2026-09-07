@@ -9,6 +9,8 @@
 - cwd=대상 프로젝트라 그 프로젝트 규약(CLAUDE.md·docs)을 그대로 따른다.
 """
 
+import json
+import re
 import subprocess
 from datetime import datetime
 from pathlib import Path
@@ -18,9 +20,11 @@ from loguru import logger
 from src.cc.client import run_headless
 from src.cc.permissions import tools_for
 from src.cc.prompts import REPROCESS_SYSTEM, reprocess_docs
+from src.db import agents as agents_db
 from src.db import board as board_db
 
 REPROCESS_TIMEOUT = 300
+_OBJ = re.compile(r"\{.*\}", re.DOTALL)   # 응답 끝의 {lesson, files_changed} 추출
 
 
 def _git(path: str, *args: str, timeout: int = 30) -> subprocess.CompletedProcess:
@@ -86,16 +90,33 @@ def _commit_changes(path: str, date: str, before: set[str]) -> dict:
     return {"committed": ok, "files": staged.splitlines(), "msg": msg}
 
 
+def _mentor_material() -> str:
+    """점수 1위 멘토의 전문·배움 요약 — 조언 반영 때 참고로 얹는다(멘토 자동 자문, C층)."""
+    m = agents_db.top_mentor()
+    if not m:
+        return ""
+    bits = []
+    if m.get("expertise"):
+        bits.append(f"전문: {m['expertise']}")
+    if m.get("note"):
+        bits.append(f"배움: {m['note'][:300]}")
+    if not bits:
+        return ""
+    return f"\n\n[멘토 {m.get('name') or '선배'}의 조언 — 참고]\n" + " / ".join(bits)
+
+
 def reprocess_one(path: str, name: str, posts: list[dict], date: str) -> dict:
-    """한 프로젝트: 받은 조언을 반영(반영처는 에이전트 판단) → 코드가 새 변경만 커밋. 결과 dict."""
+    """한 프로젝트: 받은 조언을 반영(반영처는 에이전트 판단) → 코드가 새 변경만 커밋 + 성장 기록. dict."""
     material = _material_for(path, posts)
     if not material.strip():
         return {"name": name, "path": path, "skipped": True, "reason": "받은 조언 없음"}
+    # 자기가 멘토가 아니면 점수 1위 멘토의 배움을 참고로 얹는다(멘토 자동 자문)
+    if not agents_db.is_mentor(path):
+        material += _mentor_material()
     allowed, disallowed = tools_for("reprocess")
-    from src.db import agents as agents_db
 
     before = _dirty_files(path)   # 실행 전 스냅샷 — 사용자 WIP와 에이전트 변경을 구분
-    run_headless(
+    out = run_headless(
         prompt=reprocess_docs(name, path, material),
         cwd=path,
         allowed_tools=allowed,
@@ -105,6 +126,16 @@ def reprocess_one(path: str, name: str, posts: list[dict], date: str) -> dict:
         append_system_prompt=REPROCESS_SYSTEM,
         model=agents_db.model_for(path),
     )
+    # 성장 기록 — 오늘 배운 것 한 줄을 프로필 note에 쌓는다(다음 콜에 다시 주어짐, A층)
+    if out:
+        m = _OBJ.search(out)
+        if m:
+            try:
+                lesson = (json.loads(m.group(0)).get("lesson") or "").strip()
+                if lesson:
+                    agents_db.append_note(path, lesson)
+            except json.JSONDecodeError:
+                pass
     result = _commit_changes(path, date, before)
     return {"name": name, "path": path, "skipped": False, **result}
 

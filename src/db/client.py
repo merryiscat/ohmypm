@@ -66,4 +66,9 @@ def _migrate(db: sqlite3.Connection) -> None:
         ("persona", "persona TEXT"),
         ("wish", "wish TEXT"),
         ("model", "model TEXT"),
+        # 성장 엔진(2026-09-07) — 죽어 있던 note를 살리고 보상 실효과용 3열 추가
+        ("note", "note TEXT"),               # 누적 학습 로그(성장 기록)
+        ("expertise", "expertise TEXT"),     # 전문 분야(전문가개업)
+        ("mentor_of", "mentor_of TEXT"),     # 멘토 프로젝트 path(후배지명)
+        ("rest_until", "rest_until TEXT"),   # 1일안식 만료일
     ))

@@ -91,8 +91,11 @@ CREATE TABLE IF NOT EXISTS agent_profiles (
     rewards    TEXT,               -- 지금까지 받은 보상 이력(줄바꿈 구분)
     reward     TEXT,               -- 최근 선택 보상 키
     wish       TEXT,               -- 소원권 내용(이력)
-    note       TEXT,               -- 짧은 자기 관찰/스타일 메모(연속성 주입용)
+    note       TEXT,               -- 누적 학습 로그(성장 기록) — 조언 반영 후 배움을 append, persona_prefix에 주입
     model      TEXT,               -- 이 담당의 headless 모델 별칭(opus/sonnet/haiku, NULL=기본)
+    expertise  TEXT,               -- 전문 분야(전문가개업 보상으로 획득) — 그 주제에 깊이 있게
+    mentor_of  TEXT,               -- 이 담당의 멘토 프로젝트 path(후배지명으로 맺어짐) — 멘토 학습 상속
+    rest_until TEXT,               -- 1일안식 — 이 날짜(YYYY-MM-DD)까지 일간보고 스킵
     updated_at TEXT
 );
 

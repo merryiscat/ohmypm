@@ -329,6 +329,12 @@ def run_daily_report(
                                     "(마감 초과로 오늘 순서가 오지 않음 — 재개 때 다시 시도)")
             return {"name": p["name"], "path": p["path"], "skipped": True}
         try:
+            # ★ 1일안식 보상 — 오늘 안식 중인 담당은 LLM 콜 없이 쉰다(성장 엔진 C층 보상 실효과).
+            if agents_db.rested_today(p["path"]):
+                messages_db.add_message(_daily_room(date, p["path"]), "pm",
+                                        "(1일안식 — 오늘은 보상으로 일간보고를 쉽니다)")
+                return {"name": p["name"], "path": p["path"], "skipped": False, "quiet": True,
+                        "rounds": 0, "summary": "1일안식(보상)", "headline": "", "updates_applied": 0}
             # ★ 변화 없는 프로젝트는 LLM 콜 0회 — 코드가 '작업 내용 없음' 한 줄로 끝낸다.
             #   (매일 같은 보고를 재생산하며 한도를 태우던 낭비 제거, 2026-09-02)
             if not _has_activity(p["path"]):
@@ -457,27 +463,39 @@ def run_board_posts(paths: list[str] | None = None, deadline_ts: float | None = 
     return {"posted": posted}
 
 
-def _parse_board_response(result: str | None, valid_ids: set[int]) -> tuple[set[int], list[dict]]:
-    """둘러보기 응답에서 {opened, comments}를 추출. 실패는 (빈 집합, 빈 리스트).
+MAX_COMMENTS_PER_AGENT = 2   # 한 담당이 하룻밤 다는 댓글 상한(공감 홍수 방지, 09-07 재설계)
 
-    댓글 단 글은 opened에 없어도 연 것으로 친다(댓글 = 읽었다는 가장 강한 신호).
+
+def _parse_board_response(result: str | None,
+                          valid_ids: set[int]) -> tuple[set[int], set[int], list[dict]]:
+    """둘러보기 응답에서 {opened, liked, comments}를 추출. 실패는 (빈, 빈, 빈).
+
+    liked·댓글 단 글은 opened에 없어도 연 것으로 친다(반응 = 읽었다는 신호).
+    댓글은 상한(MAX_COMMENTS_PER_AGENT)까지만.
     """
     if not result:
-        return set(), []
+        return set(), set(), []
     m = _OBJ_RE.search(result)
     if not m:
-        return set(), []
+        return set(), set(), []
     try:
         d = json.loads(m.group(0))
     except json.JSONDecodeError:
-        return set(), []
-    opened: set[int] = set()
-    for x in d.get("opened") or []:
-        try:
-            if int(x) in valid_ids:
-                opened.add(int(x))
-        except (ValueError, TypeError):
-            continue
+        return set(), set(), []
+
+    def _ids(key: str) -> set[int]:
+        out: set[int] = set()
+        for x in d.get(key) or []:
+            try:
+                if int(x) in valid_ids:
+                    out.add(int(x))
+            except (ValueError, TypeError):
+                continue
+        return out
+
+    opened = _ids("opened")
+    liked = _ids("liked")
+    opened |= liked                     # 좋아요 = 읽었다는 신호
     comments: list[dict] = []
     for it in d.get("comments") or []:
         try:
@@ -488,7 +506,7 @@ def _parse_board_response(result: str | None, valid_ids: set[int]) -> tuple[set[
         if pid in valid_ids and c:
             comments.append({"post_id": pid, "comment": c})
             opened.add(pid)
-    return opened, comments
+    return opened, liked, comments[:MAX_COMMENTS_PER_AGENT]
 
 
 def run_board_discussion(paths: list[str] | None = None, deadline_ts: float | None = None) -> dict:
@@ -516,6 +534,7 @@ def run_board_discussion(paths: list[str] | None = None, deadline_ts: float | No
     allowed, disallowed = tools_for("daily_agent")
 
     commented = 0
+    liked_n = 0
     for p in projects:
         if deadline_ts and time.time() > deadline_ts:
             break
@@ -530,17 +549,21 @@ def run_board_discussion(paths: list[str] | None = None, deadline_ts: float | No
             model=agents_db.model_for(p["path"]),
         )
         own = own_post_ids.get(p["path"])
-        opened, cmts = _parse_board_response(out, valid_ids)
+        opened, liked, cmts = _parse_board_response(out, valid_ids)
         for pid in opened:
             if pid != own:                # 자기 글 조회는 점수에 안 친다
                 board_db.increment_views(pid)
+        for pid in liked:
+            if pid != own:                # 좋아요 = 값싸고 주력인 투표 신호
+                board_db.like_post(pid)
+                liked_n += 1
         for it in cmts:
             if it["post_id"] == own:      # 자기 글엔 안 단다
                 continue
             board_db.add_comment(it["post_id"], _author_of(p["path"], p["name"]), it["comment"])
             commented += 1
-    logger.info(f"[게시판] 댓글 {commented}개 작성")
-    return {"commented": commented}
+    logger.info(f"[게시판] 좋아요 {liked_n}개 · 댓글 {commented}개")
+    return {"commented": commented, "liked": liked_n}
 
 
 def run_post_feedback(paths: list[str] | None = None, deadline_ts: float | None = None) -> dict:
