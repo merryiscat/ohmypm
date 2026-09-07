@@ -16,9 +16,11 @@ DEAD_MARKERS = ("미채택", "제외", "폐기", "불채택")
 
 
 def parse_wiki(project_path: str) -> list[dict]:
-    """docs/status.md(미해결)·pending.md(기한)를 파싱해 이슈 목록 반환."""
+    """docs/status.md(미해결)·pending.md(기한)를 파싱해 이슈 목록 반환 + 인덱스 미등재 점검."""
     docs = Path(project_path) / "docs"
     out: list[dict] = []
+
+    out += _check_index(docs)
 
     status = docs / "status.md"
     if status.exists():
@@ -28,6 +30,28 @@ def parse_wiki(project_path: str) -> list[dict]:
     if pending.exists():
         out += _parse_pending(pending.read_text(encoding="utf-8", errors="replace"))
 
+    return out
+
+
+def _check_index(docs: Path) -> list[dict]:
+    """docs/index.md에 등재 안 된 문서를 찾아 이슈로 낸다 (2026-09-08 사용자 확정).
+
+    위키 규약은 "새 페이지는 index.md에 한 줄 등재"인데 지키는지 확인하는 장치가 없어
+    조용히 새는 문서가 쌓였다(09-08 실측: 위키 19개 중 6개에서 8건). 파일 목록과
+    index.md 문자열 비교라 **모델 호출이 필요 없다** — 스캔의 결정론 원칙 그대로.
+
+    자동으로 고치지 않고 발견만 한다 — 한 줄 설명은 사람이나 담당이 써야 제 역할을 한다.
+    """
+    index = docs / "index.md"
+    if not index.exists():
+        return []      # 위키 없는 프로젝트는 대상 아님(골격 생성은 온보딩이 맡는다)
+    text = index.read_text(encoding="utf-8", errors="replace")
+    out = []
+    for f in sorted(docs.glob("*.md")):
+        if f.name == "index.md" or f.name in text:
+            continue   # 링크 문법을 안 따져도 파일명이 본문에 있으면 등재로 본다(오탐 억제)
+        out.append({"kind": "format", "title": f"위키 인덱스 미등재 — docs/{f.name}",
+                    "source": "index.md"})
     return out
 
 
