@@ -48,10 +48,13 @@ PM_CHAT_SYSTEM = load("pm_chat_system")
 EXPERT_SYSTEM = load("expert_system")
 ISSUE_VERIFY_SYSTEM = load("issue_verify_system")
 
-# 1000점 보상 메뉴 (에이전트가 택1) — 데이터라 코드에 남긴다
+# 1000점 보상 메뉴 (에이전트가 택1) — 데이터라 코드에 남긴다.
+# 맨 앞 '모델승급'이 기본 보상(2026-09-07) — 특별한 이유가 없으면 이걸 받는다.
 REWARD_MENU = [
+    "모델승급",
     "이름", "페르소나", "멘토", "전문가개업", "후배지명", "1일안식", "명예졸업", "대문표창",
 ]
+DEFAULT_REWARD = "모델승급"
 
 
 # ── 본문 템플릿 (매 호출 파일 재로딩 — 수정 즉시 반영) ─────────────────────
@@ -95,8 +98,18 @@ def board_comment(project_name: str, project_path: str, board_text: str) -> str:
                   board_text=board_text)
 
 
-def reward_choice(name: str) -> str:
-    return render("reward_choice", name=name)
+def reward_choice(name: str, model: str = "", next_model: str = "") -> str:
+    """1000점 보상 선택 프롬프트. 모델승급이 기본 보상이라 현재/다음 모델을 같이 알려준다.
+
+    최상위(opus)라 올릴 곳이 없으면 승급 줄을 '이번엔 불가'로 바꿔 다른 보상을 고르게 한다.
+    """
+    if next_model:
+        line = (f"- 모델승급 (기본 보상 — 특별한 이유가 없으면 이걸 골라라): "
+                f"네 두뇌를 {model} → {next_model} 로 영구 승급. 앞으로 모든 네 작업이 더 좋은 모델로 돈다")
+    else:
+        line = (f"- 모델승급: 너는 이미 최상위 모델({model})이라 이번엔 고를 수 없다 "
+                f"— 아래 중에서 골라라")
+    return render("reward_choice", name=name, model_line=line)
 
 
 def wish_prompt(name: str) -> str:

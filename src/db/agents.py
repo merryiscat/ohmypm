@@ -7,7 +7,9 @@
 rest_until(1일안식)로 에이전트가 시간이 지나며 실제로 큰다. 멘토 조언은 점수 가중을 받는다.
 """
 
+import os
 from datetime import datetime, timedelta
+from pathlib import Path
 
 from src.db.client import get_db
 
@@ -159,8 +161,9 @@ def take_reward(project: str, name: str, reward: str,
                 specialty: str | None = None) -> None:
     """1000점 보상 택1 — 현재 게시판 누적을 baseline으로 밀어 점수 리셋 + 보상 실효과 배선.
 
-    이름→new_name / 페르소나→persona / 전문가개업→expertise=specialty /
-    1일안식→rest_until=내일. (멘토·후배지명·명예졸업·대문표창은 rewards 기록으로 효과 발생.)
+    모델승급(기본 보상)→모델 한 칸 위(sonnet→opus) / 이름→new_name / 페르소나→persona /
+    전문가개업→expertise=specialty / 1일안식→rest_until=내일.
+    (멘토·후배지명·명예졸업·대문표창은 rewards 기록으로 효과 발생.)
     """
     scores = compute_scores()
     earned = scores.get(name, 0)
@@ -176,6 +179,10 @@ def take_reward(project: str, name: str, reward: str,
         fields.append("persona = ?"); params.append(persona)
     if reward == "전문가개업" and specialty:
         fields.append("expertise = ?"); params.append(specialty)
+    if reward == "모델승급":
+        up = next_model(prof.get("model") or default_model(project))
+        if up:
+            fields.append("model = ?"); params.append(up)
     if reward == "1일안식":
         tomorrow = (datetime.now() + timedelta(days=1)).strftime("%Y-%m-%d")
         fields.append("rest_until = ?"); params.append(tomorrow)
@@ -184,8 +191,32 @@ def take_reward(project: str, name: str, reward: str,
     db.commit()
 
 
-# 담당에게 지정할 수 있는 모델 별칭(Claude Code --model 값). ''=기본(구독 기본 모델).
+# 담당에게 지정할 수 있는 모델 별칭(Claude Code --model 값). ''=기본(=DEFAULT_MODEL).
 ALLOWED_MODELS = ("", "opus", "sonnet", "haiku")
+
+# 모델 사다리 — 낮은 것부터. 1000점 보상 '모델승급'이 이 순서로 한 칸 올린다.
+MODEL_TIERS = ("haiku", "sonnet", "opus")
+# 담당 기본 모델(2026-09-07 사용자 확정) — 전 담당 sonnet 출발, 승급 보상으로 opus에 오른다.
+DEFAULT_MODEL = "sonnet"
+# 예외: ohmyPM 자신의 담당만 처음부터 opus — 총괄 자신이라 판단 품질이 전 프로젝트에 번진다.
+# 경로를 파일 위치에서 구해 두면 DB를 새로 만들어도(프로필 초기화) 이 기본이 유지된다.
+SELF_PROJECT = str(Path(__file__).resolve().parents[2])
+SELF_MODEL = "opus"
+
+
+def default_model(project: str) -> str:
+    """지정이 없을 때 이 프로젝트 담당이 쓸 모델 — ohmyPM 자신만 opus, 나머지는 sonnet."""
+    same = os.path.normcase(os.path.normpath(project or "")) == os.path.normcase(SELF_PROJECT)
+    return SELF_MODEL if same else DEFAULT_MODEL
+
+
+def next_model(current: str | None) -> str | None:
+    """현재 모델의 한 칸 위 모델. 최상위(opus)면 None(더 올릴 곳 없음)."""
+    cur = current or DEFAULT_MODEL
+    if cur not in MODEL_TIERS:
+        return None
+    i = MODEL_TIERS.index(cur)
+    return MODEL_TIERS[i + 1] if i + 1 < len(MODEL_TIERS) else None
 
 
 def set_model(project: str, model: str | None) -> None:
@@ -199,9 +230,17 @@ def set_model(project: str, model: str | None) -> None:
 
 
 def model_for(project: str) -> str | None:
-    """이 프로젝트 담당 콜에 쓸 모델(없으면 None=Claude Code 기본)."""
+    """이 프로젝트 담당 콜에 쓸 모델. 지정이 없으면 기본(sonnet, ohmyPM 자신은 opus)."""
     prof = get_profile(project)
-    return (prof or {}).get("model") or None
+    return (prof or {}).get("model") or default_model(project)
+
+
+def promote_model(project: str) -> str | None:
+    """'모델승급' 보상 실효과 — 담당 모델을 한 칸 올린다. 올린 모델명(불가면 None)."""
+    up = next_model(model_for(project))
+    if up:
+        set_model(project, up)
+    return up
 
 
 def persona_prefix(project: str) -> str:

@@ -682,7 +682,7 @@ async function fillAgents(){
   const box = document.getElementById('agents'); if(!box) return;
   if(!list.length){ box.innerHTML = '<div class="empty">담당 없음</div>'; return; }
   AGENT_LIST = list;   // 드롭다운 onchange에서 index로 project path를 찾는다(경로 인라인 금지 — \U 이스케이프 깨짐)
-  const MODELS = [['','기본'],['opus','opus'],['sonnet','sonnet'],['haiku','haiku']];
+  const MODELS = [['','기본(sonnet)'],['opus','opus'],['sonnet','sonnet'],['haiku','haiku']];
   box.innerHTML = '<table class="ptable"><thead><tr><th>#</th><th>담당(프로젝트)</th><th>점수</th>'+
     '<th>다음 보상까지</th><th>획득</th><th>모델</th></tr></thead><tbody>'+
     list.map((a,i)=>{

@@ -36,7 +36,7 @@ def get_agents() -> list[dict]:
             "persona": prof.get("persona"),
             "reward": prof.get("reward"),
             "wish": prof.get("wish"),
-            "model": prof.get("model") or "",   # ''=기본(구독 기본 모델)
+            "model": prof.get("model") or "",   # ''=기본(=DEFAULT_MODEL sonnet)
             "tier": 2 if pts >= agents_db.MILESTONE_WISH else (1 if pts >= agents_db.MILESTONE_MENU else 0),
         })
     out.sort(key=lambda x: x["points"], reverse=True)
@@ -45,12 +45,12 @@ def get_agents() -> list[dict]:
 
 class AgentModel(BaseModel):
     project: str   # 프로젝트 path
-    model: str     # ''(기본) | opus | sonnet | haiku
+    model: str     # ''(기본=sonnet) | opus | sonnet | haiku
 
 
 @router.post("/agents/model")
 def set_agent_model(req: AgentModel) -> dict:
-    """담당 에이전트의 headless 모델 교체. 빈 값이면 기본(구독 기본 모델)으로."""
+    """담당 에이전트의 headless 모델 교체. 빈 값이면 기본(sonnet)으로 되돌린다."""
     from src.db import agents as agents_db
 
     m = req.model.strip()
