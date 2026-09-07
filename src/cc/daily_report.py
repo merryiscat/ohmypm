@@ -558,6 +558,10 @@ def run_post_feedback(paths: list[str] | None = None, deadline_ts: float | None 
         if not post.get("project"):
             continue
         top = [c for c in post.get("comments", []) if not c.get("parent_id")]
+        # 이미 글쓴이 답글이 달린 댓글은 제외 — 매일 재실행돼도 중복 반응·중복 답글이 안 쌓이게
+        replied = {c.get("parent_id") for c in post.get("comments", [])
+                   if c["author"] == post["author"] and c.get("parent_id")}
+        top = [c for c in top if c["id"] not in replied]
         if not top:
             continue
         if deadline_ts and time.time() > deadline_ts:
