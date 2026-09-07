@@ -780,6 +780,15 @@ def run_nightly() -> dict:
     generated = run_harness_audit(paths=gen_paths) if gen_paths else {"audited": 0}
     skeleton = {"reviewed": len(todo), "deferred": len(deferred),
                 "generated": generated.get("audited", 0)}
+    # ⓪c 기록 정리(2026-09-08 사용자 지시) — **보고 전에** 각 담당이 자기 기록을 실제 작업과
+    #    맞추고 docs를 커밋한다. 어긋난 기록 위에서 보고가 돌면 총괄이 틀린 전제로 묻고,
+    #    담당이 매번 대화로 정정해야 했다(09-08 youtube_ssalmuk 실증).
+    #    정리 뒤 재스캔까지 해야 이슈 테이블이 따라온다 — 안 그러면 PM이 옛 이슈를 본다.
+    from src.cc.tidy import run_tidy
+    from src.scan import run_scan
+
+    tidied = run_tidy()
+    run_scan()
     guidance = manager.plan_day(projects)                        # ① 아침 계획
     report = run_daily_report(deadline_ts=_at(settings.daily_soft_deadline_hour),
                               notify=False, guidance_by_path=guidance)   # ②
@@ -846,7 +855,7 @@ def run_nightly() -> dict:
         send_daily_telegram(date)
     return {"report": report, "board_posts": posts_res, "board": board, "feedback": feedback,
             "followup": followup, "reprocess": reprocess, "rewards": rewards,
-            "skeleton": skeleton, "synthesis_chars": len(synthesis or "")}
+            "skeleton": skeleton, "tidy": tidied, "synthesis_chars": len(synthesis or "")}
 
 
 def send_daily_telegram(date: str | None = None) -> bool:

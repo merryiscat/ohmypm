@@ -67,7 +67,7 @@ def _dirty_files(path: str) -> set[str]:
     return {ln[3:].strip().strip('"') for ln in out.splitlines() if ln.strip()}
 
 
-def _commit_changes(path: str, date: str, before: set[str]) -> dict:
+def _commit_changes(path: str, date: str, before: set[str], msg: str | None = None) -> dict:
     """에이전트 실행으로 **새로 바뀐 파일만** 커밋(push 안 함).
 
     before = 실행 전 변경 파일 스냅샷. 그 전부터 더러웠던 파일(사용자 작업 중)은
@@ -82,7 +82,7 @@ def _commit_changes(path: str, date: str, before: set[str]) -> dict:
     staged = _git(path, "diff", "--cached", "--name-only").stdout.strip()
     if not staged:
         return {"committed": False, "reason": "스테이징 실패"}
-    msg = f"chore: {date} 게시판 조언 반영 (ohmyPM 담당)"
+    msg = msg or f"chore: {date} 게시판 조언 반영 (ohmyPM 담당)"
     c = _git(path, "commit", "-m", msg)
     ok = c.returncode == 0
     if not ok:

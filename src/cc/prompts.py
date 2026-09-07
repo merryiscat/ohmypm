@@ -41,6 +41,7 @@ BOARD_SYSTEM = load("board_system")
 REWARD_SYSTEM = load("reward_system")
 MANAGER_SYSTEM = load("manager_system")
 REPROCESS_SYSTEM = load("reprocess_system")
+TIDY_SYSTEM = load("tidy_system")
 HARNESS_AUDIT_SYSTEM = load("harness_audit_system")
 BASELINE_NOTE = load("baseline_note")
 ONBOARDING_SYSTEM = load("onboarding_system")
@@ -129,6 +130,11 @@ def manager_close(journal: str, results_digest: str, best_text: str = "") -> str
     )
     return render("manager_close", journal=journal or "(첫날)", results_digest=results_digest,
                   best_block=best_block, best_rule=best_rule)
+
+
+def tidy_docs(project_name: str, project_path: str, facts: str) -> str:
+    """기록 정리(야간 ①전) — 실제 작업(커밋·작업 중 파일)과 어긋난 문서를 맞추게 한다."""
+    return render("tidy_docs", project_name=project_name, project_path=project_path, facts=facts)
 
 
 def reprocess_docs(project_name: str, project_path: str, material: str) -> str:
