@@ -95,6 +95,12 @@ def run_headless(
         # ★ argv로 가는 시스템 프롬프트에서 개행 제거 — Windows claude.CMD→cmd.exe 재파싱이
         #   개행 뒤 인자(--add-dir 등)를 잘라먹는다(09-06 실증: 담당이 폴더를 못 열음).
         #   08-31 '파이프 금지' 함정의 개행 변종. 프롬프트 파일은 여러 줄로 써도 여기서 안전해진다.
+        #   원인은 윈도우에서 .cmd 배치 파일을 실행하면 인자가 cmd.exe에 재해석되는 알려진 문제
+        #   (Node.js CVE-2024-27980과 같은 뿌리) — 인자를 목록으로 따로 넘겨도 못 막는다.
+        #   ⚠ 이 정규화는 '구분용 개행'과 '내용인 개행'을 구별하지 못한다. 지금 argv에 실리는 값은
+        #   시스템 프롬프트·도구 이름·폴더 경로뿐이라 안전하지만, 개행이 의미를 갖는 값(여러 줄
+        #   커밋 메시지 등)을 argv로 넘기려는 순간 내용이 조용히 뭉개진다 → 그때는 재해석 단계
+        #   자체를 피하는 쪽으로(배치 파일 대신 node cli.js 직접 호출 등). docs/pending.md 참조.
         cmd += ["--append-system-prompt", " ".join(append_system_prompt.split())]
     for d in add_dirs or []:
         cmd += ["--add-dir", d]
