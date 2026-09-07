@@ -23,6 +23,7 @@ CREATE TABLE IF NOT EXISTS issues (
     verdict       TEXT,                  -- keep | drop | reclass (NULL=미판정)
     review_reason TEXT,                  -- 판정 한 줄 근거
     reviewed_at   TEXT,                  -- 판정 시각 (ISO8601)
+    easy_title    TEXT,                  -- 쉬운 제목(완결 검증이 부여) — 화면은 이걸 우선 표시
     created_at    TEXT DEFAULT (datetime('now'))
 );
 

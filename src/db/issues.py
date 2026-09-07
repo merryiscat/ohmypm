@@ -29,6 +29,13 @@ def upsert_issue(
     db.commit()
 
 
+def set_easy_title(issue_id: int, easy_title: str) -> None:
+    """쉬운 제목 저장 — 화면은 easy_title을 우선 표시(원문 title은 지문·docs 대조용으로 보존)."""
+    db = get_db()
+    db.execute("UPDATE issues SET easy_title = ? WHERE id = ?", (easy_title, issue_id))
+    db.commit()
+
+
 def add_done(project: str, title: str, day: str) -> None:
     """당일 완결 작업을 완료 카드로 등재 — 칸반(할일·진행중)에 안 올랐던 일도 흔적을 남긴다
     (2026-09-07 사용자 확정). 제목에 날짜를 붙여 다른 날 같은 제목과 구분, 재실행 중복 방지."""

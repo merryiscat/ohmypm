@@ -134,7 +134,7 @@ _HTML = r"""<!doctype html>
   .kcol{flex:1;min-width:0;background:#eef0f3;border-radius:10px;padding:8px}
   .kcol>h3{font-size:11.5px;color:var(--muted);text-transform:uppercase;margin:4px 4px 8px;font-weight:700;display:flex;gap:6px;align-items:center}
   .kcol>h3 .n{background:#d9dde3;color:#555;border-radius:20px;padding:0 7px;font-size:11px}
-  .kcard{background:#fff;border:1px solid var(--line);border-radius:8px;padding:8px 9px;margin-bottom:7px;font-size:12.5px;line-height:1.45;color:#3a3f47}
+  .kcard{background:#fff;border:1px solid var(--line);border-radius:8px;padding:8px 9px;margin-bottom:7px;font-size:12.5px;line-height:1.45;color:#3a3f47;overflow-wrap:anywhere}  /* 긴 영문·괄호 문자열이 박스 밖으로 안 삐져나가게 */
   .kcard .due{color:var(--red);font-weight:700;font-size:11px}
   .kcard .kdue{color:var(--red);font-weight:700;font-size:11px;margin-bottom:3px}
   .kcard .kdue.soft{color:var(--muted);font-weight:600}   /* 재확인일 — 마감처럼 위협적이지 않게 */
@@ -1012,21 +1012,17 @@ function kanbanMarkup(items){
       const prev = idx>0 ? `<button onclick="moveIssue(${i.id},'${KORDER[idx-1]}')" title="${KCOLS[idx-1][1]}로">‹</button>` : '';
       const next = idx<KORDER.length-1 ? `<button onclick="moveIssue(${i.id},'${KORDER[idx+1]}')" title="${KCOLS[idx+1][1]}로">›</button>` : '';
       // 카드 = 기한 / 제목 / 내용 — 긴 원문을 첫 구분자(— 또는 :)에서 갈라 처음 보는 사람도 읽게
-      const t = clean(i.title);
+      const t = clean(i.easy_title || i.title);   // 쉬운 제목(완결 검증 부여)이 있으면 우선
       const m = t.match(/^(.{4,70}?)(?:\s+—\s+|:\s+)([\s\S]+)$/);
       const head = m ? m[1] : t, body = m ? m[2] : '';
-      // 판정 표식은 한글로 — reclass 같은 내부 용어를 화면에 내보내지 않는다
-      const vlabel = {keep:'판정 확인', reclass:'재분류'}[i.verdict];
-      const vtitle = {keep:'판정 에이전트가 원래 분류가 맞다고 확인함',
-                      reclass:'판정 에이전트가 성격을 바로잡음(예: 기한이 아니라 조건부 보류)'}[i.verdict];
       // 진짜 마감(deadline)=빨간 '기한' / 당일 완결(done)=초록 '완결' / 그 외=회색 '재확인'
+      // (판정 배지 keep·재분류는 내부 장부라 표시 안 함 — 2026-09-07 사용자 확정)
       const dueLabel = i.kind === 'deadline' ? `<div class="kdue">기한 ${i.due}</div>`
                      : i.kind === 'done'     ? `<div class="kdue donel">완결 ${i.due}</div>`
                                              : `<div class="kdue soft">재확인 ${i.due}</div>`;
       return `<div class="kcard">`+
         (i.due?dueLabel:'')+
-        `<div class="kt">${esc(head)}`+
-        (vlabel?` <span class="badge u" title="${vtitle}">${vlabel}</span>`:'')+`</div>`+
+        `<div class="kt">${esc(head)}</div>`+
         (body?`<div class="kb">${esc(body)}</div>`:'')+
         `<div class="mv">${prev}${next}</div></div>`;
     }).join('') || `<div class="col-empty">없음</div>`;

@@ -38,6 +38,7 @@ def _migrate(db: sqlite3.Connection) -> None:
         ("verdict", "verdict TEXT"),
         ("review_reason", "review_reason TEXT"),
         ("reviewed_at", "reviewed_at TEXT"),
+        ("easy_title", "easy_title TEXT"),   # 쉬운 제목(완결 검증이 부여) — 화면 표시 우선
     ):
         if col not in have:
             db.execute(f"ALTER TABLE issues ADD COLUMN {ddl}")

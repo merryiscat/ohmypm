@@ -59,13 +59,17 @@ def verify_project(path: str, name: str, candidates: list[dict]) -> int:
             i = int(v["i"])
         except (KeyError, ValueError, TypeError):
             continue
+        if not (0 <= i < len(candidates)):
+            continue
+        issue_id = candidates[i]["id"]
+        # 쉬운 제목 — 화면 표시용(내부 기호·약어를 풀어달라는 사용자 확정 2026-09-07)
+        easy = (v.get("easy_title") or "").strip()
+        if easy and easy.lower() != "null":
+            issues_db.set_easy_title(issue_id, easy[:100])
         evidence = (v.get("evidence") or "").strip()
         # 근거 없는 done은 무시 — resolved는 근거가 확실할 때만(프롬프트 규칙의 코드측 방어)
         if not v.get("done") or not evidence or evidence.lower() == "null":
             continue
-        if not (0 <= i < len(candidates)):
-            continue
-        issue_id = candidates[i]["id"]
         issues_db.apply_verdict(issue_id, "resolved", reason=("코드 확인: " + evidence)[:300])
         issues_db.set_status(issue_id, "resolved")
         resolved += 1
@@ -86,7 +90,13 @@ def run_issue_verification(paths: list[str] | None = None) -> dict:
     total, resolved_n, checked_projects = 0, 0, 0
     for p in projects:
         try:
-            cands = issues_db.list_unjudged(p["path"])[:MAX_PER_PROJECT]
+            # 대상: ①미판정 새 이슈 ②쉬운 제목이 아직 없는 기존 이슈(백로그 자연 치유)
+            mine = [i for i in issues_db.list_issues() if i["project"] == p["path"]]
+            cands = [
+                i for i in mine
+                if i.get("verdict") is None
+                or (not i.get("easy_title") and i["kind"] != "done" and i.get("verdict") != "drop")
+            ][:MAX_PER_PROJECT]
             if not cands:
                 continue
             total += len(cands)
