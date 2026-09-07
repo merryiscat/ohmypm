@@ -806,10 +806,11 @@ function renderDaily(){
       '</div>'+
     '</div>';
   clearInterval(pollTimer);
+  DAILY_SEL = null;
   fillDailyNav();
-  fillPmPanel();
-  // PM 답변은 headless라 뒤늦게 온다 → 오른쪽 패널만 폴링
-  pollTimer = setInterval(()=>loadPm(true), 4000);
+  fillDailyAgent();
+  // 담당 답변은 headless라 뒤늦게 온다 → 오른쪽 패널만 폴링
+  pollTimer = setInterval(()=>loadDailyAgent(true), 4000);
 }
 
 async function fillDailyNav(){
@@ -849,42 +850,59 @@ async function openDaily(di, pi, el){
   }).join('') : '<div class="chat-empty">대화 없음</div>';
   box.innerHTML = `<div class="daily-h">${esc(p.name)} · ${esc(DAILY_DATA[di].date)}</div><div class="stream">${bubbles}</div>`;
   const s = box.querySelector('.stream'); if(s) s.scrollTop = s.scrollHeight;
+  // 오른쪽 패널을 이 프로젝트의 담당과의 대화로 전환(2026-09-07 사용자 확정 —
+  // 총괄 PM은 전 프로젝트 얘기를 꺼내와서, 보고를 보며 묻는 상대는 그 담당이 맞다)
+  DAILY_SEL = {path: p.project, name: p.name};
+  fillDailyAgent();
 }
 
-// ── PM 대화 패널(#5) — 사용자가 일간보고를 보며 PM에게 직접 묻는다(room='pmchat') ──
-function fillPmPanel(){
+// ── 담당 대화 패널 — 선택한 프로젝트의 담당에게 직접 묻는다(room=프로젝트 path).
+//    총괄 PM 패널은 폐지(2026-09-07 사용자 확정 — PM은 상관없는 프로젝트 얘기까지 꺼내옴).
+//    같은 방을 프로젝트 룸이 쓰므로 여기서 나눈 대화가 룸에도 그대로 이어진다.
+let DAILY_SEL = null;   // 일간보고에서 선택된 프로젝트 {path, name}
+
+function fillDailyAgent(){
   const box = document.getElementById('daily-pm'); if(!box) return;
+  if(!DAILY_SEL){
+    box.innerHTML = '<div class="daily-h">담당과 대화</div>'+
+      '<div class="stream" id="pm-stream"><div class="chat-empty">왼쪽에서 프로젝트를 고르면 그 담당과 바로 대화할 수 있습니다</div></div>';
+    return;
+  }
   box.innerHTML =
-    '<div class="daily-h">PM과 대화</div>'+
+    `<div class="daily-h">${esc(DAILY_SEL.name)} 담당과 대화</div>`+
     '<div class="stream" id="pm-stream"><div class="chat-empty">불러오는 중…</div></div>'+
-    '<div class="composer"><textarea id="pm-input" rows="1" placeholder="일간보고에 대해 PM에게 물어보세요"></textarea></div>';
+    `<div class="composer"><textarea id="pm-input" rows="1" placeholder="보고 내용을 담당에게 바로 물어보세요"></textarea></div>`;
   const input = document.getElementById('pm-input');
   const grow = ()=>{ input.style.height='auto'; input.style.height=Math.min(input.scrollHeight,120)+'px'; };
-  input.addEventListener('keydown', e=>{ if(e.key==='Enter' && !e.shiftKey){ e.preventDefault(); sendPm(); }});
+  input.onkeydown = e=>{ if(e.key==='Enter' && !e.shiftKey){ e.preventDefault(); sendDailyAgent(); }};
   input.addEventListener('input', grow);
-  loadPm(false);
+  loadDailyAgent(false);
 }
 
-async function loadPm(silent){
-  let msgs; try{ msgs = await fetch('/api/messages?room=pmchat').then(r=>r.json()); }catch(e){ return; }
+async function loadDailyAgent(silent){
+  if(!DAILY_SEL) return;
+  let msgs; try{ msgs = await fetch('/api/messages?room='+encodeURIComponent(DAILY_SEL.path)).then(r=>r.json()); }catch(e){ return; }
   const s = document.getElementById('pm-stream'); if(!s) return;
   const atBottom = s.scrollHeight - s.scrollTop - s.clientHeight < 40;
   let html = msgs.length ? msgs.map(m=>{
     const mine = m.author === 'user';
+    const who = m.author === 'pm' ? 'PM' : esc(DAILY_SEL.name)+' 담당';
     const ts = (m.created_at||'').slice(5,16);
-    return `<div class="msg ${mine?'user':'pm'}">`+(mine?'':`<div class="who">PM</div>`)+
+    return `<div class="msg ${mine?'user':'agent'}">`+(mine?'':`<div class="who">${who}</div>`)+
       `<div class="md">${md(m.body)}</div><div class="ts">${esc(ts)}</div></div>`;
-  }).join('') : '<div class="chat-empty">PM에게 현황·우선순위를 물어보세요</div>';
-  if(msgs.length && msgs[msgs.length-1].author === 'user') html += '<div class="msg pending">PM이 확인하고 답하는 중…</div>';
+  }).join('') : '<div class="chat-empty">이 담당과의 첫 대화입니다 — 보고 내용을 물어보세요</div>';
+  if(msgs.length && msgs[msgs.length-1].author === 'user') html += '<div class="msg pending">담당이 확인하고 답하는 중…</div>';
   s.innerHTML = html;
   if(!silent || atBottom) s.scrollTop = s.scrollHeight;
 }
 
-async function sendPm(){
+async function sendDailyAgent(){
+  if(!DAILY_SEL) return;
   const input = document.getElementById('pm-input'); const body = input.value.trim(); if(!body) return;
   input.value = ''; input.style.height = 'auto';
-  await fetch('/api/pm-chat',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({message:body})});
-  await loadPm(false);
+  await fetch('/api/messages',{method:'POST',headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({room: DAILY_SEL.path, author:'user', body})});
+  await loadDailyAgent(false);
 }
 
 async function addPort(){
