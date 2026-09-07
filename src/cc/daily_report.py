@@ -200,10 +200,16 @@ def _manage_call(name: str, issue_list: str, transcript: str) -> list:
         return []
 
 
-def _apply_updates(updates: list, valid_ids: set[int]) -> int:
-    """PM이 낸 칸반 상태·기한 갱신을 이슈 DB에 반영. 반영 건수 반환."""
+def _apply_updates(updates: list, valid_ids: set[int], path: str = "", date: str = "") -> int:
+    """PM이 낸 칸반 상태·기한 갱신 + 당일 완결 등재를 이슈 DB에 반영. 반영 건수 반환."""
     n = 0
     for u in updates:
+        # 당일 완결 등재({"done": "..."}) — 칸반을 거치지 않고 끝난 일의 흔적(2026-09-07)
+        done = (u.get("done") or "").strip() if isinstance(u, dict) else ""
+        if done and path and date:
+            issues_db.add_done(path, done[:120], date)
+            n += 1
+            continue
         try:
             iid = int(u["id"])
         except (KeyError, ValueError, TypeError):
@@ -285,7 +291,7 @@ def report_one_project(path: str, name: str, date: str, guidance: str = "",
         turns.append((pm["ask"], ans))
     # 대화 종료 후: PM이 칸반 상태·일정을 확정해 실제 반영(전용 관리 호출)
     transcript = "\n".join(f"PM: {q}\n담당: {a}" for q, a in turns) or summary
-    applied = _apply_updates(_manage_call(name, issue_list, transcript), valid_ids)
+    applied = _apply_updates(_manage_call(name, issue_list, transcript), valid_ids, path, date)
     return {"name": name, "path": path, "rounds": rounds, "summary": summary or "(요약 없음)",
             "headline": headline, "updates_applied": applied, "skipped": False}
 
@@ -778,23 +784,30 @@ def run_nightly() -> dict:
         logger.error(f"[일간보고] {msg}")
         alerts_db.set_setting(f"daily_summary:{date}", f"<b>ohmyPM {date}</b>\n{msg}")
         return {"report": report, "aborted": True, "reason": msg}
-    # ★ 게시판 토론·반응은 '변화 있던' 프로젝트 담당만 — 조용한 프로젝트 담당까지 부르면
-    #   콜 수가 도로 프로젝트 수만큼 늘어 절약이 무의미해진다. (재가공은 글 있는 프로젝트만이라 자동 제외)
+    # 글쓰기는 '변화 있던' 담당만(글감은 변화에서 나온다). 둘러보기·반응은 **위키 있는 전 담당**
+    #   참여(2026-09-07 사용자: "다른 에이전트들은 뭐해?" — 광장은 전원이 읽어야 산다).
     active_paths = [r["path"] for r in report.get("results", []) if not r.get("quiet")]
+    wiki_paths = [p["path"] for p in projects if p.get("has_wiki")]
     # 재개로 새벽 마감(4시)을 이미 넘겼으면 마감 없이 진행 — 사용량이 리셋 직후라 여유가 있다
     disc_deadline: float | None = _at(settings.discussion_until_hour)
     if time.time() > disc_deadline:
         disc_deadline = None
-    if active_paths:
-        posts_res = run_board_posts(paths=active_paths, deadline_ts=disc_deadline)       # ③a 글쓰기(창작)
-        board = run_board_discussion(paths=active_paths, deadline_ts=disc_deadline)      # ③b 둘러보기·댓글
-        feedback = run_post_feedback(paths=active_paths, deadline_ts=disc_deadline)      # ④ 대댓글 필수
-        followup = run_reply_followup(paths=active_paths, deadline_ts=disc_deadline)     # ④b 대대댓글 선택
-    else:
-        posts_res = {"posted": 0}
-        board = {"commented": 0, "note": "변화 있는 프로젝트 없음"}
-        feedback = {"reacted": 0}
-        followup = {"replied": 0}
+    posts_res = run_board_posts(paths=active_paths, deadline_ts=disc_deadline) \
+        if active_paths else {"posted": 0}                                           # ③a 글쓰기(창작)
+    board = run_board_discussion(paths=wiki_paths, deadline_ts=disc_deadline)        # ③b 둘러보기·댓글
+    feedback = run_post_feedback(paths=wiki_paths, deadline_ts=disc_deadline)        # ④ 대댓글 필수
+    followup = run_reply_followup(paths=wiki_paths, deadline_ts=disc_deadline)       # ④b 대대댓글 선택
+    # ★ 게시판 단계 한도 재개(2026-09-07 실증: 글 3편은 올라갔는데 둘러보기부터 429 전멸 —
+    #   조회·댓글 0의 원인. 보고 단계만 감싸던 재개를 게시판 단계에도) — 전멸했을 때만 1회 재시도.
+    reset_at2 = cc_client.limit_reset_at()
+    if reset_at2 and board.get("commented", 0) == 0 and feedback.get("reacted", 0) == 0:
+        wait = min(max(reset_at2 - time.time(), 0) + 120, 6 * 3600)
+        logger.info(f"[야간] 게시판 단계 한도 소진 — {wait / 60:.0f}분 뒤 리셋에 재개")
+        time.sleep(wait)
+        cc_client.clear_limit()
+        board = run_board_discussion(paths=wiki_paths, deadline_ts=None)
+        feedback = run_post_feedback(paths=wiki_paths, deadline_ts=None)
+        followup = run_reply_followup(paths=wiki_paths, deadline_ts=None)
     reprocess = run_reprocess()                                   # ⑤ 문서 재가공(docs 커밋·push 안 함)
     rewards = run_rewards()                                       # ⑥ 보상
     synthesis = manager.close_day(date, report.get("results", []))   # ⑦ 저녁 종합

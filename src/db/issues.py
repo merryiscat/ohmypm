@@ -29,6 +29,21 @@ def upsert_issue(
     db.commit()
 
 
+def add_done(project: str, title: str, day: str) -> None:
+    """당일 완결 작업을 완료 카드로 등재 — 칸반(할일·진행중)에 안 올랐던 일도 흔적을 남긴다
+    (2026-09-07 사용자 확정). 제목에 날짜를 붙여 다른 날 같은 제목과 구분, 재실행 중복 방지."""
+    fp = _fingerprint(project, "done", f"{day} {title}")
+    db = get_db()
+    db.execute(
+        "INSERT INTO issues (project, kind, title, due, source, fingerprint, status, "
+        "verdict, review_reason) "
+        "VALUES (?, 'done', ?, ?, 'daily_report', ?, 'resolved', 'resolved', '당일 완결(일간보고)') "
+        "ON CONFLICT(fingerprint) DO NOTHING",
+        (project, title, day, fp),
+    )
+    db.commit()
+
+
 def delete_by_project(project: str) -> int:
     """한 프로젝트의 이슈 전부 삭제(프로젝트 관리 제외 시). 삭제 건수 반환."""
     db = get_db()
