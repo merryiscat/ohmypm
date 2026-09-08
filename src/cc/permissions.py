@@ -17,11 +17,16 @@ TASK_TOOLS = {
     "scan": ["Read", "Grep", "Glob"],  # 읽기 전용
     # 판정 에이전트(자가 확인형) — 대상 프로젝트 llmwiki를 직접 열어보고 이슈를 가린다. 읽기만.
     "judge": ["Read", "Grep", "Glob"],
-    # 프로젝트 담당 에이전트(룸 채팅) — CLAUDE.md·docs를 읽고 대화만. 읽기 전용.
-    "room_chat": ["Read", "Grep", "Glob"],
-    # 일간보고: PM(팩트로 판단, 필요 시 읽기)·담당(프로젝트 읽고 답) — 둘 다 읽기 전용.
+    # 프로젝트 담당 에이전트(사용자와의 룸 대화) — 2026-09-09 사용자 확정으로 편집 허용.
+    #   사용자가 그 자리에서 지시하고 결과를 바로 보므로 승인이 곧 사용자 판단이다.
+    #   **코드까지 고칠 수 있다**(docs 한정 아님). Bash는 없어 임의 명령·푸시는 여전히 불가하고,
+    #   커밋도 하지 않는다 — 변경은 작업 폴더에 남아 사용자가 보고 되돌릴 수 있다.
+    "room_chat": ["Read", "Grep", "Glob", "Edit", "Write"],
+    # 일간보고: PM은 팩트로 판단(읽기 전용), 담당은 답하면서 **자기 기록장을 그 자리에서 고친다**
+    #   (2026-09-09 사용자 확정: "대화를 했으면 기록장에도 작성을 하게 해줘야지").
+    #   커밋은 코드가 대화 종료 후 docs/ 범위로만 한다.
     "daily_pm": ["Read", "Grep", "Glob"],
-    "daily_agent": ["Read", "Grep", "Glob"],
+    "daily_agent": ["Read", "Grep", "Glob", "Edit", "Write"],
     # 형식 표준화 = git 커밋 단위 자율(변경→add→commit). push는 NEVER_ALLOW로 차단.
     "format_standardize": ["Read", "Edit", "Write", "Bash(git add:*)", "Bash(git commit:*)"],
     # 문서 재가공(#4) = 담당이 자기 docs에만 쓴다. Bash 없음 — git 커밋은 코드가 docs/만 스코프해서

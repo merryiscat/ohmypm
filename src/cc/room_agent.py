@@ -47,10 +47,12 @@ def reply_in_room(project_path: str, name: str) -> None:
         cwd=_neutral_cwd(),           # 중립 cwd — 대상 훅·CLAUDE.md 격리
         allowed_tools=allowed,
         disallowed_tools=disallowed,
-        permission_mode="default",
+        # 사용자가 시키면 그 자리에서 고친다(2026-09-09 확정) — 저장 자동 승인.
+        #   Bash가 없어 임의 명령·푸시는 불가. 커밋도 안 한다 — 사용자가 보고 되돌릴 수 있게.
+        permission_mode="acceptEdits",
         timeout=CHAT_TIMEOUT,
         append_system_prompt=ROOM_SYSTEM,
-        add_dirs=[project_path],      # 대상 CLAUDE.md·docs를 읽기 허용
+        add_dirs=[project_path],      # 대상 폴더 — 읽고, 사용자가 시키면 고친다
         model=agents_db.model_for(project_path),   # 담당별 지정 모델(없으면 기본)
     )
     body = (result or "").strip() or "(지금은 답을 만들지 못했어 — 잠시 후 다시 시도해줘)"

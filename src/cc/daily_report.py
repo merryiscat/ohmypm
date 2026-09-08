@@ -233,6 +233,7 @@ def _agent_call(name: str, path: str, question: str, history: str) -> str:
         cwd=_neutral_cwd(),
         allowed_tools=tools_for("daily_agent")[0],
         disallowed_tools=tools_for("daily_agent")[1],
+        permission_mode="acceptEdits",   # 답하면서 기록장 수정 — 저장 자동 승인(Bash는 없음)
         timeout=AGENT_TIMEOUT,
         append_system_prompt=ROOM_SYSTEM,
         add_dirs=[path],
@@ -260,6 +261,11 @@ def report_one_project(path: str, name: str, date: str, guidance: str = "",
         f"{', 기한 ' + i['due'] if i.get('due') else ''}) {i['title'][:75]}"
         for i in issue_rows
     )
+    # 담당이 대화 중 고친 기록장을 나중에 커밋하려면 '고치기 전' 상태를 알아야 한다.
+    #   (실행 전부터 더러웠던 파일 = 사용자 작업 중 → 커밋에 섞지 않는다)
+    from src.cc.reprocess import _commit_changes, _dirty_files
+
+    before_files = _dirty_files(path)
     turns: list[tuple[str, str]] = []   # (PM 질문, 담당 답)
     summary = ""
     headline = ""
@@ -292,8 +298,19 @@ def report_one_project(path: str, name: str, date: str, guidance: str = "",
     # 대화 종료 후: PM이 칸반 상태·일정을 확정해 실제 반영(전용 관리 호출)
     transcript = "\n".join(f"PM: {q}\n담당: {a}" for q, a in turns) or summary
     applied = _apply_updates(_manage_call(name, issue_list, transcript), valid_ids, path, date)
+    # 담당이 대화하면서 고친 기록장을 커밋한다 — docs/ 범위만, push 없음(2026-09-09).
+    #   PM은 칸반(ohmyPM DB), 담당은 기록장(프로젝트 docs)으로 역할이 갈린다.
+    new_docs = {f for f in (_dirty_files(path) - before_files) if f.startswith("docs/")}
+    committed = False
+    if new_docs:
+        guard = before_files | ((_dirty_files(path) - before_files) - new_docs)
+        res = _commit_changes(path, date, guard, msg=f"chore: {date} 일간보고 반영 (ohmyPM 담당)")
+        committed = bool(res.get("committed"))
+        if committed:
+            logger.info(f"[일간보고] {name} 기록장 반영 커밋 {len(new_docs)}개 파일")
     return {"name": name, "path": path, "rounds": rounds, "summary": summary or "(요약 없음)",
-            "headline": headline, "updates_applied": applied, "skipped": False}
+            "headline": headline, "updates_applied": applied, "skipped": False,
+            "docs_committed": committed}
 
 
 def run_daily_report(
