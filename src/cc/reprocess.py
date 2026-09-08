@@ -1,4 +1,4 @@
-"""조언 반영(#4) — 당일 게시판에서 받은 조언을 담당이 프로젝트에 실제로 반영한다.
+"""반영(#4) — 당일 **일간보고 대화**와 **게시판 조언**을 담당이 프로젝트에 실제로 반영한다.
 반영처(docs·코드 주석·설정 등)는 조언 성격에 맞게 에이전트가 판단한다(2026-09-06 사용자
 확정: "꼭 docs가 아니더라도 반영할 수 있는 방법을 찾고 반영해"). 게시판 원본은 남긴다.
 
@@ -61,6 +61,28 @@ def _material_for(path: str, posts: list[dict]) -> str:
     return "\n".join(lines)
 
 
+def daily_transcript(path: str, date: str) -> str:
+    """오늘 일간보고에서 PM과 나눈 대화 — 거기서 확정된 것도 기록장에 반영해야 한다.
+
+    2026-09-09 사용자 지적: "대화를 했으면 기록장에도 작성을 하게 해줘야지".
+    PM이 기한을 다시 잡고 담당이 상태를 정정해도 그 결과가 ohmyPM 안에만 남고
+    프로젝트 docs는 옛날 그대로였다 → 다음 스캔이 옛 문서를 다시 읽어 원위치.
+    """
+    from src.db import messages as messages_db
+
+    msgs = messages_db.list_messages(f"daily::{date}::{path}", limit=40)
+    if not msgs:
+        return ""
+    # 변화 없어 자동 한 줄만 남은 방은 반영할 대화가 아니다
+    if len(msgs) == 1 and "작업 내용 없음" in (msgs[0].get("body") or ""):
+        return ""
+    lines = []
+    for m in msgs:
+        who = "PM" if m["author"] == "pm" else "나(담당)"
+        lines.append(f"- {who}: {(m['body'] or '')[:600]}")
+    return "\n".join(lines)
+
+
 def _dirty_files(path: str) -> set[str]:
     """git이 보는 변경 파일 목록(스테이징 여부 무관). 커밋 범위 산정용."""
     out = _git(path, "status", "--porcelain").stdout
@@ -82,7 +104,7 @@ def _commit_changes(path: str, date: str, before: set[str], msg: str | None = No
     staged = _git(path, "diff", "--cached", "--name-only").stdout.strip()
     if not staged:
         return {"committed": False, "reason": "스테이징 실패"}
-    msg = msg or f"chore: {date} 게시판 조언 반영 (ohmyPM 담당)"
+    msg = msg or f"chore: {date} 일간보고·게시판 반영 (ohmyPM 담당)"
     c = _git(path, "commit", "-m", msg)
     ok = c.returncode == 0
     if not ok:
@@ -108,8 +130,12 @@ def _mentor_material() -> str:
 def reprocess_one(path: str, name: str, posts: list[dict], date: str) -> dict:
     """한 프로젝트: 받은 조언을 반영(반영처는 에이전트 판단) → 코드가 새 변경만 커밋 + 성장 기록. dict."""
     material = _material_for(path, posts)
+    talk = daily_transcript(path, date)
+    if talk:
+        material = (material + "\n\n" if material.strip() else "") + \
+            "[오늘 일간보고에서 PM과 나눈 대화 — 여기서 확정된 것은 기록장에 반드시 반영]\n" + talk
     if not material.strip():
-        return {"name": name, "path": path, "skipped": True, "reason": "받은 조언 없음"}
+        return {"name": name, "path": path, "skipped": True, "reason": "반영할 것 없음"}
     # 자기가 멘토가 아니면 점수 1위 멘토의 배움을 참고로 얹는다(멘토 자동 자문)
     if not agents_db.is_mentor(path):
         material += _mentor_material()
@@ -141,7 +167,7 @@ def reprocess_one(path: str, name: str, posts: list[dict], date: str) -> dict:
 
 
 def run_reprocess(paths: list[str] | None = None) -> dict:
-    """당일 게시판 조언을 각 담당이 자기 docs에 반영(git 커밋, push 안 함). 커밋 건수 반환."""
+    """당일 일간보고 대화 + 게시판 조언을 각 담당이 자기 기록장에 반영(커밋, push 안 함)."""
     date = datetime.now().strftime("%Y-%m-%d")
     all_posts = board_db.list_posts(board_db.DAILY_BOARD)
     # ★ 오늘(day=date) 올라온 글만 재가공 대상 — 안 그러면 어제 조언을 매일 다시 반영해
@@ -151,6 +177,13 @@ def run_reprocess(paths: list[str] | None = None) -> dict:
     for p in posts:
         if p.get("project") and p.get("comments"):
             targets.setdefault(p["project"], p["author"])
+    # 게시판 조언이 없어도 **오늘 일간보고 대화가 있으면** 반영 대상이다(2026-09-09).
+    #   대화에서 정한 기한·상태가 기록장에 안 남으면 다음 스캔이 옛 문서를 다시 읽어 원위치한다.
+    from src.db import projects as projects_db
+
+    for q in projects_db.list_projects(enabled_only=True):
+        if q["path"] not in targets and daily_transcript(q["path"], date):
+            targets[q["path"]] = q["name"]
     if paths:
         wanted = set(paths)
         targets = {k: v for k, v in targets.items() if k in wanted}
