@@ -1,23 +1,30 @@
 """SQLite 커넥션 + 스키마 초기화. odin의 Supabase client 자리를 로컬 SQLite로 대체."""
 
 import sqlite3
+import threading
 from pathlib import Path
 
 from src.config.settings import settings
 
-_conn: sqlite3.Connection | None = None
+# ★ 커넥션은 **스레드마다 하나**(2026-09-09). 예전엔 싱글톤 하나를 스레드가 공유했는데,
+#   일간보고가 ThreadPoolExecutor로 여러 프로젝트를 동시에 돌리면서 두 스레드가 같은
+#   커넥션에 commit을 걸어 "cannot commit - no transaction is active"로 배치가 죽었다.
+#   sqlite 파일 잠금이 동시 쓰기를 조정하므로, WAL + busy_timeout으로 대기시킨다.
+_local = threading.local()
 
 
 def get_db() -> sqlite3.Connection:
-    """로컬 SQLite 커넥션(싱글톤). row_factory=Row 로 행을 딕셔너리처럼 다룬다."""
-    global _conn
-    if _conn is None:
+    """이 스레드의 SQLite 커넥션. row_factory=Row 로 행을 딕셔너리처럼 다룬다."""
+    conn = getattr(_local, "conn", None)
+    if conn is None:
         db_path = Path(settings.db_path)
         db_path.parent.mkdir(parents=True, exist_ok=True)  # data/ 폴더 보장
-        # 단일 워커 전제라 스레드 공유 허용
-        _conn = sqlite3.connect(db_path, check_same_thread=False)
-        _conn.row_factory = sqlite3.Row
-    return _conn
+        conn = sqlite3.connect(db_path, check_same_thread=False, timeout=30)
+        conn.row_factory = sqlite3.Row
+        conn.execute("PRAGMA journal_mode=WAL")    # 읽기와 쓰기가 서로를 막지 않게
+        conn.execute("PRAGMA busy_timeout=30000")  # 잠겨 있으면 실패 대신 최대 30초 대기
+        _local.conn = conn
+    return conn
 
 
 def init_db() -> None:

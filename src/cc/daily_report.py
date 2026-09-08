@@ -318,6 +318,13 @@ def run_daily_report(
     date = datetime.now().strftime("%Y-%m-%d")
     guidance_by_path = guidance_by_path or {}
 
+    # ★ 시작 시점에 이미 소프트 마감이 지났으면 마감을 없앤다(2026-09-09) — 늦게 시작한
+    #   배치(재부팅으로 03시를 놓쳐 05시에 수동 실행 등)가 전 프로젝트를 '마감 초과'로
+    #   건너뛰어 통째로 헛도는 것을 막는다. 게시판 단계엔 이미 같은 보호가 있었다.
+    if deadline_ts and time.time() > deadline_ts:
+        logger.info("[일간보고] 시작 시점에 소프트 마감이 이미 지남 — 마감 없이 진행")
+        deadline_ts = None
+
     done_results: list[dict] = []
     skipped: list[str] = []
     skipped_paths: list[str] = []
