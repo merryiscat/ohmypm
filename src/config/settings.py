@@ -31,7 +31,6 @@ class Settings(BaseSettings):
 
     # --- 스케줄 ---
     scan_hour: int = 8       # 매일 정시 스캔 시각(24시간)
-    heartbeat_sec: int = 300  # 이슈 감지 heartbeat 주기(초)
     # 일간보고(멀티에이전트) — 03:00 시작(사용량 리셋 직후, 01시는 리셋 전이라 한도로 전량실패했음
     # 2026-09-01), 보고 소프트마감 05:00, 게시판 토론 마감 06:00
     daily_report_hour: int = 3

@@ -1,11 +1,11 @@
-"""APScheduler — 정시 cron(스캔) + heartbeat(감지). odin 싱글톤·중복가드 패턴.
+"""APScheduler — 정시 cron(스캔·일간보고·텔레그램·전문가수집). odin 싱글톤·중복가드 패턴.
 
-정시 스캔이 미해결·기한을 훑어 알림, heartbeat는 이벤트 감지 골격(상담은 다음 관문).
+5분 주기 heartbeat는 2026-09-09 제거 — 자리만 잡아둔 빈 껍데기(pass)라 하는 일 없이
+로그만 어지럽혔다. 주기 작업이 다시 필요해지면 그때 목적에 맞는 주기로 새로 단다.
 """
 
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.cron import CronTrigger
-from apscheduler.triggers.interval import IntervalTrigger
 from loguru import logger
 
 from src.config.settings import settings
@@ -95,15 +95,6 @@ async def _run_expert_collect_job() -> None:
         _running.discard("expert_collect")
 
 
-async def _heartbeat_job() -> None:
-    """heartbeat: 기한 임박·신규 이슈 감지 골격. 상담(케이스4)·화이트리스트 자율은 다음 관문."""
-    try:
-        # MVP: 감지 골격만. 정시 스캔 알림이 첫 관문의 핵심.
-        pass
-    except Exception as e:
-        logger.error(f"[스케줄러] heartbeat 실패: {e}")
-
-
 def start_scheduler() -> None:
     """서버 startup(lifespan)에서 호출."""
     scheduler.add_job(
@@ -130,17 +121,11 @@ def start_scheduler() -> None:
         id="expert_collect",
         replace_existing=True,
     )
-    scheduler.add_job(
-        _heartbeat_job,
-        IntervalTrigger(seconds=settings.heartbeat_sec),
-        id="heartbeat",
-        replace_existing=True,
-    )
     scheduler.start()
     logger.info(
         f"[스케줄러] 시작 — 스캔 {settings.scan_hour}:00, 일간보고 {settings.daily_report_hour}:00, "
         f"텔레그램 {settings.telegram_hour}:00, 전문가수집 매주 {settings.expert_collect_weekday}요일 "
-        f"{settings.expert_collect_hour}:00, heartbeat {settings.heartbeat_sec}초"
+        f"{settings.expert_collect_hour}:00"
     )
 
 
