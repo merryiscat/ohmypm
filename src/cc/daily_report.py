@@ -442,11 +442,32 @@ def _author_of(path: str, fallback: str) -> str:
     return prof.get("name") or fallback
 
 
+def _board_parallel(items: list, worker, label: str) -> list:
+    """게시판 4단계 공통 실행기 — 담당(또는 글)별 headless 콜을 CONCURRENCY만큼 동시에 돌린다.
+
+    ★ 2026-09-10: 네 단계가 전부 순차 `for` 루프라, 위키 25개면 단계당 25콜이 줄을 서서
+      댓글이 몇 시간씩 밀렸다(09-09 실측: 06:07 글쓰기 시작 → 06:27 글 21편·댓글 1건).
+      일간보고와 같은 병렬 방식으로 통일. DB는 스레드별 커넥션(커밋 d589f2b)이라 안전하고,
+      담당은 각자 자기 프로젝트만 건드려 작업 디렉터리 충돌도 없다.
+
+    한 담당의 예외가 단계 전체를 멈추지 않게 삼키고 로그만 남긴다(실패는 결과에서 빠짐).
+    """
+    def guarded(item):
+        try:
+            return worker(item)
+        except Exception as e:
+            logger.warning(f"[{label}] 항목 실패: {e}")
+            return None
+
+    with ThreadPoolExecutor(max_workers=CONCURRENCY) as ex:
+        return [r for r in ex.map(guarded, items) if r is not None]
+
+
 def run_board_posts(paths: list[str] | None = None, deadline_ts: float | None = None) -> dict:
     """게시판 글쓰기 — 각 담당이 자기 프로젝트에서 글감을 **스스로 골라** 글을 쓴다(0~1편).
 
     조회·좋아요가 점수(보상)가 되는 유인 구조라, 뭐가 잘 읽힐지도 담당이 판단한다.
-    담당당 headless 1콜. 억지 글 방지: 쓸 게 없으면 빈 배열 허용.
+    담당당 headless 1콜, 담당끼리는 병렬. 억지 글 방지: 쓸 게 없으면 빈 배열 허용.
     """
     from src.scan.discover import discover_projects
 
@@ -456,10 +477,11 @@ def run_board_posts(paths: list[str] | None = None, deadline_ts: float | None = 
         wanted = set(paths)
         projects = [p for p in projects if p["path"] in wanted]
     allowed, disallowed = tools_for("daily_agent")
-    posted = 0
-    for p in projects:
+
+    def worker(p: dict) -> int:
+        # 마감을 넘겨 '시작'하는 담당만 스킵(이미 도는 콜은 끝까지 간다) — 순차 때의 break 자리
         if deadline_ts and time.time() > deadline_ts:
-            break
+            return 0
         out = run_headless(
             prompt=agents_db.persona_prefix(p["path"]) + board_write(p["name"], p["path"]),
             cwd=_neutral_cwd(),
@@ -468,21 +490,25 @@ def run_board_posts(paths: list[str] | None = None, deadline_ts: float | None = 
             add_dirs=[p["path"]], model=agents_db.model_for(p["path"]),
         )
         if not out:
-            continue
+            return 0
         m = _ARR_RE.search(out)
         if not m:
-            continue
+            return 0
         try:
             items = json.loads(m.group(0))
         except json.JSONDecodeError:
-            continue
+            return 0
+        n = 0
         for it in (items if isinstance(items, list) else [])[:1]:   # 최대 1편
             title = (it.get("title") or "").strip()
             body = (it.get("body") or "").strip()
             if title and body:
                 board_db.add_post(author=_author_of(p["path"], p["name"]), title=title[:80],
                                   body=body, project=p["path"], day=date)
-                posted += 1
+                n += 1
+        return n
+
+    posted = sum(_board_parallel(projects, worker, "게시판 글쓰기"))
     logger.info(f"[게시판 글쓰기] {posted}편")
     return {"posted": posted}
 
@@ -536,7 +562,7 @@ def _parse_board_response(result: str | None,
 def run_board_discussion(paths: list[str] | None = None, deadline_ts: float | None = None) -> dict:
     """게시판 둘러보기 — 각 담당이 제목을 훑고 **끌리는 글만 열어**(조회수 +1) 마음에 들면 댓글.
 
-    담당당 headless 1콜. 연 글만 조회수가 오른다 — 조회수가 진짜 '읽힘' 신호가 되게.
+    담당당 headless 1콜, 담당끼리는 병렬. 연 글만 조회수가 오른다 — 조회수가 진짜 '읽힘' 신호가 되게.
     자기 글은 열람·댓글 제외. 마감(deadline_ts) 넘겨 시작하는 담당은 스킵.
     """
     from src.scan.discover import discover_projects
@@ -557,11 +583,10 @@ def run_board_discussion(paths: list[str] | None = None, deadline_ts: float | No
         projects = [p for p in projects if p["path"] in wanted]
     allowed, disallowed = tools_for("daily_agent")
 
-    commented = 0
-    liked_n = 0
-    for p in projects:
+    def worker(p: dict) -> tuple[int, int]:
+        """한 담당의 둘러보기 → (좋아요 수, 댓글 수)."""
         if deadline_ts and time.time() > deadline_ts:
-            break
+            return 0, 0
         out = run_headless(
             prompt=agents_db.persona_prefix(p["path"]) + board_comment(p["name"], p["path"], board_text),
             cwd=_neutral_cwd(),
@@ -574,18 +599,24 @@ def run_board_discussion(paths: list[str] | None = None, deadline_ts: float | No
         )
         own = own_post_ids.get(p["path"])
         opened, liked, cmts = _parse_board_response(out, valid_ids)
+        likes = comments = 0
         for pid in opened:
             if pid != own:                # 자기 글 조회는 점수에 안 친다
                 board_db.increment_views(pid)
         for pid in liked:
             if pid != own:                # 좋아요 = 값싸고 주력인 투표 신호
                 board_db.like_post(pid)
-                liked_n += 1
+                likes += 1
         for it in cmts:
             if it["post_id"] == own:      # 자기 글엔 안 단다
                 continue
             board_db.add_comment(it["post_id"], _author_of(p["path"], p["name"]), it["comment"])
-            commented += 1
+            comments += 1
+        return likes, comments
+
+    results = _board_parallel(projects, worker, "게시판 둘러보기")
+    liked_n = sum(r[0] for r in results)
+    commented = sum(r[1] for r in results)
     logger.info(f"[게시판] 좋아요 {liked_n}개 · 댓글 {commented}개")
     return {"commented": commented, "liked": liked_n}
 
@@ -594,25 +625,30 @@ def run_post_feedback(paths: list[str] | None = None, deadline_ts: float | None 
     """글쓴이 에이전트가 자기 글에 달린 댓글에 좋아요/싫어요/대댓글로 반응(강화학습 보상 신호).
 
     한 글당 headless 1콜(글+댓글 주고 [{comment_id,reaction,reply}] 받음) → 코드가 반영.
+    병렬 단위는 **프로젝트** — 한 담당이 글 여러 편을 가진 경우 그 글들은 순서대로 처리한다
+    (같은 작업 디렉터리에 같은 담당을 동시에 두지 않기 위해). 담당끼리는 동시에 돈다.
     """
     posts = board_db.list_posts(board_db.DAILY_BOARD)
     if paths:
         wanted = set(paths)
         posts = [p for p in posts if p.get("project") in wanted]
     allowed, disallowed = tools_for("daily_agent")
-    reacted = 0
+
+    posts_by_project: dict[str, list[dict]] = {}
     for post in posts:
-        if not post.get("project"):
-            continue
+        if post.get("project"):
+            posts_by_project.setdefault(post["project"], []).append(post)
+
+    def _react_one(post: dict) -> int:
         top = [c for c in post.get("comments", []) if not c.get("parent_id")]
         # 이미 글쓴이 답글이 달린 댓글은 제외 — 매일 재실행돼도 중복 반응·중복 답글이 안 쌓이게
         replied = {c.get("parent_id") for c in post.get("comments", [])
                    if c["author"] == post["author"] and c.get("parent_id")}
         top = [c for c in top if c["id"] not in replied]
         if not top:
-            continue
+            return 0
         if deadline_ts and time.time() > deadline_ts:
-            break
+            return 0
         cids = {c["id"] for c in top}
         ctext = "\n".join(f"[{c['id']}] {c['author']}: {(c['body'] or '')[:200]}" for c in top)
         out = run_headless(
@@ -624,14 +660,15 @@ def run_post_feedback(paths: list[str] | None = None, deadline_ts: float | None 
             model=agents_db.model_for(post["project"]),
         )
         if not out:
-            continue
+            return 0
         m = _ARR_RE.search(out)
         if not m:
-            continue
+            return 0
         try:
             items = json.loads(m.group(0))
         except json.JSONDecodeError:
-            continue
+            return 0
+        n = 0
         for it in items if isinstance(items, list) else []:
             try:
                 cid = int(it["comment_id"])
@@ -641,10 +678,16 @@ def run_post_feedback(paths: list[str] | None = None, deadline_ts: float | None 
                 continue
             if it.get("reaction") in ("like", "dislike"):
                 board_db.react_comment(cid, it["reaction"])
-                reacted += 1
+                n += 1
             rep = (it.get("reply") or "").strip()
             if rep and rep.lower() != "null":
                 board_db.add_comment(post["id"], post["author"], rep, parent_id=cid)
+        return n
+
+    def worker(item: tuple[str, list[dict]]) -> int:
+        return sum(_react_one(post) for post in item[1])
+
+    reacted = sum(_board_parallel(list(posts_by_project.items()), worker, "게시판 피드백"))
     logger.info(f"[게시판 피드백] 반응 {reacted}건")
     return {"reacted": reacted}
 
@@ -702,10 +745,12 @@ def run_reply_followup(paths: list[str] | None = None, deadline_ts: float | None
             valid_by_agent.setdefault(agent, set()).add(r["id"])
 
     allowed, disallowed = tools_for("daily_agent")
-    replied = 0
-    for agent, threads in threads_by_agent.items():
+
+    def worker(item: tuple[str, list[str]]) -> int:
+        """한 담당의 스레드 묶음 → 단 대대댓글 수. 담당끼리는 병렬."""
+        agent, threads = item
         if deadline_ts and time.time() > deadline_ts:
-            break
+            return 0
         path = path_by_name[agent]
         out = run_headless(
             prompt=agents_db.persona_prefix(path) + comment_followup(agent, path, "\n\n".join(threads)),
@@ -715,14 +760,15 @@ def run_reply_followup(paths: list[str] | None = None, deadline_ts: float | None
             add_dirs=[path], model=agents_db.model_for(path),
         )
         if not out:
-            continue
+            return 0
         m = _ARR_RE.search(out)
         if not m:
-            continue
+            return 0
         try:
             items = json.loads(m.group(0))
         except json.JSONDecodeError:
-            continue
+            return 0
+        n = 0
         for it in items if isinstance(items, list) else []:
             try:
                 rid = int(it["reply_id"])
@@ -732,7 +778,10 @@ def run_reply_followup(paths: list[str] | None = None, deadline_ts: float | None
             if rid not in valid_by_agent.get(agent, set()) or not body or body.lower() == "null":
                 continue
             board_db.add_comment(post_of_reply[rid], agent, body, parent_id=rid)
-            replied += 1
+            n += 1
+        return n
+
+    replied = sum(_board_parallel(list(threads_by_agent.items()), worker, "대대댓글"))
     logger.info(f"[대대댓글] {replied}건")
     return {"replied": replied}
 
