@@ -22,6 +22,7 @@ from src.cc.permissions import tools_for
 from src.cc.prompts import REPROCESS_SYSTEM, reprocess_docs
 from src.db import agents as agents_db
 from src.db import board as board_db
+from src.proc import NO_WINDOW
 
 REPROCESS_TIMEOUT = 300
 _OBJ = re.compile(r"\{.*\}", re.DOTALL)   # 응답 끝의 {lesson, files_changed} 추출
@@ -31,6 +32,7 @@ def _git(path: str, *args: str, timeout: int = 30) -> subprocess.CompletedProces
     return subprocess.run(
         ["git", "-C", path, *args],
         capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=timeout,
+        creationflags=NO_WINDOW,
     )
 
 

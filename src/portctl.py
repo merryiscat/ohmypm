@@ -14,6 +14,7 @@ from loguru import logger
 
 from src.db import ports as ports_db
 from src.portscan import listening_ports
+from src.proc import NO_WINDOW
 
 # Windows: 부모(서버)와 분리해 띄운다 — 서버가 죽어도 살아 있게
 _DETACHED = 0x00000008 | 0x00000200   # DETACHED_PROCESS | CREATE_NEW_PROCESS_GROUP
@@ -57,6 +58,7 @@ def stop_port(port_id: int) -> dict:
         r = subprocess.run(
             ["taskkill", "/PID", str(pid), "/F", "/T"],
             capture_output=True, text=True, timeout=10, encoding="utf-8", errors="replace",
+            creationflags=NO_WINDOW,
         )
     except Exception as e:
         logger.warning(f"[포트] stop 실패(pid {pid}): {e}")

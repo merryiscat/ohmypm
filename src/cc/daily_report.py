@@ -33,8 +33,8 @@ from src.cc.prompts import (
     comment_followup,
     daily_agent_answer,
     pm_manage,
-    post_feedback,
     pm_turn,
+    post_feedback,
 )
 from src.cc.room_agent import _neutral_cwd
 from src.config.settings import settings
@@ -42,6 +42,7 @@ from src.db import agents as agents_db
 from src.db import board as board_db
 from src.db import issues as issues_db
 from src.db import messages as messages_db
+from src.proc import NO_WINDOW
 
 DAILY_PREFIX = "daily::"       # 일간보고 대화 방 키: daily::{날짜}::{프로젝트path} (일자·프로젝트별 분리)
 
@@ -82,6 +83,7 @@ def _has_activity(path: str) -> bool:
             r = subprocess.run(
                 ["git", "-C", path, "log", "--since=24 hours ago", "--format=%s"],
                 capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=15,
+                creationflags=NO_WINDOW,
             )
             if r.returncode != 0:
                 return True  # git 조회 실패 — 모르면 점검하는 쪽으로

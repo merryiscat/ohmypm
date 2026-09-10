@@ -20,6 +20,7 @@ from src.cc.permissions import tools_for
 from src.cc.prompts import ONBOARDING_SYSTEM, onboarding_review
 from src.cc.room_agent import _neutral_cwd
 from src.db import messages as messages_db
+from src.proc import NO_WINDOW
 
 ONBOARD_TIMEOUT = 240
 OWNER_MARK = "merryiscat"        # 이 문자열이 origin에 있으면 내 저장소
@@ -30,7 +31,8 @@ SECRET_GLOBS = (".env", ".env.*", "*.pem", "*.key", "*credentials*", "*secret*")
 def _git(path: str, *args: str) -> str:
     try:
         r = subprocess.run(["git", "-C", path, *args], capture_output=True, text=True,
-                           encoding="utf-8", errors="replace", timeout=15)
+                           encoding="utf-8", errors="replace", timeout=15,
+                           creationflags=NO_WINDOW)
         return r.stdout.strip() if r.returncode == 0 else ""
     except Exception:
         return ""

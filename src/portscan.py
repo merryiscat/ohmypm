@@ -9,6 +9,8 @@ import subprocess
 
 from loguru import logger
 
+from src.proc import NO_WINDOW
+
 # 포트별 (PID·프로세스명) 한 줄씩 탭 구분으로 뱉는 PowerShell 한 줄
 _PS = (
     "Get-NetTCPConnection -State Listen | "
@@ -25,6 +27,7 @@ def listening_ports() -> dict[int, dict]:
         r = subprocess.run(
             [ps, "-NoProfile", "-Command", _PS],
             capture_output=True, text=True, timeout=10, encoding="utf-8", errors="replace",
+            creationflags=NO_WINDOW,
         )
     except Exception as e:
         logger.warning(f"[포트스캔] 실패: {e}")

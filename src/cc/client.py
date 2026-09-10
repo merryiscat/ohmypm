@@ -16,6 +16,7 @@ from pathlib import Path
 from loguru import logger
 
 from src.config.settings import settings
+from src.proc import NO_WINDOW
 
 # PreToolUse 훅(인자 레벨 방어 L3) — ohmyPM 안에 둔다(대상 에이전트가 자기 게이트를 못 고치게)
 GUARD_HOOK = Path(__file__).resolve().parents[2] / "scripts" / "pretooluse_guard.ps1"
@@ -118,6 +119,7 @@ def run_headless(
             timeout=timeout,
             encoding="utf-8",
             errors="replace",
+            creationflags=NO_WINDOW,
         )
         if r.returncode != 0:
             # ★ 실패 원인은 stderr가 비고 stdout(JSON)에 담기는 경우가 많다(사용량·속도 한도 등).

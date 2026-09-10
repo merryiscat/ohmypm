@@ -23,6 +23,7 @@ from src.cc.permissions import tools_for
 from src.cc.prompts import BASELINE_NOTE, HARNESS_AUDIT_SYSTEM, harness_audit_prompt
 from src.cc.room_agent import _neutral_cwd
 from src.db import messages as messages_db
+from src.proc import NO_WINDOW
 
 AUDIT_TIMEOUT = 360
 AUDIT_CONCURRENCY = 3          # 한도(속도/사용량) 폭주 방지 — 일간보고보다 보수적으로
@@ -35,6 +36,7 @@ def _git(path: str, *args: str, timeout: int = 30) -> subprocess.CompletedProces
     return subprocess.run(
         ["git", "-C", path, *args],
         capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=timeout,
+        creationflags=NO_WINDOW,
     )
 
 
