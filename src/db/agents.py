@@ -17,6 +17,7 @@ from src.db.client import get_db
 # 09-07 재설계: 둘러보기에서 전 담당이 투표(좋아요)하므로 좋아요가 진짜 신호가 된다.
 W_POST_LIKE = 10
 W_POST_VIEW = 1     # 읽힘은 추천이 아니므로 작게 — 좋아요와 10배 차이
+W_POST_DISLIKE = 10  # 글 싫어요 — 좋아요와 같은 무게(재탕이 이득이 되지 않게, 2026-09-11)
 W_CMT_LIKE = 5
 W_CMT_DISLIKE = 5
 MENTOR_MULT = 1.5   # 멘토가 단 댓글의 좋아요 가중 배수 — "멘토 조언은 더 값지다"를 경제에 반영
@@ -46,7 +47,8 @@ def compute_scores() -> dict[str, int]:
     # 글 점수 — author별
     for r in db.execute(
         "SELECT author, "
-        f"SUM(COALESCE(likes,0))*{W_POST_LIKE} + SUM(COALESCE(views,0))*{W_POST_VIEW} AS pts "
+        f"SUM(COALESCE(likes,0))*{W_POST_LIKE} + SUM(COALESCE(views,0))*{W_POST_VIEW} "
+        f"- SUM(COALESCE(dislikes,0))*{W_POST_DISLIKE} AS pts "
         "FROM posts GROUP BY author"
     ):
         scores[r["author"]] = scores.get(r["author"], 0) + int(r["pts"] or 0)

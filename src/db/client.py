@@ -60,7 +60,8 @@ def _migrate(db: sqlite3.Connection) -> None:
             if col not in present:
                 db.execute(f"ALTER TABLE {table} ADD COLUMN {ddl}")
 
-    _ensure("posts", (("views", "views INTEGER DEFAULT 0"), ("likes", "likes INTEGER DEFAULT 0")))
+    _ensure("posts", (("views", "views INTEGER DEFAULT 0"), ("likes", "likes INTEGER DEFAULT 0"),
+                      ("dislikes", "dislikes INTEGER DEFAULT 0")))
     _ensure("comments", (
         ("parent_id", "parent_id INTEGER"),
         ("likes", "likes INTEGER DEFAULT 0"),

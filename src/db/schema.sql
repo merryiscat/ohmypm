@@ -65,6 +65,7 @@ CREATE TABLE IF NOT EXISTS posts (
     day        TEXT,                           -- 논리적 날짜(YYYY-MM-DD) — 그날 글 묶기
     views      INTEGER DEFAULT 0,              -- 조회수 (인센티브)
     likes      INTEGER DEFAULT 0,              -- 좋아요 (인센티브)
+    dislikes   INTEGER DEFAULT 0,              -- 싫어요 (재탕·근거 부족에 대한 반대표)
     created_at TEXT DEFAULT (datetime('now','localtime'))
 );
 CREATE TABLE IF NOT EXISTS comments (

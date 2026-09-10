@@ -40,6 +40,17 @@ def like_post(post_id: int) -> None:
     db.commit()
 
 
+def dislike_post(post_id: int) -> None:
+    """글 싫어요. 좋아요의 반대표 — 재탕(같은 이야기 다시 쓰기)·근거 없는 글에 쓴다.
+
+    ★ 2026-09-11 신설. 그전엔 글에 반대 신호가 없어서, 어제 쓴 이야기를 제목만 바꿔
+      다시 올려도 좋아요가 그대로 붙었다(점수가 재탕을 벌하지 않았다).
+    """
+    db = get_db()
+    db.execute("UPDATE posts SET dislikes = COALESCE(dislikes,0) + 1 WHERE id = ?", (post_id,))
+    db.commit()
+
+
 def increment_views(post_id: int) -> None:
     db = get_db()
     db.execute("UPDATE posts SET views = views + 1 WHERE id = ?", (post_id,))

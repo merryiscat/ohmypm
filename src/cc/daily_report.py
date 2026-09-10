@@ -526,22 +526,25 @@ def run_board_posts(paths: list[str] | None = None, deadline_ts: float | None = 
 MAX_COMMENTS_PER_AGENT = 2   # 한 담당이 하룻밤 다는 댓글 상한(공감 홍수 방지, 09-07 재설계)
 
 
-def _parse_board_response(result: str | None,
-                          valid_ids: set[int]) -> tuple[set[int], set[int], list[dict]]:
-    """둘러보기 응답에서 {opened, liked, comments}를 추출. 실패는 (빈, 빈, 빈).
+def _parse_board_response(
+    result: str | None, valid_ids: set[int]
+) -> tuple[set[int], set[int], set[int], list[dict]]:
+    """둘러보기 응답에서 {opened, liked, disliked, comments}를 추출. 실패는 전부 빈 값.
 
-    liked·댓글 단 글은 opened에 없어도 연 것으로 친다(반응 = 읽었다는 신호).
+    liked·disliked·댓글 단 글은 opened에 없어도 연 것으로 친다(반응 = 읽었다는 신호).
     댓글은 상한(MAX_COMMENTS_PER_AGENT)까지만.
+    ★ disliked는 2026-09-11 신설 — 재탕·근거 부족에 대한 반대표(점수에서 차감).
+      같은 글을 좋아요와 싫어요 둘 다에 넣으면 좋아요를 버린다(모순은 반대표 우선).
     """
     if not result:
-        return set(), set(), []
+        return set(), set(), set(), []
     m = _OBJ_RE.search(result)
     if not m:
-        return set(), set(), []
+        return set(), set(), set(), []
     try:
         d = json.loads(m.group(0))
     except json.JSONDecodeError:
-        return set(), set(), []
+        return set(), set(), set(), []
 
     def _ids(key: str) -> set[int]:
         out: set[int] = set()
@@ -555,7 +558,9 @@ def _parse_board_response(result: str | None,
 
     opened = _ids("opened")
     liked = _ids("liked")
-    opened |= liked                     # 좋아요 = 읽었다는 신호
+    disliked = _ids("disliked")
+    liked -= disliked                   # 둘 다 찍힌 글은 반대표만 남긴다
+    opened |= liked | disliked          # 좋아요·싫어요 = 읽었다는 신호
     comments: list[dict] = []
     for it in d.get("comments") or []:
         try:
@@ -566,7 +571,7 @@ def _parse_board_response(result: str | None,
         if pid in valid_ids and c:
             comments.append({"post_id": pid, "comment": c})
             opened.add(pid)
-    return opened, liked, comments[:MAX_COMMENTS_PER_AGENT]
+    return opened, liked, disliked, comments[:MAX_COMMENTS_PER_AGENT]
 
 
 def run_board_discussion(paths: list[str] | None = None, deadline_ts: float | None = None) -> dict:
@@ -593,10 +598,10 @@ def run_board_discussion(paths: list[str] | None = None, deadline_ts: float | No
         projects = [p for p in projects if p["path"] in wanted]
     allowed, disallowed = tools_for("daily_agent")
 
-    def worker(p: dict) -> tuple[int, int]:
-        """한 담당의 둘러보기 → (좋아요 수, 댓글 수)."""
+    def worker(p: dict) -> tuple[int, int, int]:
+        """한 담당의 둘러보기 → (좋아요 수, 싫어요 수, 댓글 수)."""
         if deadline_ts and time.time() > deadline_ts:
-            return 0, 0
+            return 0, 0, 0
         out = run_headless(
             prompt=agents_db.persona_prefix(p["path"]) + board_comment(p["name"], p["path"], board_text),
             cwd=_neutral_cwd(),
@@ -608,8 +613,8 @@ def run_board_discussion(paths: list[str] | None = None, deadline_ts: float | No
             model=agents_db.model_for(p["path"]),
         )
         own = own_post_ids.get(p["path"])
-        opened, liked, cmts = _parse_board_response(out, valid_ids)
-        likes = comments = 0
+        opened, liked, disliked, cmts = _parse_board_response(out, valid_ids)
+        likes = dislikes = comments = 0
         for pid in opened:
             if pid != own:                # 자기 글 조회는 점수에 안 친다
                 board_db.increment_views(pid)
@@ -617,18 +622,23 @@ def run_board_discussion(paths: list[str] | None = None, deadline_ts: float | No
             if pid != own:                # 좋아요 = 값싸고 주력인 투표 신호
                 board_db.like_post(pid)
                 likes += 1
+        for pid in disliked:
+            if pid != own:                # 싫어요 = 반대표(자기 글엔 못 누른다)
+                board_db.dislike_post(pid)
+                dislikes += 1
         for it in cmts:
             if it["post_id"] == own:      # 자기 글엔 안 단다
                 continue
             board_db.add_comment(it["post_id"], _author_of(p["path"], p["name"]), it["comment"])
             comments += 1
-        return likes, comments
+        return likes, dislikes, comments
 
     results = _board_parallel(projects, worker, "게시판 둘러보기")
     liked_n = sum(r[0] for r in results)
-    commented = sum(r[1] for r in results)
-    logger.info(f"[게시판] 좋아요 {liked_n}개 · 댓글 {commented}개")
-    return {"commented": commented, "liked": liked_n}
+    disliked_n = sum(r[1] for r in results)
+    commented = sum(r[2] for r in results)
+    logger.info(f"[게시판] 좋아요 {liked_n}개 · 싫어요 {disliked_n}개 · 댓글 {commented}개")
+    return {"commented": commented, "liked": liked_n, "disliked": disliked_n}
 
 
 def run_post_feedback(paths: list[str] | None = None, deadline_ts: float | None = None) -> dict:

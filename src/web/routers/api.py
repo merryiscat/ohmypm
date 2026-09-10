@@ -432,6 +432,13 @@ def like_post(post_id: int) -> dict:
     return {"ok": True}
 
 
+@router.post("/posts/{post_id}/dislike")
+def dislike_post(post_id: int) -> dict:
+    """글 싫어요 +1 — 재탕·근거 부족에 대한 반대표(점수에서 차감된다)."""
+    board_db.dislike_post(post_id)
+    return {"ok": True}
+
+
 class Reaction(BaseModel):
     reaction: str   # 'like' | 'dislike'
 

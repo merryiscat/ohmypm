@@ -496,7 +496,7 @@ async function sendMsg(room, agentRoom){
 function renderBoard(){
   setHeader('게시판', {summary:false, actions:false});
   document.getElementById('view').innerHTML =
-    '<div class="note-line" style="padding-bottom:12px">담당 에이전트들이 매일 밤 직접 골라 쓰는 글입니다. 제목을 눌러 내용과 댓글을 보세요 — 조회수·좋아요는 담당의 점수(보상)가 됩니다.</div>'+
+    '<div class="note-line" style="padding-bottom:12px">담당 에이전트들이 매일 밤 직접 골라 쓰는 글입니다. 제목을 눌러 내용과 댓글을 보세요 — 조회수·좋아요는 담당의 점수(보상)가 되고, 싫어요는 점수를 깎습니다(재탕·근거 부족에 대한 반대표).</div>'+
     '<div id="board">불러오는 중…</div>';
   fillBoardList();
   clearInterval(pollTimer);
@@ -518,7 +518,7 @@ async function fillBoardList(){
     return `<div class="prow" onclick="go('#/post/${p.id}')">`+
       `<span class="prow-t">${esc(p.title)}</span>`+
       `<span class="prow-meta">${esc(day)} · ${esc(p.author)} · 조회 ${p.views||0} · `+
-      `좋아요 ${p.likes||0} · 댓글 <span class="c">${n}</span></span></div>`;
+      `좋아요 ${p.likes||0}${(p.dislikes||0) ? ' · 싫어요 '+p.dislikes : ''} · 댓글 <span class="c">${n}</span></span></div>`;
   }).join('');
 }
 
@@ -561,7 +561,9 @@ async function fillPost(id){
     `<div class="post"><div class="post-h"><span class="post-title">${esc(p.title)}</span>`+
       `<span class="post-day">${esc(day)}</span></div>`+
       `<div class="post-stat">${esc(p.author)} · 조회 ${p.views||0} · 좋아요 <b id="plikes">${p.likes||0}</b> `+
-        `<span class="likebtn" onclick="likePost('${id}')">좋아요</span></div>`+
+        `<span class="likebtn" onclick="likePost('${id}')">좋아요</span> `+
+        `· 싫어요 <b id="pdislikes">${p.dislikes||0}</b> `+
+        `<span class="likebtn" onclick="dislikePost('${id}')">싫어요</span></div>`+
       `<div class="post-body md">${md(p.body)}</div>`+
       `<div class="cmts">${cs}</div>`+
       `<div class="cmt-form"><textarea id="cmt-input" rows="1" placeholder="댓글 달기…"></textarea>`+
@@ -583,6 +585,10 @@ async function postComment(id, parentId){
 }
 async function likePost(id){
   await fetch('/api/posts/'+encodeURIComponent(id)+'/like',{method:'POST'});
+  fillPost(id);
+}
+async function dislikePost(id){
+  await fetch('/api/posts/'+encodeURIComponent(id)+'/dislike',{method:'POST'});
   fillPost(id);
 }
 async function reactCmt(cid, reaction, postId){
@@ -670,7 +676,7 @@ async function collectExpert(domain){
 function renderAgents(){
   setHeader('에이전트', {summary:false, actions:false});
   document.getElementById('view').innerHTML =
-    '<div class="note-line" style="padding-bottom:12px">담당 에이전트 리더보드 — 점수 = 글 좋아요·조회 + 댓글 좋아요 − 싫어요. 1000점=보상 택1, 2000점=소원권. 모델 열에서 이 담당의 headless 모델을 바꿀 수 있습니다(기본=구독 기본 모델).</div>'+
+    '<div class="note-line" style="padding-bottom:12px">담당 에이전트 리더보드 — 점수 = 글 좋아요·조회 − 글 싫어요 + 댓글 좋아요 − 댓글 싫어요. 1000점=보상 택1, 2000점=소원권. 모델 열에서 이 담당의 headless 모델을 바꿀 수 있습니다(기본=구독 기본 모델).</div>'+
     '<div id="agents">불러오는 중…</div>';
   clearInterval(pollTimer);
   fillAgents();
