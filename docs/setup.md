@@ -1,20 +1,49 @@
 # ohmyPM 다른 PC 세팅 (재현 절차)
 
-> 이 저장소를 새 PC에서 세팅하는 절차. 환경은 **두 층**이다 —
-> ① `git clone`으로 딸려오는 프로젝트 로컬, ② 각 PC에 따로 세팅해야 하는 글로벌·런타임·시크릿.
-> 셸은 **PowerShell** 기준(상위 CLAUDE.md).
+> 이 저장소를 새 PC에서 세팅하는 절차. 셸은 **PowerShell** 기준(상위 CLAUDE.md).
 
-## 1. 클론 (① 프로젝트 로컬)
+## 전제 — PC마다 **독립 인스턴스**다 (2026-09-10 사용자 확정)
+
+각 PC의 ohmyPM은 **그 PC의 로컬 프로젝트만** 돌보는 별개의 PM이다. 코드·기획·규약은
+git으로 공유되지만 **기억은 공유되지 않는다**:
+
+| 공유됨 (git) | PC 전용 (gitignore) |
+|---|---|
+| `src/` · `prompts/` · `docs/` 기획·규약 | `.env` (관리 대상 루트·토큰) |
+| `CLAUDE.md` · `skills-lock.json` | `data/ohmypm.db` (프로젝트·이슈·게시판·일간보고) |
+| `scripts/` (경로 무관하게 동작) | `logs/` · `docs/status.md` · `log.md` · `mistakes.md` · `pending.md` |
+| | `.agents/` · `.claude/skills/` (lock으로 재설치) |
+
+따라서 새 PC는 **보드가 백지인 새 PM**으로 출발한다. 이전 PC의 이슈·게시판을 이어받고
+싶다면 그건 다른 설계(상태 공유)이고, 지금 구조가 아니다 — [plan.md](plan.md)의
+"SQLite 로컬 = 서버 없음" 결정 재검토가 선행돼야 한다.
+
+**하드코딩 금지 규칙**: 스크립트는 자기 위치(`%~dp0` / `BASH_SOURCE`)에서 저장소 경로를
+구한다. `C:\Users\<누구>\...` 같은 절대경로를 커밋하지 않는다 — 2026-09-10에 정확히 이것
+때문에 두 번째 PC에서 아무것도 안 돌았다.
+
+---
+
+## 1. 클론
 
 ```powershell
 git clone https://github.com/merryiscat/ohmypm.git
 cd ohmypm
 ```
 
-clone으로 오는 것: `docs/`(기획·레퍼런스·유즈케이스·규약) · `CLAUDE.md` · `skills-lock.json` · `.gitignore`.
-**안 오는 것**: 스킬 코드(재설치)·시크릿(.env)·위키 운영 파일(status/log/mistakes/pending — 로컬 전용).
+저장소는 어디에 둬도 된다(`D:\dev\project\ohmypm` 등). 스크립트가 경로를 가정하지 않는다.
 
-## 2. 글로벌 스킬 — 킥오프팩 (② `~/.claude/skills`)
+## 2. 런타임
+
+- **Python 3.11+ 및 uv** — 소스 실행 (상위 CLAUDE.md: `uv` 우선)
+- **Node.js 18+** — npx 스킬 설치용
+- **git** · **Claude Code CLI**(`claude`가 PATH에 있어야 함 — 판단·작업을 headless로 호출)
+
+```powershell
+uv sync
+```
+
+## 3. 글로벌 스킬 — 킥오프팩 (`~/.claude/skills`)
 
 킥오프 체인·screen-plan·grill·llmwiki 등은 글로벌이라 프로젝트에 안 딸린다:
 
@@ -22,10 +51,10 @@ clone으로 오는 것: `docs/`(기획·레퍼런스·유즈케이스·규약) �
 npx skills add merryiscat/kickoff_pack --all -g
 ```
 
-> 참고: 이 개발 PC는 팩 개발자 모드라 글로벌 스킬이 kickoff_pack에 **junction**으로 연결돼 있다.
-> 일반 PC는 위 명령으로 설치하면 된다.
+> 참고: 팩 개발 PC는 글로벌 스킬이 kickoff_pack에 **junction**으로 연결돼 있다.
+> 일반 PC는 위 명령으로 설치한다.
 
-## 3. 프로젝트 로컬 스킬 재설치 (skills-lock.json 기반)
+## 4. 프로젝트 로컬 스킬 재설치 (skills-lock.json 기반)
 
 ```powershell
 npx skills install
@@ -33,31 +62,49 @@ npx skills install
 
 → `fastapi` 스킬이 `.agents/skills`에 재설치된다(스킬 코드는 gitignore, **lock으로 재현** = npm lock 패턴).
 
-## 4. 런타임
+## 5. 세팅 wizard — `.env` + 부팅 자동실행
 
-- **Node.js 18+** — npx 스킬 설치용
-- **Python 3.11+ 및 uv** — 소스 실행 (상위 CLAUDE.md: `uv` 우선)
-- **git**
-- **lychee** (링크 점검, 구현 시) — `winget install lycheeverse.lychee` (또는 scoop/choco)
+```powershell
+scripts\setup_wizard.cmd
+```
 
-## 5. MCP 승인 (② 각 PC)
+5단계로 묻는다:
 
-Playwright·context7 MCP는 프로젝트에 등록돼 있으나 각 PC에서 승인 필요 — 화면 구현·검수 단계에서:
+1. **관리 대상 루트**(`PROJECTS_ROOT`) — 이 PC가 돌볼 프로젝트들의 상위 폴더. **PC마다 다르다.**
+   기본값이 없으므로 비워두면 프로젝트 발견이 경고 후 아무것도 안 잡는다
+2. 텔레그램 봇 토큰 (BotFather) — 비우면 알림만 조용히 건너뛰고 시스템은 정상 동작
+3. chat_id
+4. 발송 테스트
+5. 작업 스케줄러 등록 (로그인 시 `scripts\run_ohmypm.cmd` 자동 실행)
+
+수동으로 할 거면 `.env.example`을 `.env`로 복사해 채우고, 스케줄러는
+`scripts\register_task.cmd`를 관리자 권한으로 실행한다.
+
+## 6. 기동 · 확인
+
+```powershell
+scripts\run_ohmypm.cmd          # 대시보드 서버 (http://127.0.0.1:8123)
+```
+
+`data/ohmypm.db`는 첫 기동에 생성된다. 대시보드에서 발견된 프로젝트 목록이 보이면 성공.
+일간보고를 즉시 한 번 돌려보려면 `scripts\run_report_once.cmd`.
+
+## 7. MCP 승인 (각 PC)
+
+Playwright·context7 MCP는 프로젝트에 등록돼 있으나 각 PC에서 승인 필요:
 
 ```powershell
 claude   # 실행 후 pending MCP(playwright·context7) 승인
 ```
 
-## 6. 시크릿 (`.env` — 절대 커밋 안 함)
+## 8. 위키 운영 파일 (선택)
 
-**구현 단계에서 확정.** 텔레그램 봇 토큰 등. `.env.example`(생기면)을 복사해 채운다.
+`docs/status.md` · `log.md` · `mistakes.md` · `pending.md`는 git에 없다. 이 PC에서 처음
+작업할 때 새로 만든다(빈 파일이어도 됨) — 규약은 [conventions-wiki.md](conventions-wiki.md).
 
 ---
 
-## TODO (구현 후 이 문서 갱신)
+## 아직 안 된 것
 
-- 런타임 의존성 확정 (`pyproject.toml`/`requirements`) → 3·4번 구체화
-- `.env.example` 작성 (텔레그램 토큰·관리 대상 경로 등)
-- 실행 스케줄 등록 절차 (Windows scheduled tasks / cron + heartbeat) + `.cmd` 동봉
-- SQLite 초기화 스크립트
-- (선택) `setup.cmd` 반자동 세팅 스크립트 — clone에 안 딸리는 ②~⑥을 순서대로
+- **lychee**(링크 점검) — 구현되면 `winget install lycheeverse.lychee` 추가
+- **SQLite 초기화 스크립트** — 현재는 첫 기동 시 `src/db/schema.sql`로 자동 생성. 별도 스크립트 불요

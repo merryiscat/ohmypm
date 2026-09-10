@@ -183,11 +183,37 @@ finish() {
 # STAGES — author this section. One stage() per step the human takes.
 # ──────────────────────────────────────────────────────────────────────────
 
-TOTAL_STAGES=4
+TOTAL_STAGES=5
 
-banner "ohmyPM 운영 세팅 — 텔레그램 알림 + 부팅 자동실행"
+# 이 저장소의 위치는 PC마다 다르다 — 스크립트 자신의 경로에서 구한다(하드코딩 금지).
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+ENV_FILE="$REPO_ROOT/.env"   # cwd가 어디든 저장소의 .env에 쓴다
+# 작업 스케줄러에 넘길 Windows 경로 (Git Bash 경로 → C:\... 변환)
+if command -v cygpath >/dev/null 2>&1; then
+  TASK_CMD_WIN="$(cygpath -w "$SCRIPT_DIR/run_ohmypm.cmd")"
+else
+  TASK_CMD_WIN="$SCRIPT_DIR/run_ohmypm.cmd"
+fi
 
-# ── Stage 1: 텔레그램 봇 생성 · 토큰 ──────────────────────────────────────
+banner "ohmyPM 운영 세팅 — 관리 대상 + 텔레그램 알림 + 부팅 자동실행"
+
+# ── Stage 1: 관리 대상 루트 ───────────────────────────────────────────────
+stage "관리 대상 루트 (이 PC가 돌볼 프로젝트들)"
+say "ohmyPM은 이 폴더 **바로 아래** 폴더들을 프로젝트로 잡아 매일 돌봅니다."
+say "PC마다 다르므로 여기서 정합니다 — 다른 PC의 값을 따라갈 필요 없습니다."
+note "이 저장소 위치: $REPO_ROOT"
+note "예: $(dirname "$REPO_ROOT")  ← 보통 이 저장소의 상위 폴더"
+ask PROJECTS_ROOT "관리 대상 루트 경로 (예: D:\dev\project):"
+if [[ -n "$PROJECTS_ROOT" ]]; then
+  write_env PROJECTS_ROOT "$PROJECTS_ROOT"
+else
+  warn "비워둠 — .env의 PROJECTS_ROOT를 직접 채우기 전엔 프로젝트 발견이 돌지 않습니다."
+  SKIPPED+=(".env의 PROJECTS_ROOT 설정")
+fi
+
+
+# ── Stage 2: 텔레그램 봇 생성 · 토큰 ──────────────────────────────────────
 stage "텔레그램 봇 생성 · 토큰"
 say "폰으로 알림을 받으려면 텔레그램 봇 하나가 필요합니다(무료, 1분)."
 open_url "https://t.me/BotFather"
@@ -197,7 +223,7 @@ step "BotFather가 준 토큰(예: 123456789:ABCdef...)을 복사합니다"
 ask_secret TELEGRAM_BOT_TOKEN "봇 토큰 붙여넣기:"
 write_env TELEGRAM_BOT_TOKEN "$TELEGRAM_BOT_TOKEN"
 
-# ── Stage 2: chat_id 확인 ─────────────────────────────────────────────────
+# ── Stage 3: chat_id 확인 ─────────────────────────────────────────────────
 stage "chat_id 확인 (누구에게 보낼지)"
 say "봇이 '당신에게' 보내도록 chat_id를 알아냅니다."
 step "방금 만든 봇을 텔레그램에서 열고 아무 메시지나 한 번 보내세요 (예: hi)"
@@ -208,7 +234,7 @@ note "예: ...\"chat\":{\"id\":123456789,... → 123456789"
 ask TELEGRAM_CHAT_ID "chat_id 붙여넣기:"
 write_env TELEGRAM_CHAT_ID "$TELEGRAM_CHAT_ID"
 
-# ── Stage 3: 발송 테스트 ──────────────────────────────────────────────────
+# ── Stage 4: 발송 테스트 ──────────────────────────────────────────────────
 stage "발송 테스트"
 say "실제로 폰에 도착하는지 확인합니다."
 if curl -s "https://api.telegram.org/bot$TELEGRAM_BOT_TOKEN/sendMessage" \
@@ -221,14 +247,14 @@ else
 fi
 pause "확인했으면 Enter"
 
-# ── Stage 4: 부팅 시 자동 실행 등록 (작업 스케줄러) ──────────────────────
+# ── Stage 5: 부팅 시 자동 실행 등록 (작업 스케줄러) ──────────────────────
 stage "부팅 시 자동 실행 등록"
 say "PC 로그인할 때마다 대시보드 서버가 자동으로 켜지게 등록합니다."
 say "서버가 켜져 있어야 매일 08:00 자동 스캔 + 텔레그램 요약이 돕니다."
-note "등록 대상: scripts\\run_ohmypm.cmd → 로그인 시(onlogon) 실행"
+note "등록 대상: $TASK_CMD_WIN → 로그인 시(onlogon) 실행"
 if confirm "지금 작업 스케줄러에 등록할까요?"; then
   if MSYS_NO_PATHCONV=1 schtasks.exe /create /tn "ohmyPM" \
-        /tr "C:\\Users\\minhy\\project\\ohmyPM\\scripts\\run_ohmypm.cmd" \
+        /tr "$TASK_CMD_WIN" \
         /sc onlogon /f; then
     say "등록 완료 — 다음 로그인부터 자동 실행됩니다."
     say "지금 바로 켜려면 새 창에서:  scripts\\run_ohmypm.cmd"

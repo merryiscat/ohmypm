@@ -15,8 +15,13 @@ def discover_projects() -> list[dict]:
     docs 없는 프로젝트야말로 세팅 대상이라 docs 조건을 없앰). 숨김 폴더(.venv 등)와
     사용자 제외 폴더만 건너뛴다. docs 유무는 has_wiki로 기록해 후속 단계가 참고한다.
     """
-    root = Path(settings.projects_root)
     found: list[dict] = []
+    if not settings.projects_root:
+        # PC마다 다른 값이라 기본값이 없다 — 미설정이면 cwd를 훑지 않고 조용히 멈춘다
+        logger.warning("[발견] PROJECTS_ROOT 미설정 — .env에 관리 대상 루트를 지정하세요")
+        return found
+
+    root = Path(settings.projects_root)
     if not root.is_dir():
         logger.warning(f"[발견] projects_root 없음: {root}")
         return found

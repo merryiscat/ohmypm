@@ -20,7 +20,9 @@ class Settings(BaseSettings):
 
     # --- 관리 대상 ---
     # 이 폴더 하위의 프로젝트들을 매일 돌본다
-    projects_root: str = r"C:\Users\minhy\project"
+    # PC마다 다르므로 기본값을 두지 않는다 — .env의 PROJECTS_ROOT로 각 PC가 정한다
+    # (setup_wizard가 물어본다). 비어 있으면 프로젝트 발견이 경고 후 건너뛴다.
+    projects_root: str = ""
 
     # --- 로컬 저장 ---
     db_path: str = "data/ohmypm.db"  # SQLite 파일 경로

@@ -5,7 +5,7 @@
 - [references.md](references.md) — 레퍼런스: 기능별 keep 표 23 + 드랍 18(사유) + 미검증 83 (재검수 종결)
 - [usecases.md](usecases.md) — 킥오프 2부: 18케이스(해피/배드/필요기술) + 공통전제 + 선결 과제
 - [deliverables.md](deliverables.md) — 산출물 대장: 단계(기획·설계·구축·검증·운영)별 산출물 기준표, PM이 단계 판단·요구에 쓴다
-- [setup.md](setup.md) — 다른 PC 재현 절차 (clone·글로벌 스킬·스킬 재설치·런타임·MCP·시크릿)
+- [setup.md](setup.md) — 다른 PC 재현 절차 (PC마다 **독립 인스턴스** 전제, wizard 5단계, 하드코딩 금지 규칙)
 
 ## 위키 운영
 - [conventions-wiki.md](conventions-wiki.md) — 위키 상세 규약 (raw 보존, asserted/inferred, 다이어트 기준)
