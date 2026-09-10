@@ -57,7 +57,10 @@ settings = Settings()
 
 # 로깅 설정 (loguru) — 콘솔 + logs/ 일별 파일
 logger.remove()
-logger.add(sys.stderr, level=settings.log_level)
+# pythonw(창 없는 실행)에는 stderr가 없다(None) — 그대로 넘기면 loguru가 죽는다.
+# 파일 싱크는 아래에서 따로 붙으므로 콘솔 싱크만 건너뛰면 된다.
+if sys.stderr is not None:
+    logger.add(sys.stderr, level=settings.log_level)
 logger.add(
     "logs/ohmypm_{time:YYYY-MM-DD}.log",
     rotation="00:00",     # 매일 자정 새 파일

@@ -78,24 +78,44 @@ scripts\setup_wizard.cmd
 2. 텔레그램 봇 토큰 (BotFather) — 비우면 알림만 조용히 건너뛰고 시스템은 정상 동작
 3. chat_id
 4. 발송 테스트
-5. 작업 스케줄러 등록 (로그인 시 `scripts\run_ohmypm.cmd` 자동 실행)
+5. 로그인 시 자동 실행 등록 (시작프로그램 바로가기 → 창 없이 기동)
 
 wizard는 대화형이라 **터미널에서 사람이 직접** 실행해야 한다.
-수동으로 할 거면 `.env.example`을 `.env`로 복사해 채우고, 스케줄러는
-`scripts\register_task.cmd`를 관리자 권한으로 실행한다.
+수동으로 할 거면 `.env.example`을 `.env`로 복사해 채우고, 자동 실행은 아래 §6.
 
 > `.env`에 **모델에 없는 키가 있으면 서버가 아예 안 뜬다**(pydantic-settings가
 > `extra_forbidden`으로 거부). `.env.example`은 항상 `src/config/settings.py`와 맞춰 둔다 —
 > 2026-09-10에 이미 제거된 `HEARTBEAT_SEC`가 남아 있어 새 PC가 그대로 밟았다.
 
-## 6. 기동 · 확인
+## 6. 기동 · 자동 실행 · 종료
 
 ```powershell
-scripts\run_ohmypm.cmd          # 대시보드 서버 (http://127.0.0.1:8123)
+scripts\run_ohmypm.cmd          # 창 + 실시간 로그로 기동 (http://127.0.0.1:8123)
+scripts\stop_ohmypm.cmd         # 종료 (8123 리스닝 프로세스를 잡아 끈다)
 ```
 
 `data/ohmypm.db`는 첫 기동에 생성된다. 대시보드에서 발견된 프로젝트 목록이 보이면 성공.
 일간보고를 즉시 한 번 돌려보려면 `scripts\run_report_once.cmd`.
+
+**로그인 시 자동 실행**(창 없이):
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts\startup_shortcut.ps1
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts\startup_shortcut.ps1 -Remove   # 해제
+```
+
+시작프로그램 폴더에 `ohmyPM.lnk`를 만든다. 대상은 `.venv\Scripts\pythonw.exe`
+(GUI 서브시스템 = 콘솔 창이 아예 없음) + `scripts\run_ohmypm_hidden.py`.
+창이 없으니 로그는 `logs\server_console.log`로 간다.
+
+> **막다른 길 둘 (2026-09-10 실측, 되풀이 금지)**
+> - `schtasks /create /sc onlogon`은 **관리자 권한**을 요구한다(액세스 거부). 시작프로그램
+>   폴더는 사용자 자기 것이라 승격이 필요 없다. `scripts\register_task.cmd`는 관리자로
+>   돌릴 때를 위한 대안으로만 남겨 둔다.
+> - **VBS 런처는 쓰지 마라.** 최신 Windows 11(10.0.26200)에서 Windows Script Host가
+>   `WScript.Echo` 한 줄에도 "메모리 리소스가 부족" 오류로 죽는다. VBScript가 기능 분리된
+>   탓이다. 단 `WScript.Shell` **COM 객체**는 멀쩡해서 .lnk 생성에는 쓸 수 있다
+>   (깨진 건 `wscript.exe` 실행기뿐).
 
 ## 7. MCP 승인 (각 PC)
 
@@ -117,8 +137,14 @@ claude   # 실행 후 pending MCP(playwright·context7) 승인
 1~4·6번을 이 PC에서 실제로 돌려 확인했다 — `uv sync` → `.env` 작성 →
 `npx skills experimental_install`(fastapi 1개) → `scripts\run_ohmypm.cmd`.
 `data/ohmypm.db` 자동 생성, `PROJECTS_ROOT=D:\dev\project` 하위 **8개 프로젝트 발견**,
-`GET /api/projects` 200 확인. 5번 wizard는 대화형이라 사람이 직접 돌려야 해 미검증
-(`.env`는 손으로 썼다).
+`GET /api/projects` 200 확인.
+
+6번 자동 실행도 실측했다 — `startup_shortcut.ps1`로 등록 후 바로가기를 직접 실행해
+창 없이 기동(`pythonw`) + HTTP 200 확인.
+
+5번 wizard는 대화형(TTY 필요)이라 **텔레그램 3단계와 등록 실행은 미검증**이다. 다만
+wizard가 쓰는 경로 산출은 따로 확인했다 — cwd를 `C:\`로 두고도 `REPO_ROOT`가 저장소로
+잡히고, `ENV_FILE`이 저장소의 `.env`, `write_env` 2회에 1줄(멱등). `.env`는 손으로 썼다.
 
 ## 아직 안 된 것
 

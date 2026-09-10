@@ -189,12 +189,6 @@ TOTAL_STAGES=5
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 ENV_FILE="$REPO_ROOT/.env"   # cwd가 어디든 저장소의 .env에 쓴다
-# 작업 스케줄러에 넘길 Windows 경로 (Git Bash 경로 → C:\... 변환)
-if command -v cygpath >/dev/null 2>&1; then
-  TASK_CMD_WIN="$(cygpath -w "$SCRIPT_DIR/run_ohmypm.cmd")"
-else
-  TASK_CMD_WIN="$SCRIPT_DIR/run_ohmypm.cmd"
-fi
 
 banner "ohmyPM 운영 세팅 — 관리 대상 + 텔레그램 알림 + 부팅 자동실행"
 
@@ -247,25 +241,27 @@ else
 fi
 pause "확인했으면 Enter"
 
-# ── Stage 5: 부팅 시 자동 실행 등록 (작업 스케줄러) ──────────────────────
-stage "부팅 시 자동 실행 등록"
-say "PC 로그인할 때마다 대시보드 서버가 자동으로 켜지게 등록합니다."
-say "서버가 켜져 있어야 매일 08:00 자동 스캔 + 텔레그램 요약이 돕니다."
-note "등록 대상: $TASK_CMD_WIN → 로그인 시(onlogon) 실행"
-if confirm "지금 작업 스케줄러에 등록할까요?"; then
-  if MSYS_NO_PATHCONV=1 schtasks.exe /create /tn "ohmyPM" \
-        /tr "$TASK_CMD_WIN" \
-        /sc onlogon /f; then
-    say "등록 완료 — 다음 로그인부터 자동 실행됩니다."
-    say "지금 바로 켜려면 새 창에서:  scripts\\run_ohmypm.cmd"
+# ── Stage 5: 로그인 시 자동 실행 등록 (시작프로그램) ─────────────────────
+stage "로그인 시 자동 실행 등록"
+say "PC에 로그인할 때마다 대시보드 서버가 자동으로 켜지게 등록합니다."
+say "서버가 켜져 있어야 매일 정시 스캔 + 일간보고 + 텔레그램 요약이 돕니다."
+note "방식: 시작프로그램 바로가기 → pythonw.exe (창 없이 실행, 관리자 권한 불필요)"
+note "  ※ schtasks는 관리자 권한을 요구하고, VBS 런처는 최신 Windows에서 죽는다"
+note "     (2026-09-10 실측). 그래서 둘 다 안 쓴다."
+if confirm "지금 등록할까요?"; then
+  if MSYS_NO_PATHCONV=1 powershell.exe -NoProfile -ExecutionPolicy Bypass \
+        -File "$(cygpath -w "$SCRIPT_DIR/startup_shortcut.ps1" 2>/dev/null || echo "$SCRIPT_DIR/startup_shortcut.ps1")"; then
+    say "등록 완료 — 다음 로그인부터 창 없이 자동 실행됩니다."
+    say "지금 바로 켜려면:  scripts\run_ohmypm.cmd   (창+실시간 로그)"
+    say "끄려면:            scripts\stop_ohmypm.cmd"
   else
-    warn "등록 실패 — 관리자 권한이 필요할 수 있습니다."
-    note "수동: scripts\\register_task.cmd 를 관리자 권한으로 실행하세요."
-    SKIPPED+=("작업 스케줄러 등록 (scripts\\register_task.cmd 관리자 실행)")
+    warn "등록 실패 — 아래 명령을 직접 실행해 보세요."
+    note "powershell -NoProfile -ExecutionPolicy Bypass -File scripts\startup_shortcut.ps1"
+    SKIPPED+=("로그인 자동 실행 등록 (scripts\startup_shortcut.ps1)")
   fi
 else
-  note "나중에 등록하려면: scripts\\register_task.cmd 실행"
-  SKIPPED+=("작업 스케줄러 등록")
+  note "나중에 등록하려면: powershell -ExecutionPolicy Bypass -File scripts\startup_shortcut.ps1"
+  SKIPPED+=("로그인 자동 실행 등록")
 fi
 
 finish
