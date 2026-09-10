@@ -21,8 +21,8 @@ def upsert_issue(
     fp = _fingerprint(project, kind, title)
     db = get_db()
     db.execute(
-        "INSERT INTO issues (project, kind, title, due, source, fingerprint) "
-        "VALUES (?, ?, ?, ?, ?, ?) "
+        "INSERT INTO issues (project, kind, title, due, source, fingerprint, created_at) "
+        "VALUES (?, ?, ?, ?, ?, ?, datetime('now','localtime')) "
         "ON CONFLICT(fingerprint) DO UPDATE SET due=excluded.due",
         (project, kind, title, due, source, fp),
     )
@@ -43,8 +43,9 @@ def add_done(project: str, title: str, day: str) -> None:
     db = get_db()
     db.execute(
         "INSERT INTO issues (project, kind, title, due, source, fingerprint, status, "
-        "verdict, review_reason) "
-        "VALUES (?, 'done', ?, ?, 'daily_report', ?, 'resolved', 'resolved', '당일 완결(일간보고)') "
+        "verdict, review_reason, created_at) "
+        "VALUES (?, 'done', ?, ?, 'daily_report', ?, 'resolved', 'resolved', '당일 완결(일간보고)', "
+        "datetime('now','localtime')) "
         "ON CONFLICT(fingerprint) DO NOTHING",
         (project, title, day, fp),
     )
@@ -130,12 +131,12 @@ def apply_verdict(
     if verdict == "reclass" and kind is not None:
         db.execute(
             "UPDATE issues SET verdict=?, kind=?, due=?, review_reason=?, "
-            "reviewed_at=datetime('now') WHERE id=?",
+            "reviewed_at=datetime('now','localtime') WHERE id=?",
             (verdict, kind, due, reason, issue_id),
         )
     else:
         db.execute(
-            "UPDATE issues SET verdict=?, review_reason=?, reviewed_at=datetime('now') "
+            "UPDATE issues SET verdict=?, review_reason=?, reviewed_at=datetime('now','localtime') "
             "WHERE id=?",
             (verdict, reason, issue_id),
         )

@@ -13,7 +13,8 @@ def add_message(room: str, author: str, body: str) -> dict:
     """방에 글 한 줄 추가. 방금 넣은 행을 딕셔너리로 돌려준다."""
     db = get_db()
     cur = db.execute(
-        "INSERT INTO messages (room, author, body) VALUES (?, ?, ?)",
+        "INSERT INTO messages (room, author, body, created_at) "
+        "VALUES (?, ?, ?, datetime('now','localtime'))",
         (room, author, body),
     )
     db.commit()

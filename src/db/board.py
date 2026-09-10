@@ -14,7 +14,8 @@ def add_post(author: str, title: str, body: str, project: str | None = None,
     """글 하나 등록. 방금 넣은 행 반환."""
     db = get_db()
     cur = db.execute(
-        "INSERT INTO posts (board, project, author, title, body, day) VALUES (?, ?, ?, ?, ?, ?)",
+        "INSERT INTO posts (board, project, author, title, body, day, created_at) "
+        "VALUES (?, ?, ?, ?, ?, ?, datetime('now','localtime'))",
         (board, project, author, title, body, day),
     )
     db.commit()
@@ -25,7 +26,8 @@ def add_comment(post_id: int, author: str, body: str, parent_id: int | None = No
     """댓글 하나 등록. parent_id 주면 대댓글(그 댓글에 달린 답글)."""
     db = get_db()
     cur = db.execute(
-        "INSERT INTO comments (post_id, author, body, parent_id) VALUES (?, ?, ?, ?)",
+        "INSERT INTO comments (post_id, author, body, parent_id, created_at) "
+        "VALUES (?, ?, ?, ?, datetime('now','localtime'))",
         (post_id, author, body, parent_id),
     )
     db.commit()

@@ -17,7 +17,8 @@ def register(project: str, port: int, label: str = "", start_cmd: str = "") -> d
         pid = existing["id"]
     else:
         cur = db.execute(
-            "INSERT INTO ports (project, port, label, start_cmd) VALUES (?, ?, ?, ?)",
+            "INSERT INTO ports (project, port, label, start_cmd, created_at) "
+            "VALUES (?, ?, ?, ?, datetime('now','localtime'))",
             (project, port, label, start_cmd),
         )
         pid = cur.lastrowid

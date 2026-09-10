@@ -14,7 +14,7 @@ import re
 import subprocess
 import time
 from concurrent.futures import ThreadPoolExecutor
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timedelta
 
 from loguru import logger
 
@@ -90,8 +90,9 @@ def _has_activity(path: str) -> bool:
         except Exception:
             return True
     # 비git 폴더는 커밋 신호가 없다 — 매일 점검(콜 낭비) 대신 새 이슈 신호만 본다
-    # 새 이슈: issues.created_at은 SQLite datetime('now') = UTC 문자열 → UTC로 비교
-    cutoff = (datetime.now(timezone.utc) - timedelta(hours=24)).strftime("%Y-%m-%d %H:%M:%S")
+    # 새 이슈: issues.created_at은 로컬시각 문자열(2026-09-10 UTC→로컬 통일) → 로컬로 비교.
+    # 예전엔 저장이 UTC라 여기서만 UTC로 맞췄는데, 그 보정을 잊은 자리가 생기면 9시간 어긋난다.
+    cutoff = (datetime.now() - timedelta(hours=24)).strftime("%Y-%m-%d %H:%M:%S")
     return any(
         i["project"] == path and (i.get("created_at") or "") >= cutoff
         for i in issues_db.list_issues()

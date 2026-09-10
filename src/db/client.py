@@ -79,3 +79,58 @@ def _migrate(db: sqlite3.Connection) -> None:
         ("mentor_of", "mentor_of TEXT"),     # 멘토 프로젝트 path(후배지명)
         ("rest_until", "rest_until TEXT"),   # 1일안식 만료일
     ))
+
+    _migrate_timestamps_to_localtime(db)
+
+
+# 2026-09-10 이전에 쌓인 시각은 SQLite datetime('now') = **UTC**로 저장됐다. 파이썬 쪽은
+# datetime.now() = 로컬을 써서 한 DB 안에 두 시간대가 섞여 있었고(대시보드가 9시간 어긋나 보임),
+# 저장을 로컬로 통일하면서 기존 행도 한 번 옮겨야 이력이 안 끊긴다.
+_TZ_MIGRATION_KEY = "migration.tz_localtime_v1"
+
+# (테이블, 시각 열) — schema.sql의 TEXT 시각 열 전부. 새 시각 열을 만들면 여기에도 넣는다.
+_TS_COLUMNS = (
+    ("projects", "last_scan"),
+    ("issues", "created_at"),
+    ("issues", "reviewed_at"),
+    ("autolog", "created_at"),
+    ("messages", "created_at"),
+    ("posts", "created_at"),
+    ("comments", "created_at"),
+    ("agent_profiles", "updated_at"),
+    ("ports", "created_at"),
+)
+
+
+def _migrate_timestamps_to_localtime(db: sqlite3.Connection) -> None:
+    """기존 UTC 시각을 로컬로 한 번만 이동(멱등 — alerts에 마커를 남긴다).
+
+    두 번 돌면 +18시간이 되므로 마커 확인이 핵심이다. `datetime(col,'localtime')`이
+    NULL을 주는 행(형식이 시각이 아님)은 건드리지 않는다 — 데이터를 지우느니 그대로 둔다.
+    """
+    done = db.execute(
+        "SELECT value FROM alerts WHERE key = ?", (_TZ_MIGRATION_KEY,)
+    ).fetchone()
+    if done:
+        return
+
+    moved = 0
+    for table, col in _TS_COLUMNS:
+        if not db.execute(
+            "SELECT name FROM sqlite_master WHERE type='table' AND name=?", (table,)
+        ).fetchone():
+            continue
+        cur = db.execute(
+            f"UPDATE {table} SET {col} = datetime({col}, 'localtime') "
+            f"WHERE {col} IS NOT NULL AND datetime({col}, 'localtime') IS NOT NULL"
+        )
+        moved += cur.rowcount or 0
+
+    db.execute(
+        "INSERT OR REPLACE INTO alerts (key, value) VALUES (?, datetime('now','localtime'))",
+        (_TZ_MIGRATION_KEY,),
+    )
+    if moved:
+        from loguru import logger
+
+        logger.info(f"[마이그레이션] 시각 {moved}건을 UTC→로컬로 이동(1회)")

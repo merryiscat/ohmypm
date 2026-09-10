@@ -8,7 +8,7 @@ def upsert_project(path: str, name: str, has_wiki: bool) -> None:
     db = get_db()
     db.execute(
         "INSERT INTO projects (path, name, has_wiki, last_scan) "
-        "VALUES (?, ?, ?, datetime('now')) "
+        "VALUES (?, ?, ?, datetime('now','localtime')) "
         "ON CONFLICT(path) DO UPDATE SET "
         "  name=excluded.name, has_wiki=excluded.has_wiki, last_scan=excluded.last_scan",
         (path, name, int(has_wiki)),

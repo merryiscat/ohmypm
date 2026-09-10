@@ -67,7 +67,7 @@ def upsert_profile(project: str, name: str) -> None:
     """프로필 없으면 생성(이름=프로젝트명 기본)."""
     db = get_db()
     db.execute(
-        "INSERT INTO agent_profiles (project, name, updated_at) VALUES (?, ?, datetime('now')) "
+        "INSERT INTO agent_profiles (project, name, updated_at) VALUES (?, ?, datetime('now','localtime')) "
         "ON CONFLICT(project) DO NOTHING",
         (project, name),
     )
@@ -95,7 +95,7 @@ def refresh_scores(name_by_project: dict[str, str]) -> None:
         earned = scores.get(name, 0)
         current = max(0, earned - (prof.get("baseline") or 0))
         db.execute(
-            "UPDATE agent_profiles SET points = ?, updated_at = datetime('now') WHERE project = ?",
+            "UPDATE agent_profiles SET points = ?, updated_at = datetime('now','localtime') WHERE project = ?",
             (current, path),
         )
     db.commit()
@@ -122,7 +122,7 @@ def append_note(project: str, line: str, max_chars: int = NOTE_MAX) -> None:
     merged = (entry + ("\n" + old if old else ""))[:max_chars]
     db = get_db()
     db.execute(
-        "UPDATE agent_profiles SET note = ?, updated_at = datetime('now') WHERE project = ?",
+        "UPDATE agent_profiles SET note = ?, updated_at = datetime('now','localtime') WHERE project = ?",
         (merged, project),
     )
     db.commit()
@@ -144,7 +144,7 @@ def set_mentor_of(junior_project: str, mentor_project: str) -> None:
     """후배지명 — 후배 프로필에 멘토 프로젝트 path를 기록(멘토 학습 상속 링크)."""
     db = get_db()
     db.execute(
-        "UPDATE agent_profiles SET mentor_of = ?, updated_at = datetime('now') WHERE project = ?",
+        "UPDATE agent_profiles SET mentor_of = ?, updated_at = datetime('now','localtime') WHERE project = ?",
         (mentor_project, junior_project),
     )
     db.commit()
@@ -171,7 +171,7 @@ def take_reward(project: str, name: str, reward: str,
     prof = get_profile(project) or {}
     hist = (prof.get("rewards") or "")
     fields = ["baseline = ?", "points = 0", "held = 0", "reward = ?", "rewards = ?",
-              "updated_at = datetime('now')"]
+              "updated_at = datetime('now','localtime')"]
     params: list = [earned, reward, (hist + "\n" + reward).strip()]
     if new_name:
         fields.append("name = ?"); params.append(new_name)
@@ -223,7 +223,7 @@ def set_model(project: str, model: str | None) -> None:
     """이 프로젝트 담당의 headless 모델 지정. 빈 값/None이면 기본으로 되돌림."""
     db = get_db()
     db.execute(
-        "UPDATE agent_profiles SET model = ?, updated_at = datetime('now') WHERE project = ?",
+        "UPDATE agent_profiles SET model = ?, updated_at = datetime('now','localtime') WHERE project = ?",
         (model or None, project),
     )
     db.commit()
@@ -286,7 +286,7 @@ def grant_wish(project: str, name: str, wish: str) -> None:
     db = get_db()
     db.execute(
         "UPDATE agent_profiles SET baseline = ?, points = 0, wish = ?, "
-        "updated_at = datetime('now') WHERE project = ?",
+        "updated_at = datetime('now','localtime') WHERE project = ?",
         (earned, wish, project),
     )
     db.commit()

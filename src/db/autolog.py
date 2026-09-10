@@ -12,7 +12,8 @@ def log_action(
     """자율로 한 일 기록. commit_sha가 롤백 단위."""
     db = get_db()
     db.execute(
-        "INSERT INTO autolog (project, action, commit_sha, reason) VALUES (?, ?, ?, ?)",
+        "INSERT INTO autolog (project, action, commit_sha, reason, created_at) "
+        "VALUES (?, ?, ?, ?, datetime('now','localtime'))",
         (project, action, commit_sha, reason),
     )
     db.commit()

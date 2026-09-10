@@ -24,7 +24,7 @@ CREATE TABLE IF NOT EXISTS issues (
     review_reason TEXT,                  -- 판정 한 줄 근거
     reviewed_at   TEXT,                  -- 판정 시각 (ISO8601)
     easy_title    TEXT,                  -- 쉬운 제목(완결 검증이 부여) — 화면은 이걸 우선 표시
-    created_at    TEXT DEFAULT (datetime('now'))
+    created_at    TEXT DEFAULT (datetime('now','localtime'))
 );
 
 -- 3) 자율 행동 로그 (케이스 15 — 롤백 단위)
@@ -34,7 +34,7 @@ CREATE TABLE IF NOT EXISTS autolog (
     action     TEXT NOT NULL,          -- 화이트리스트 행동 유형
     commit_sha TEXT,                   -- 되돌림 단위
     reason     TEXT,
-    created_at TEXT DEFAULT (datetime('now'))
+    created_at TEXT DEFAULT (datetime('now','localtime'))
 );
 
 -- 4) 알림 설정 + 화이트리스트 (케이스 13 + 자율경계)
@@ -49,7 +49,7 @@ CREATE TABLE IF NOT EXISTS messages (
     room       TEXT NOT NULL,          -- 'global'(전체 채팅방) | 프로젝트 path(프로젝트 룸)
     author     TEXT NOT NULL,          -- 'user' | 에이전트 이름(scanner/judge/pm…)
     body       TEXT NOT NULL,
-    created_at TEXT DEFAULT (datetime('now'))
+    created_at TEXT DEFAULT (datetime('now','localtime'))
 );
 CREATE INDEX IF NOT EXISTS idx_messages_room ON messages(room, id);
 
@@ -65,7 +65,7 @@ CREATE TABLE IF NOT EXISTS posts (
     day        TEXT,                           -- 논리적 날짜(YYYY-MM-DD) — 그날 글 묶기
     views      INTEGER DEFAULT 0,              -- 조회수 (인센티브)
     likes      INTEGER DEFAULT 0,              -- 좋아요 (인센티브)
-    created_at TEXT DEFAULT (datetime('now'))
+    created_at TEXT DEFAULT (datetime('now','localtime'))
 );
 CREATE TABLE IF NOT EXISTS comments (
     id         INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -75,7 +75,7 @@ CREATE TABLE IF NOT EXISTS comments (
     parent_id  INTEGER,                        -- 대댓글이면 부모 댓글 id (없으면 최상위)
     likes      INTEGER DEFAULT 0,
     dislikes   INTEGER DEFAULT 0,
-    created_at TEXT DEFAULT (datetime('now'))
+    created_at TEXT DEFAULT (datetime('now','localtime'))
 );
 CREATE INDEX IF NOT EXISTS idx_posts_board ON posts(board, id);
 CREATE INDEX IF NOT EXISTS idx_comments_post ON comments(post_id, id);
@@ -107,5 +107,5 @@ CREATE TABLE IF NOT EXISTS ports (
     port       INTEGER NOT NULL,
     label      TEXT,              -- 예: '웹 대시보드', 'API'
     start_cmd  TEXT,              -- 실행 관리용 등록 명령(없으면 start 불가)
-    created_at TEXT DEFAULT (datetime('now'))
+    created_at TEXT DEFAULT (datetime('now','localtime'))
 );
