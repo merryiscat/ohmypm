@@ -1,4 +1,6 @@
 @echo off
-REM ohmyPM ?´ì˜ ?¸íŒ… wizard ?¤í–‰ê¸?(PowerShell/?ìƒ‰ê¸°ì—???´ê±¸ ?¤í–‰).
-REM Git Bashë¡?setup_wizard.sh ë¥??Œë¦°??
-"C:\Program Files\Git\bin\bash.exe" "%~dp0setup_wizard.sh"
+REM ohmyPM setup wizard launcher (run from PowerShell or Explorer).
+REM Runs setup_wizard.sh under Git Bash.
+set "GITBASH=C:\Program Files\Git\bin\bash.exe"
+if not exist "%GITBASH%" set "GITBASH=bash"
+"%GITBASH%" "%~dp0setup_wizard.sh"

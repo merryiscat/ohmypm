@@ -57,10 +57,13 @@ npx skills add merryiscat/kickoff_pack --all -g
 ## 4. 프로젝트 로컬 스킬 재설치 (skills-lock.json 기반)
 
 ```powershell
-npx skills install
+npx skills experimental_install
 ```
 
 → `fastapi` 스킬이 `.agents/skills`에 재설치된다(스킬 코드는 gitignore, **lock으로 재현** = npm lock 패턴).
+
+> 명령 이름 주의: lock 복원은 `add`/`install`이 아니라 **`experimental_install`**이다
+> (2026-09-10 실측 — `npx skills install`은 `add`로 해석돼 "Missing required argument: source"로 죽는다).
 
 ## 5. 세팅 wizard — `.env` + 부팅 자동실행
 
@@ -77,8 +80,13 @@ scripts\setup_wizard.cmd
 4. 발송 테스트
 5. 작업 스케줄러 등록 (로그인 시 `scripts\run_ohmypm.cmd` 자동 실행)
 
+wizard는 대화형이라 **터미널에서 사람이 직접** 실행해야 한다.
 수동으로 할 거면 `.env.example`을 `.env`로 복사해 채우고, 스케줄러는
 `scripts\register_task.cmd`를 관리자 권한으로 실행한다.
+
+> `.env`에 **모델에 없는 키가 있으면 서버가 아예 안 뜬다**(pydantic-settings가
+> `extra_forbidden`으로 거부). `.env.example`은 항상 `src/config/settings.py`와 맞춰 둔다 —
+> 2026-09-10에 이미 제거된 `HEARTBEAT_SEC`가 남아 있어 새 PC가 그대로 밟았다.
 
 ## 6. 기동 · 확인
 
@@ -103,6 +111,14 @@ claude   # 실행 후 pending MCP(playwright·context7) 승인
 작업할 때 새로 만든다(빈 파일이어도 됨) — 규약은 [conventions-wiki.md](conventions-wiki.md).
 
 ---
+
+## 검증 (2026-09-10, `D:\dev\project\ohmypm`)
+
+1~4·6번을 이 PC에서 실제로 돌려 확인했다 — `uv sync` → `.env` 작성 →
+`npx skills experimental_install`(fastapi 1개) → `scripts\run_ohmypm.cmd`.
+`data/ohmypm.db` 자동 생성, `PROJECTS_ROOT=D:\dev\project` 하위 **8개 프로젝트 발견**,
+`GET /api/projects` 200 확인. 5번 wizard는 대화형이라 사람이 직접 돌려야 해 미검증
+(`.env`는 손으로 썼다).
 
 ## 아직 안 된 것
 

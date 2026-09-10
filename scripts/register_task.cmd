@@ -1,13 +1,13 @@
 @echo off
-REM ohmyPM ?€?œë³´???œë²„ë¥?Windows ë¡œê·¸?????ë™ ?¤í–‰?˜ë„ë¡??‘ì—… ?¤ì?ì¤„ëŸ¬???±ë¡.
-REM wizard??5ë²ˆì§¸ ?¨ê³„ê°€ ?´ê±¸ ?¸ì¶œ?œë‹¤. ì§ì ‘ ?¤í–‰?´ë„ ?œë‹¤(ê´€ë¦¬ì ê¶Œì¥).
+REM Register the ohmyPM dashboard server to start at Windows logon.
+REM Stage 5 of setup_wizard calls this; can also be run directly (as admin).
 schtasks /create /tn "ohmyPM" /tr "\"%~dp0run_ohmypm.cmd\"" /sc onlogon /f
 if %errorlevel%==0 (
   echo.
-  echo [OK] ?±ë¡ ?„ë£Œ - ?¤ìŒ ë¡œê·¸?¸ë????€?œë³´???œë²„ê°€ ?ë™?¼ë¡œ ì¼œì§‘?ˆë‹¤.
-  echo      ì§€ê¸?ë°”ë¡œ ì¼œë ¤ë©? scripts\run_ohmypm.cmd ë¥??¤í–‰?˜ì„¸??
+  echo [OK] Registered - the server starts at your next logon.
+  echo      To start it right now: scripts\run_ohmypm.cmd
 ) else (
   echo.
-  echo [?¤íŒ¨] ?±ë¡ ?¤íŒ¨ - ê´€ë¦¬ì ê¶Œí•œ?¼ë¡œ ?¤ì‹œ ?¤í–‰??ë³´ì„¸??
+  echo [FAILED] Could not register - try again as Administrator.
 )
 pause
