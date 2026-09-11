@@ -473,11 +473,35 @@ def _board_parallel(items: list, worker, label: str) -> list:
         return [r for r in ex.map(guarded, items) if r is not None]
 
 
+PAST_POSTS_SHOWN = 12       # 글쓰기 프롬프트에 넣어주는 '내가 전에 쓴 글' 편수
+
+
+def _past_posts_text(project_path: str, posts: list[dict]) -> str:
+    """이 담당이 전에 올린 글 목록 — 글쓰기 프롬프트에 넣어 재탕을 막는다(2026-09-11).
+
+    ★ 코드는 **알려주기만** 한다. 같은 글인지 판정하거나 저장을 막는 일은 하지 않는다
+      (사용자 확정: 게시판은 코드 개입을 최소로 — 판단은 담당이, 심판은 독자의 좋아요·싫어요가).
+      그전엔 자기가 뭘 썼는지 몰라서, 프로젝트에서 제일 재미있는 사건 하나를 제목만 바꿔
+      사흘 내리 다시 쓰는 일이 24개 담당 중 최소 12개에서 나왔다.
+    """
+    mine = [p for p in posts if p.get("project") == project_path][:PAST_POSTS_SHOWN]
+    if not mine:
+        return ""
+    lines = []
+    for p in mine:
+        head = (f"- [{p.get('day') or ''}] {p['title']} "
+                f"(조회 {p.get('views', 0)}·좋아요 {p.get('likes', 0)})")
+        lines.append(head)
+        lines.append(f"    요지: {(p.get('body') or '').strip()[:90]}…")
+    return "\n".join(lines)
+
+
 def run_board_posts(paths: list[str] | None = None, deadline_ts: float | None = None) -> dict:
     """게시판 글쓰기 — 각 담당이 자기 프로젝트에서 글감을 **스스로 골라** 글을 쓴다(0~1편).
 
     조회·좋아요가 점수(보상)가 되는 유인 구조라, 뭐가 잘 읽힐지도 담당이 판단한다.
     담당당 headless 1콜, 담당끼리는 병렬. 억지 글 방지: 쓸 게 없으면 빈 배열 허용.
+    자기가 전에 쓴 글 목록을 프롬프트로 함께 준다 — 같은 이야기를 다시 쓰지 않도록.
     """
     from src.scan.discover import discover_projects
 
@@ -487,13 +511,15 @@ def run_board_posts(paths: list[str] | None = None, deadline_ts: float | None = 
         wanted = set(paths)
         projects = [p for p in projects if p["path"] in wanted]
     allowed, disallowed = tools_for("daily_agent")
+    past = board_db.list_posts(board_db.DAILY_BOARD)      # 최신순 — 담당별로 걸러 쓴다
 
     def worker(p: dict) -> int:
         # 마감을 넘겨 '시작'하는 담당만 스킵(이미 도는 콜은 끝까지 간다) — 순차 때의 break 자리
         if deadline_ts and time.time() > deadline_ts:
             return 0
         out = run_headless(
-            prompt=agents_db.persona_prefix(p["path"]) + board_write(p["name"], p["path"]),
+            prompt=agents_db.persona_prefix(p["path"])
+                   + board_write(p["name"], p["path"], _past_posts_text(p["path"], past)),
             cwd=_neutral_cwd(),
             allowed_tools=allowed, disallowed_tools=disallowed,
             timeout=BOARD_TIMEOUT, append_system_prompt=BOARD_WRITE_SYSTEM,

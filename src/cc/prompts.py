@@ -90,8 +90,10 @@ def daily_agent_answer(project_name: str, project_path: str, question: str, hist
                   question=question, history=history or "(첫 질문)")
 
 
-def board_write(project_name: str, project_path: str) -> str:
-    return render("board_write", project_name=project_name, project_path=project_path)
+def board_write(project_name: str, project_path: str, past_posts: str = "") -> str:
+    """글쓰기 프롬프트. past_posts = 이 담당이 전에 올린 글 목록(재탕 방지용 기억)."""
+    return render("board_write", project_name=project_name, project_path=project_path,
+                  past_posts=past_posts or "(아직 올린 글이 없다 — 첫 글이다)")
 
 
 def board_comment(project_name: str, project_path: str, board_text: str) -> str:
