@@ -118,7 +118,7 @@ def build_facts(path: str) -> str:
         return "추적 중인 이슈 없음(조용한 프로젝트)."
     u = sum(1 for i in items if i["kind"] == "unresolved")
     d = sum(1 for i in items if i["kind"] == "deadline")
-    st = {"open": 0, "consulting": 0, "resolved": 0, "deferred": 0}
+    st = {"open": 0, "consulting": 0, "resolved": 0, "deferred": 0, "needs_user": 0}
     for i in items:
         st[i.get("status") or "open"] = st.get(i.get("status") or "open", 0) + 1
     deadlines = sorted(
@@ -128,7 +128,8 @@ def build_facts(path: str) -> str:
     top = "\n".join(f"  - [{i['kind']}] {i['title'][:90]}" for i in items[:12])
     return (
         f"이슈 {len(items)}건 (미해결 {u}·기한 {d}) / 칸반 상태: 할일 {st['open']}·"
-        f"진행중 {st['consulting']}·완료 {st['resolved']}\n"
+        f"진행중 {st['consulting']}·조건대기 {st['deferred']}·내차례 {st['needs_user']}·"
+        f"완료 {st['resolved']}\n"
         f"임박/기한:\n{dl_txt}\n"
         f"이슈 목록(일부):\n{top}"
     )
@@ -227,7 +228,7 @@ def _apply_updates(updates: list, valid_ids: set[int], path: str = "", date: str
         if iid not in valid_ids:
             continue
         st = u.get("status")
-        if st in ("open", "consulting", "resolved", "deferred"):
+        if st in ("open", "consulting", "resolved", "deferred", "needs_user"):
             issues_db.set_status(iid, st)
             n += 1
         if "due" in u:
@@ -261,6 +262,18 @@ def report_one_project(path: str, name: str, date: str, guidance: str = "",
     """
     room = _daily_room(date, path)
     facts = build_facts(path)
+    # ★ 사용자가 직접 한 말을 PM이 먼저 본다(2026-09-12 사용자 지적: "말한 게 다음으로 안 이어진다").
+    #   칸반 카드가 배치가 읽는 상태이고 재스캔도 그 상태를 덮지 않는데, 사용자 발언은 카드를
+    #   움직이지 못했다 — PM이 카드만 보고 사흘 내리 같은 질문을 다시 한 이유가 이것이다.
+    #   PM에게 주면 PM이 대화 끝에 updates로 카드를 옮긴다(needs_user·resolved 등).
+    from src.cc.reprocess import pending_user_says
+
+    says, _ = pending_user_says(path)
+    if says:
+        facts = ("[사용자가 직접 한 말 — 담당의 보고보다 우선하는 사실이다.\n"
+                 " 사용자가 '했다/해뒀다'고 한 항목은 다시 묻지 말고 updates로 완료 처리하라.\n"
+                 " 사용자만 할 수 있는 일은 needs_user(내 차례) 칸으로 옮겨라]\n"
+                 + says + "\n\n") + facts
     if guidance:
         facts = f"[총괄 관리자의 오늘 지침] {guidance}\n\n" + facts
     # PM이 상태·기한을 갱신할 수 있게 이슈를 id와 함께 목록화
@@ -473,18 +486,24 @@ def _board_parallel(items: list, worker, label: str) -> list:
         return [r for r in ex.map(guarded, items) if r is not None]
 
 
-PAST_POSTS_SHOWN = 12       # 글쓰기 프롬프트에 넣어주는 '내가 전에 쓴 글' 편수
+PAST_POSTS_DAYS = 30        # 재탕 금지 기간 — 30일 지난 이야기는 다시 써도 된다
+PAST_POSTS_CAP = 30         # 프롬프트에 넣는 최대 편수(기간 안이라도 이 이상은 안 넣는다)
 
 
 def _past_posts_text(project_path: str, posts: list[dict]) -> str:
-    """이 담당이 전에 올린 글 목록 — 글쓰기 프롬프트에 넣어 재탕을 막는다(2026-09-11).
+    """이 담당이 최근 30일 올린 글 목록 — 글쓰기 프롬프트에 넣어 재탕을 막는다(2026-09-11).
 
     ★ 코드는 **알려주기만** 한다. 같은 글인지 판정하거나 저장을 막는 일은 하지 않는다
       (사용자 확정: 게시판은 코드 개입을 최소로 — 판단은 담당이, 심판은 독자의 좋아요·싫어요가).
       그전엔 자기가 뭘 썼는지 몰라서, 프로젝트에서 제일 재미있는 사건 하나를 제목만 바꿔
       사흘 내리 다시 쓰는 일이 24개 담당 중 최소 12개에서 나왔다.
+    ★ 기간을 30일로 둔 근거(2026-09-12 사용자 확정): 무기한이면 오래된 좋은 이야기를
+      새 독자에게 영영 못 쓰고, 프롬프트도 계속 길어진다. naverblog_ssalmuk이 같은 문제에
+      쓰는 재탕 금지 기간(사용자가 3일→30일로 올림)과 맞췄다.
     """
-    mine = [p for p in posts if p.get("project") == project_path][:PAST_POSTS_SHOWN]
+    cutoff = (datetime.now() - timedelta(days=PAST_POSTS_DAYS)).strftime("%Y-%m-%d")
+    mine = [p for p in posts
+            if p.get("project") == project_path and (p.get("day") or "") >= cutoff][:PAST_POSTS_CAP]
     if not mine:
         return ""
     lines = []

@@ -957,8 +957,10 @@ async function stopPort(id, port, proc, pid){
 }
 
 // ── 프로젝트 룸 뷰(왼쪽 달력+칸반 / 오른쪽 담당 에이전트 채팅) ──
-const KCOLS = [['open','할일'],['consulting','진행중'],['resolved','완료']];
-const KORDER = ['open','consulting','resolved'];   // 열 순서(‹ › 이동)
+// 칸 5종(2026-09-12 사용자 확정). '내 차례'=사람이 눌러야 끝나는 일(담당이 못 하는 것),
+// '조건 대기'=날짜가 아니라 조건을 기다리는 보류 — 둘 다 할일에 섞여 기한 초과처럼 보였다.
+const KCOLS = [['needs_user','내 차례'],['open','할일'],['consulting','진행중'],['deferred','조건 대기'],['resolved','완료']];
+const KORDER = ['needs_user','open','consulting','deferred','resolved'];   // 열 순서(‹ › 이동)
 
 function renderRoom(path){
   CUR_ROOM = path;
