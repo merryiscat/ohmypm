@@ -12,7 +12,7 @@
 import json
 import re
 import subprocess
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 
 from loguru import logger
@@ -85,6 +85,40 @@ def daily_transcript(path: str, date: str) -> str:
     return "\n".join(lines)
 
 
+USER_SAYS_MARK = "user_says_reflected:"   # alerts 설정 키 접두사 — 여기까지 반영했다는 표시
+USER_SAYS_FIRST_DAYS = 10                # 처음 도입 시 거슬러 볼 날수(옛 질문 잡음 차단)
+
+
+def pending_user_says(path: str) -> tuple[str, int]:
+    """아직 기록장에 반영 안 된 **사용자 발언**을 날짜를 가로질러 모은다. (재료, 마지막 id)
+
+    ★ 2026-09-12 사용자 지적: "구글 로그인 권한 관련해서 말한 게 전혀 다음으로 안 이어진다".
+      실제로 사용자가 09-09 방에 "공개 해둠"이라고 답했는데, 반영 단계는 **그날 방만** 읽어서
+      그 답이 기록장에 오르지 못했다. 다음 밤부터 PM은 옛 문서만 보고 같은 질문을 다시 했고,
+      09-11·09-12까지 사흘을 같은 자리에서 맴돌았다.
+      사용자 발언은 이 시스템에서 가장 값진 신호다 — 반영될 때까지 계속 따라다니게 한다.
+    """
+    from src.db import alerts as alerts_db
+    from src.db import messages as messages_db
+
+    try:
+        after = int(alerts_db.get_setting(USER_SAYS_MARK + path) or 0)
+    except (TypeError, ValueError):
+        after = 0
+    rows = messages_db.user_says_for_project(path, after)
+    if not after:
+        # 처음 도입되는 날 — 몇 달 치 옛 질문까지 끌어오면 잡음이다. 최근 것만 본다.
+        cutoff = (datetime.now() - timedelta(days=USER_SAYS_FIRST_DAYS)).strftime("%Y-%m-%d")
+        rows = [r for r in rows if (r.get("created_at") or "") >= cutoff]
+    if not rows:
+        return "", after
+    lines = []
+    for r in rows:
+        when = (r.get("created_at") or "")[:10]
+        lines.append(f"- [{when} 사용자] {(r.get('body') or '').strip()[:600]}")
+    return "\n".join(lines), rows[-1]["id"]
+
+
 def _dirty_files(path: str) -> set[str]:
     """git이 보는 변경 파일 목록(스테이징 여부 무관). 커밋 범위 산정용."""
     out = _git(path, "status", "--porcelain").stdout
@@ -136,6 +170,12 @@ def reprocess_one(path: str, name: str, posts: list[dict], date: str) -> dict:
     if talk:
         material = (material + "\n\n" if material.strip() else "") + \
             "[오늘 일간보고에서 PM과 나눈 대화 — 여기서 확정된 것은 기록장에 반드시 반영]\n" + talk
+    # 사용자가 직접 한 말은 지난 날짜 것이라도 반영될 때까지 따라온다 — 맨 앞에 놓는다
+    says, says_mark = pending_user_says(path)
+    if says:
+        material = ("[사용자가 직접 남긴 말 — 아직 기록장에 반영 안 됐다. 무엇보다 먼저 반영하라.\n"
+                    " 사용자가 '했다/해뒀다'고 말한 것은 확인된 사실로 보고 해당 항목을 닫아라]\n"
+                    + says + "\n\n" + material)
     if not material.strip():
         return {"name": name, "path": path, "skipped": True, "reason": "반영할 것 없음"}
     # 자기가 멘토가 아니면 점수 1위 멘토의 배움을 참고로 얹는다(멘토 자동 자문)
@@ -154,6 +194,12 @@ def reprocess_one(path: str, name: str, posts: list[dict], date: str) -> dict:
         append_system_prompt=REPROCESS_SYSTEM,
         model=agents_db.model_for(path),
     )
+    # 사용자 발언 반영 표시 — 담당이 응답했을 때만 전진시킨다(무응답이면 내일 다시 물고 온다).
+    # 응답했는데도 기록에 안 남기면 그대로 흘러가므로, 프롬프트에서 '먼저 반영하라'로 못박았다.
+    if out and says:
+        from src.db import alerts as alerts_db
+
+        alerts_db.set_setting(USER_SAYS_MARK + path, str(says_mark))
     # 성장 기록 — 오늘 배운 것 한 줄을 프로필 note에 쌓는다(다음 콜에 다시 주어짐, A층)
     if out:
         m = _OBJ.search(out)
@@ -184,7 +230,10 @@ def run_reprocess(paths: list[str] | None = None) -> dict:
     from src.db import projects as projects_db
 
     for q in projects_db.list_projects(enabled_only=True):
-        if q["path"] not in targets and daily_transcript(q["path"], date):
+        if q["path"] in targets:
+            continue
+        # 오늘 대화가 없어도, 미반영 사용자 발언이 남아 있으면 반영 대상이다(2026-09-12)
+        if daily_transcript(q["path"], date) or pending_user_says(q["path"])[0]:
             targets[q["path"]] = q["name"]
     if paths:
         wanted = set(paths)

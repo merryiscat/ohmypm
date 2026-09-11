@@ -129,6 +129,13 @@ _HTML = r"""<!doctype html>
   .cal-cell.today{border-color:var(--green);border-width:2px}
   .cal-cell .dd{font-size:10.5px;color:var(--muted)}
   .cal-cell .ev{background:#fdeceb;color:var(--red);border-radius:4px;padding:0 3px;margin-top:2px;font-size:10px;line-height:1.4;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;cursor:default}
+  .cal-cell.has{cursor:pointer}
+  .cal-cell.has:hover{background:#f7f9fb}
+  .cal-cell .ev.more{background:#eef0f2;color:var(--muted)}
+  .cal-h .cal-hint{min-width:0;font-weight:400;font-size:11px;color:var(--muted)}
+  #cal-day{margin-top:10px}
+  #cal-day .cal-day-h{font-size:12px;font-weight:700;margin-bottom:4px}
+  #cal-day .cal-day-row{font-size:12px;line-height:1.5;padding:3px 6px;border-left:2px solid var(--red);background:#fbfcfd;margin-bottom:3px;border-radius:0 4px 4px 0}
   /* 칸반 */
   .kanban{display:flex;gap:10px;align-items:flex-start}
   .kcol{flex:1;min-width:0;background:#eef0f3;border-radius:10px;padding:8px}
@@ -1000,14 +1007,33 @@ function calMarkup(items){
   const isToday = d => td.getFullYear()===y && td.getMonth()===m && td.getDate()===d;
   let cells = ['일','월','화','수','목','금','토'].map(w=>`<div class="dow">${w}</div>`).join('');
   for(let k=0;k<startDow;k++) cells += `<div class="cal-cell out"></div>`;
+  // 한 칸에 다 밀어넣으면 하루에 11건 걸린 날이 달력을 세로로 찢는다(2026-09-11 사용자 지적).
+  // 칸에는 2건까지만 보이고 나머지는 '+N건' — 날짜를 누르면 아래 목록에 그날 전체가 펼쳐진다.
+  const MAX_EV = 2;
+  window._calByDay = byDay;
   for(let day=1;day<=daysIn;day++){
-    const evs = (byDay[day]||[]).map(i=>
-      `<div class="ev" title="${escAttr(clean(i.title))}">${esc(clean(i.title))}</div>`).join('');
-    cells += `<div class="cal-cell${isToday(day)?' today':''}"><div class="dd">${day}</div>${evs}</div>`;
+    const list = byDay[day]||[];
+    const evs = list.slice(0,MAX_EV).map(i=>
+      `<div class="ev" title="${escAttr(clean(i.title))}">${esc(clean(i.title))}</div>`).join('')
+      + (list.length>MAX_EV ? `<div class="ev more">+${list.length-MAX_EV}건</div>` : '');
+    const cl = `cal-cell${isToday(day)?' today':''}${list.length?' has':''}`;
+    const on = list.length ? ` onclick="calDay(${day})"` : '';
+    cells += `<div class="${cl}"${on}><div class="dd">${day}</div>${evs}</div>`;
   }
   return `<div class="cal"><div class="cal-h">`+
     `<button onclick="calNav(-1)">‹</button><span>${y}년 ${m+1}월</span><button onclick="calNav(1)">›</button>`+
-    `</div><div class="cal-grid">${cells}</div></div>`;
+    `<span class="cal-hint">날짜를 누르면 그날 전체가 아래에 펼쳐집니다</span>`+
+    `</div><div class="cal-grid">${cells}</div><div id="cal-day"></div></div>`;
+}
+
+// 그날 항목 전체 — 달력 칸은 좁으니 제목을 접지 않고 여기서 다 보여준다
+function calDay(day){
+  const list = (window._calByDay||{})[day]||[];
+  const box = document.getElementById('cal-day');
+  if(!box) return;
+  if(!list.length){ box.innerHTML=''; return; }
+  box.innerHTML = `<div class="cal-day-h">${day}일 · ${list.length}건</div>`+
+    list.map(i=>`<div class="cal-day-row">${esc(clean(i.title))}</div>`).join('');
 }
 
 function kanbanMarkup(items){
