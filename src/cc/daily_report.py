@@ -871,6 +871,24 @@ def run_nightly() -> dict:
         return now.replace(hour=hour, minute=0, second=0, microsecond=0).timestamp()
 
     projects = discover_projects()
+    # ★ 관리할 프로젝트가 0개면 배치를 여기서 멈추고 시끄럽게 알린다(2026-09-12).
+    #   그전엔 0개여도 전 단계가 '성공 0건'으로 조용히 끝나 텔레그램까지 정상으로 나갔다.
+    #   실제 사고: 이식성 개선 커밋(cd81cf5)이 루트를 .env로 옮겼는데 이 PC의 .env에 값이
+    #   없어서, 09-12 새벽 배치가 18초 만에 0개를 처리하고 끝났다. 실패가 아니라 '할 일 없음'
+    #   으로 보이는 유형이라 아무도 몰랐다 — 같은 계열: 09-08 서버 재시작 누락.
+    if not projects:
+        msg = ("관리 대상 프로젝트가 0개 — 배치를 중단했다. "
+               f"PROJECTS_ROOT 설정을 확인하라(현재 값: '{settings.projects_root or '(비어 있음)'}'). "
+               "코드를 업데이트한 뒤 새로 생긴 필수 설정이 이 PC의 .env에 없을 때 이렇게 된다.")
+        logger.error(f"[야간] {msg}")
+        alerts_db.set_setting(f"daily_summary:{date}", f"<b>ohmyPM {date}</b>\n{msg}")
+        try:
+            from src.bot.telegram_bot import send_telegram_sync
+
+            send_telegram_sync(f"<b>ohmyPM {date} 배치 중단</b>\n{msg}")
+        except Exception as e:
+            logger.warning(f"[야간] 중단 알림 발송 실패: {e}")
+        return {"aborted": True, "reason": msg, "projects": 0}
     # ⓪ 신규 편입 검토(2026-09-06 사용자 확정: "처음 등록된 프로젝트는 PM-하네스 전문가 검토 방식")
     #    계약 파일(status.md·pending.md) 없는 프로젝트는 **쓰기 없이** PM+전문가 검토 리포트만 낸다
     #    (분류·시크릿은 코드가 결정론 판정해 주입 — 전문가 자문 P0). 골격 생성은 사용자가 리포트를
