@@ -137,9 +137,21 @@ _HTML = r"""<!doctype html>
   #cal-day .cal-day-h{font-size:12px;font-weight:700;margin-bottom:4px}
   #cal-day .cal-day-row{font-size:12px;line-height:1.5;padding:3px 6px;border-left:2px solid var(--red);background:#fbfcfd;margin-bottom:3px;border-radius:0 4px 4px 0}
   /* 칸반 */
-  .kanban{display:flex;gap:10px;align-items:flex-start}
-  .kcol{flex:1;min-width:0;background:#eef0f3;border-radius:10px;padding:8px}
-  .kcol>h3{font-size:11.5px;color:var(--muted);text-transform:uppercase;margin:4px 4px 8px;font-weight:700;display:flex;gap:6px;align-items:center}
+  /* 칸반은 좌우로 넘겨 본다(2026-09-13 사용자 확정). 룸 왼쪽 칸이 600픽셀도 안 되는데 다섯 칸을
+     욱여넣으면 칸 하나가 110픽셀이라 제목이 글자 두세 개씩 끊겼다. 칸 너비를 읽을 수 있는 크기로
+     고정하고 넘치는 칸은 가로로 밀어서 본다 — Shift+휠(트랙패드는 좌우 스와이프). */
+  .kanban{display:flex;gap:10px;align-items:flex-start;overflow-x:auto;padding-bottom:8px}
+  .kanban::-webkit-scrollbar{height:9px}
+  .kanban::-webkit-scrollbar-thumb{background:#c8ced6;border-radius:5px}
+  .kanban::-webkit-scrollbar-track{background:#f0f1f4;border-radius:5px}
+  .kan-hint{color:var(--muted);font-size:11px;padding:0 2px 6px}
+  /* ★ 칸은 스스로 스크롤하지 않는다(2026-09-13 사용자 확정). 휠은 언제나 화면 전체를 위아래로
+     움직인다 — 칸에 max-height+overflow-y를 주면 마우스가 칸 위에 있을 때 휠을 칸이 가로채,
+     화면이 안 내려가거나(칸 안에서만 굴러감) 위로 못 올라가는 일이 생겼다.
+     세로는 화면, 가로는 칸반 — 축마다 주인이 하나씩이라 헷갈릴 데가 없다.
+     칸 이름·건수는 위에 붙어 있어(sticky) 긴 칸을 내려가도 지금 보는 칸이 어딘지 안 잃는다. */
+  .kcol{flex:0 0 264px;background:#eef0f3;border-radius:10px;padding:0 8px 8px}
+  .kcol>h3{position:sticky;top:0;z-index:1;background:#eef0f3;font-size:11.5px;color:var(--muted);text-transform:uppercase;margin:0 -8px 8px;padding:11px 12px 7px;font-weight:700;display:flex;gap:6px;align-items:center}
   .kcol>h3 .n{background:#d9dde3;color:#555;border-radius:20px;padding:0 7px;font-size:11px}
   .kcard{background:#fff;border:1px solid var(--line);border-radius:8px;padding:8px 9px;margin-bottom:7px;font-size:12.5px;line-height:1.45;color:#3a3f47;overflow-wrap:anywhere}  /* 긴 영문·괄호 문자열이 박스 밖으로 안 삐져나가게 */
   .kcard .due{color:var(--red);font-weight:700;font-size:11px}
@@ -1062,7 +1074,10 @@ function kanbanMarkup(items){
     }).join('') || `<div class="col-empty">없음</div>`;
     return `<div class="kcol"><h3>${label}<span class="n">${list.length}</span></h3>${cards}</div>`;
   }).join('');
-  return `<div class="kanban">${cols}</div>`;
+  // 휠은 세로(화면) 전용이라 좌우는 Shift+휠로 넘긴다. 가로 막대는 칸반 맨 아래에 있는데
+  // 긴 칸이 3000픽셀을 넘어가는 날이 있어 안내에는 넣지 않는다 — 손 닿는 방법만 적는다.
+  return `<div class="kan-hint">칸은 좌우로 넘겨서 봅니다 (Shift+휠, 트랙패드는 좌우 스와이프)</div>`+
+         `<div class="kanban">${cols}</div>`;
 }
 
 function calNav(delta){
