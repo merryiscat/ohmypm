@@ -30,6 +30,7 @@ lint 연계), ④ 자율 업무 실행(사용자 판단이 필요 없는 업무�
 - 1부 "화면 없음" → **웹 대시보드 추가**(케이스 2·15)
 - **실행 = 로컬 확정**: 로컬 프로젝트 파일 접근 필수라 클라우드 Routines 배제(references Zenn 결론)
 - 상태 저장 = SQLite(사용자 결정 — 로컬 도구라 설치 0·서버 없음)
+- **역추적 결과 주의(2026-09-14, [usecases 합산규칙 3](usecases.md))**: 이 줄의 항목 중 **heartbeat는 현재 코드에 없다**(빈 5분 잡을 09-09에 제거, 30cb85c — 케이스 4 착수 시 재부착), **lychee는 코드 0줄 + 케이스 9 하나에만 걸린다**(범위 결정 대기). 나머지 6개는 핵심 케이스에 닿는다
 
 **하네스**(로컬 `.claude`): fastapi 스킬 신규 설치 / screen-plan·web-design-guidelines·ponytail·grill 글로벌 재사용 / Playwright·context7 MCP(승인 대기). supabase·텔레그램봇 스킬은 스택이 요구 안 해 미설치.
 
