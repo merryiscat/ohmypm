@@ -3,6 +3,7 @@
 from fastapi import APIRouter, BackgroundTasks
 from pydantic import BaseModel
 
+from src.db import alerts as alerts_db
 from src.db import board as board_db
 from src.db import issues as issues_db
 from src.db import messages as messages_db
@@ -190,13 +191,39 @@ def get_daily() -> list[dict]:
         by_date.setdefault(date, []).append(
             {"project": path, "name": names.get(path, path), "room": room,
              "msgs": len(msgs), "active": active,
+             "checked": alerts_db.get_setting(_daily_check_key(date, path)) == "1",
              "last": (msgs[-1]["created_at"] if msgs else "")}
         )
-    # 정렬: 대화한 순서대로(최근 대화가 위) — 생략된 방은 자연히 아래로 깔린다(2026-09-06 사용자 확정)
+    # 정렬: **보고가 실제로 있는 프로젝트가 먼저**(2026-09-13 사용자 확정 — 읽을 게 있는 것부터
+    # 위에 와야 한다). 같은 무리 안에서는 최근 대화가 위. 생략된 방(변화 없음·한도 스킵)은 뒤로 깔린다.
     return [
-        {"date": d, "projects": sorted(by_date[d], key=lambda x: x["last"], reverse=True)}
+        {"date": d,
+         "projects": sorted(by_date[d], key=lambda x: (x["active"], x["last"]), reverse=True)}
         for d in sorted(by_date, reverse=True)
     ]
+
+
+def _daily_check_key(date: str, path: str) -> str:
+    """'이 날짜의 이 프로젝트 보고를 내가 봤다' 표시를 담는 설정 키."""
+    return f"daily_checked:{date}:{path}"
+
+
+class DailyCheck(BaseModel):
+    date: str
+    project: str
+    checked: bool
+
+
+@router.post("/daily/check")
+def set_daily_check(c: DailyCheck) -> dict:
+    """일간보고를 사용자가 확인했는지 표시한다(날짜+프로젝트 단위).
+
+    보고가 27개씩 쌓이면 "어디까지 읽었더라"가 매일 반복되는 질문이 된다(2026-09-13 사용자 요청).
+    체크는 날짜마다 따로 — 어제 확인했다고 오늘 보고가 확인된 것은 아니다.
+    별도 테이블 없이 alerts 키/값에 얹는다(파생 정보라 지워져도 보고 자체는 안 다친다).
+    """
+    alerts_db.set_setting(_daily_check_key(c.date, c.project), "1" if c.checked else "0")
+    return {"ok": True}
 
 
 # ── PM 대화 패널 (사용자 ↔ 총괄 PM, 일간보고 화면 오른쪽) ─────────────────────

@@ -231,7 +231,12 @@ _HTML = r"""<!doctype html>
   .daily-nav{width:260px;flex:0 0 260px;min-height:0;overflow-y:auto;background:var(--card);border:1px solid var(--line);border-radius:10px;padding:6px}
   .dnav-date{font-weight:700;font-size:13px;padding:10px 10px 5px;border-top:1px solid var(--line);margin-top:4px}
   .dnav-date:first-child{border-top:none;margin-top:0}
-  .dnav-proj{padding:7px 12px;font-size:12.5px;color:#3a3f47;cursor:pointer;border-radius:6px}
+  .dnav-proj{padding:7px 10px;font-size:12.5px;color:#3a3f47;cursor:pointer;border-radius:6px;display:flex;align-items:center;gap:7px}
+  .dnav-proj .dnav-chk{flex:0 0 auto;margin:0;cursor:pointer;accent-color:var(--green)}
+  .dnav-proj .dnav-name{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  /* 확인한 보고는 흐리게 — 안 지우고 남겨두되 남은 것이 눈에 띄게 한다 */
+  .dnav-proj.done .dnav-name{opacity:.45;text-decoration:line-through}
+  .dnav-count{font-size:11px;color:var(--muted);padding:4px 10px 6px;border-bottom:1px solid var(--line);margin-bottom:4px}
   .dnav-proj:hover{background:#f1f3f6}
   .dnav-proj.active{background:#e7f3ec;font-weight:600}
   .dnav-proj.talked{color:var(--green);font-weight:600}   /* 실제 인터뷰 진행 */
@@ -853,11 +858,40 @@ function pickDate(di, el){
   document.querySelectorAll('.datechip').forEach(x=>x.classList.remove('active'));
   el.classList.add('active');
   const col = document.getElementById('daily-projcol');
-  // 실제 인터뷰가 돈 프로젝트(진하게)와 생략·스킵된 프로젝트(회색)를 색으로 구분
-  col.innerHTML = DAILY_DATA[di].projects.map((p,pi)=>
-    `<div class="dnav-proj${p.active?' talked':' quiet'}" onclick="openDaily(${di},${pi},this)">${esc(p.name)}</div>`
-  ).join('') || '<div class="empty" style="padding:14px 8px;font-size:12px">이 날 보고 없음</div>';
+  // 보고가 실제로 있는 프로젝트가 위(진하게), 생략·스킵된 프로젝트가 아래(회색) — 정렬은 서버가 한다.
+  // 앞의 체크상자 = 내가 확인한 보고(날짜별로 따로 기억한다). 상자를 눌러도 보고는 안 열린다.
+  const projs = DAILY_DATA[di].projects;
+  col.innerHTML = (projs.length ? `<div class="dnav-count" id="dnav-count">${dailyCheckCount(di)}</div>` : '')+
+    projs.map((p,pi)=>
+      `<div class="dnav-proj${p.active?' talked':' quiet'}${p.checked?' done':''}" onclick="openDaily(${di},${pi},this)">`+
+        `<input type="checkbox" class="dnav-chk"${p.checked?' checked':''} title="확인함으로 표시"`+
+        ` onclick="event.stopPropagation();toggleDailyCheck(${di},${pi},this)">`+
+        `<span class="dnav-name">${esc(p.name)}</span>`+
+      `</div>`
+    ).join('') || '<div class="empty" style="padding:14px 8px;font-size:12px">이 날 보고 없음</div>';
   document.getElementById('daily-convo').innerHTML = '<div class="chat-empty">프로젝트를 골라 PM↔담당 대화를 보세요</div>';
+}
+
+// 내가 확인한 보고 표시 — 날짜+프로젝트 단위로 서버에 남긴다(새로고침·다른 PC에서도 유지).
+// 보고가 하루 27개씩 쌓이니 "어디까지 봤더라"를 화면이 기억해 준다(2026-09-13 사용자 요청).
+function dailyCheckCount(di){
+  const projs = DAILY_DATA[di].projects;
+  const done = projs.filter(p=>p.checked).length;
+  return `확인 ${done} / ${projs.length}`;
+}
+
+async function toggleDailyCheck(di, pi, el){
+  const d = DAILY_DATA[di], p = d.projects[pi];
+  p.checked = el.checked;
+  const row = el.closest('.dnav-proj'); if(row) row.classList.toggle('done', el.checked);
+  const cnt = document.getElementById('dnav-count'); if(cnt) cnt.textContent = dailyCheckCount(di);
+  try{
+    await fetch('/api/daily/check', {method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({date:d.date, project:p.project, checked:el.checked})});
+  }catch(e){
+    // 저장 실패는 조용히 넘기지 않는다 — 표시만 되고 안 남으면 다음 날 또 읽게 된다
+    appAlert('확인 표시 저장 실패', '잠시 뒤 다시 눌러 주세요');
+  }
 }
 
 async function openDaily(di, pi, el){
