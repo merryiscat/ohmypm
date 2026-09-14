@@ -107,6 +107,8 @@ _HTML = r"""<!doctype html>
   .chat .composer .as{width:110px;padding:9px 8px;border:1px solid var(--line);border-radius:8px;font-size:12.5px;background:#fff}
   .chat-empty{color:var(--muted);text-align:center;margin:auto;padding:30px}
   .msg.pending{align-self:flex-start;background:#f7f8fa;border:1px dashed var(--line);color:var(--muted);font-style:italic}
+  .msg.pending.stuck{color:var(--amber);border-color:#e7cfa6;background:#fdf7ee;font-style:normal;display:flex;align-items:center;gap:10px}
+  .msg.pending.stuck .retry{padding:3px 10px;font-size:12px;background:#fff;color:var(--ink);border:1px solid var(--line);border-radius:6px;white-space:nowrap}
   /* 프로젝트 룸: 왼쪽 내용 + 오른쪽 세로 채팅 패널 */
   .room-layout{display:flex;gap:16px;flex:1;min-height:0}
   .room-main{flex:1;min-width:0;min-height:0;overflow-y:auto}
@@ -152,6 +154,9 @@ _HTML = r"""<!doctype html>
      칸 이름·건수는 위에 붙어 있어(sticky) 긴 칸을 내려가도 지금 보는 칸이 어딘지 안 잃는다. */
   .kcol{flex:0 0 264px;background:#eef0f3;border-radius:10px;padding:0 8px 8px}
   .kcol>h3{position:sticky;top:0;z-index:1;background:#eef0f3;font-size:11.5px;color:var(--muted);text-transform:uppercase;margin:0 -8px 8px;padding:11px 12px 7px;font-weight:700;display:flex;gap:6px;align-items:center}
+  .kcol::-webkit-scrollbar{width:8px}
+  .kcol::-webkit-scrollbar-thumb{background:#c8ced6;border-radius:4px}
+  .kcol::-webkit-scrollbar-track{background:transparent}
   .kcol>h3 .n{background:#d9dde3;color:#555;border-radius:20px;padding:0 7px;font-size:11px}
   .kcard{background:#fff;border:1px solid var(--line);border-radius:8px;padding:8px 9px;margin-bottom:7px;font-size:12.5px;line-height:1.45;color:#3a3f47;overflow-wrap:anywhere}  /* 긴 영문·괄호 문자열이 박스 밖으로 안 삐져나가게 */
   .kcard .due{color:var(--red);font-weight:700;font-size:11px}
@@ -500,7 +505,7 @@ async function loadMessages(room, silent, agentRoom){
   }).join('') : '<div class="chat-empty">아직 대화가 없습니다. 첫 메시지를 남겨보세요.</div>';
   // 담당 에이전트 방에서 마지막 글이 사용자면 = 답이 오는 중 → 대기 표시
   if(agentRoom && msgs.length && msgs[msgs.length-1].author === 'user'){
-    html += `<div class="msg pending">에이전트가 확인하고 답하는 중…</div>`;
+    html += pendingMarkup(room, msgs[msgs.length-1], '에이전트');
   }
   stream.innerHTML = html;
   if(!silent || atBottom) stream.scrollTop = stream.scrollHeight;
@@ -894,6 +899,35 @@ async function toggleDailyCheck(di, pi, el){
   }
 }
 
+// 답을 기다리는 표시. 담당 답변은 서버 프로세스 안에서 도는 작업이라, 그 사이 서버가
+// 내려가면 답이 영영 안 온다(2026-09-13 사고). 그런데 화면은 "마지막 글이 사용자"만 보고
+// 대기 표시를 그리므로 영영 안 없어졌다 — 그래서 시간이 지나면 말을 바꾸고 손잡이를 준다.
+const PENDING_STUCK_MIN = 5;   // 이 분을 넘겨 답이 없으면 끊긴 것으로 본다(담당 답변 제한시간 3분)
+
+function pendingMarkup(room, lastMsg, who){
+  const asked = new Date((lastMsg.created_at||'').replace(' ','T'));
+  const mins = isNaN(asked) ? 0 : Math.floor((Date.now() - asked.getTime())/60000);
+  if(mins < PENDING_STUCK_MIN) return `<div class="msg pending">${who}이 확인하고 답하는 중…</div>`;
+  return `<div class="msg pending stuck">${mins}분째 답이 없습니다 — 답변이 중간에 끊겼을 수 있습니다`+
+         // 방 이름은 윈도우 경로(역슬래시)다 — 그대로 JS 문자열에 넣으면 \U·\p가 이스케이프로 먹혀
+         // 경로가 뭉개진다. 주소 인코딩해 넘기고 받는 쪽에서 되돌린다.
+         `<button class="retry" onclick="retryRoomReply('${encodeURIComponent(room)}')">다시 요청</button></div>`;
+}
+
+async function retryRoomReply(room){
+  room = decodeURIComponent(room);
+  let r = {};
+  try{
+    r = await fetch('/api/room-retry',{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({room})}).then(x=>x.json());
+  }catch(e){ r = {ok:false, error:'서버에 연결하지 못했습니다'}; }
+  if(!r.ok){ appAlert('다시 요청 실패', r.error||'알 수 없는 오류'); return; }
+  document.querySelectorAll('.msg.pending').forEach(el=>{
+    el.classList.remove('stuck');
+    el.textContent = '다시 요청했습니다 — 담당이 답하는 중…';
+  });
+}
+
 async function openDaily(di, pi, el){
   document.querySelectorAll('.dnav-proj').forEach(x=>x.classList.remove('active'));
   el.classList.add('active');
@@ -951,7 +985,8 @@ async function loadDailyAgent(silent){
     return `<div class="msg ${mine?'user':'agent'}">`+(mine?'':`<div class="who">${who}</div>`)+
       `<div class="md">${md(m.body)}</div><div class="ts">${esc(ts)}</div></div>`;
   }).join('') : '<div class="chat-empty">이 담당과의 첫 대화입니다 — 보고 내용을 물어보세요</div>';
-  if(msgs.length && msgs[msgs.length-1].author === 'user') html += '<div class="msg pending">담당이 확인하고 답하는 중…</div>';
+  if(msgs.length && msgs[msgs.length-1].author === 'user')
+    html += pendingMarkup(DAILY_SEL.path, msgs[msgs.length-1], '담당');
   s.innerHTML = html;
   if(!silent || atBottom) s.scrollTop = s.scrollHeight;
 }

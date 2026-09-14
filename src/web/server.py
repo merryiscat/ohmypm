@@ -30,6 +30,11 @@ async def lifespan(app: FastAPI):
     from src.scheduler import start_scheduler, stop_scheduler
 
     start_scheduler()
+    # 서버가 내려갈 때 죽어버린 담당 답변을 되살린다 — 안 하면 화면의 "답하는 중…"이 영영 안 없어진다
+    # (2026-09-13 사고: 질문 37초 뒤 서버 재시작으로 답변 작업이 같이 죽었다).
+    from src.cc.room_agent import resume_dangling_replies
+
+    resume_dangling_replies()
     yield
     # 종료: 스케줄러 정리
     stop_scheduler()

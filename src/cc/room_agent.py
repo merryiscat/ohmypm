@@ -6,6 +6,7 @@ judge와 같은 headless 통로(`claude -p`)를 읽기 전용으로 재사용한
 """
 
 import tempfile
+import threading
 from pathlib import Path
 
 from src.cc.client import run_headless
@@ -57,3 +58,46 @@ def reply_in_room(project_path: str, name: str) -> None:
     )
     body = (result or "").strip() or "(지금은 답을 만들지 못했어 — 잠시 후 다시 시도해줘)"
     messages_db.add_message(project_path, AGENT_AUTHOR, body)
+
+
+# ── 끊긴 답변 되살리기 ────────────────────────────────────────────────────────
+# 담당 답변은 서버 프로세스 안의 백그라운드 작업이다. 답을 만드는 3분 사이에 서버가
+# 내려가면(재시작·강제종료) 그 작업도 같이 죽고, 방에는 사용자 질문만 남는다.
+# 화면은 "마지막 글이 사용자면 답하는 중"으로 그리므로 그 표시가 영영 안 없어진다
+# — 2026-09-13 실제 사고: 05:40:11 질문 → 05:40:48 서버 재시작 → 답 없음.
+# 그래서 서버가 뜰 때 '답을 기다리다 끊긴 방'을 찾아 한 번씩 다시 부른다.
+RESUME_MAX_ROOMS = 5        # 한 번에 되살릴 방 수 상한(뜨자마자 모델 호출이 몰리지 않게)
+
+
+def dangling_rooms() -> list[dict]:
+    """마지막 글이 사용자 질문인 프로젝트 방 목록 — 답을 기다리다 끊긴 방."""
+    from src.db import projects as projects_db
+
+    out = []
+    for proj in projects_db.list_projects(enabled_only=True):
+        msgs = messages_db.list_messages(proj["path"], limit=1)
+        if msgs and msgs[-1]["author"] == "user":
+            out.append({"path": proj["path"], "name": proj["name"],
+                        "asked_at": msgs[-1]["created_at"]})
+    return out
+
+
+def resume_dangling_replies() -> None:
+    """끊긴 방들의 답변을 순서대로 다시 부른다. 서버 기동 때 한 번(별도 스레드)."""
+    from loguru import logger
+
+    rooms = dangling_rooms()[:RESUME_MAX_ROOMS]
+    if not rooms:
+        return
+    names = ", ".join(r["name"] for r in rooms)
+    logger.info(f"[방] 답을 기다리다 끊긴 방 {len(rooms)}개 재개: {names}")
+
+    def _work():
+        for r in rooms:
+            try:
+                reply_in_room(r["path"], r["name"])          # 한 번에 하나씩
+                logger.info(f"[방] {r['name']} 답변 재개 완료(질문 {r['asked_at']})")
+            except Exception as e:                            # 한 방이 실패해도 나머지는 간다
+                logger.warning(f"[방] {r['name']} 답변 재개 실패: {e}")
+
+    threading.Thread(target=_work, daemon=True, name="room-resume").start()

@@ -168,6 +168,30 @@ def post_message(msg: PostMessage, background: BackgroundTasks) -> dict:
     return {"ok": True, "message": row}
 
 
+class RoomRetry(BaseModel):
+    room: str
+
+
+@router.post("/room-retry")
+def retry_room_reply(r: RoomRetry, background: BackgroundTasks) -> dict:
+    """끊긴 담당 답변을 다시 부른다 — 질문을 새로 쓰지 않고 마지막 질문에 답하게 한다.
+
+    서버 재시작·예외로 답변 작업이 죽으면 방에는 질문만 남고 화면은 계속 "답하는 중"이다.
+    기동 때 자동 재개(room_agent.resume_dangling_replies)가 기본이고, 이건 사용자가
+    화면에서 직접 누르는 손잡이다(2026-09-13).
+    """
+    proj = next((p for p in projects_db.list_projects() if p["path"] == r.room), None)
+    if not proj:
+        return {"ok": False, "error": "프로젝트 방이 아닙니다"}
+    msgs = messages_db.list_messages(r.room, limit=1)
+    if not msgs or msgs[-1]["author"] != "user":
+        return {"ok": False, "error": "답을 기다리는 질문이 없습니다"}
+    from src.cc.room_agent import reply_in_room
+
+    background.add_task(reply_in_room, proj["path"], proj["name"])
+    return {"ok": True}
+
+
 @router.get("/daily")
 def get_daily() -> list[dict]:
     """일간보고 트리 — [{date, projects:[{project, name, room}]}], 최신 날짜 먼저.
