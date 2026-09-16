@@ -1054,6 +1054,8 @@ function renderRoom(path){
       `<div class="room-main" id="room-main"></div>`+
       `<div class="room-side">`+
         `<div class="side-h">${esc(name)} 담당 에이전트</div>`+
+        `<label class="note-line" style="display:flex;gap:6px;align-items:center;padding:0 0 8px;cursor:pointer" title="켜면 이 프로젝트의 담당이 밤에 docs를 고치고 ohmyPM이 커밋합니다(기록 정리·일간보고 반영·조언 반영). 기본은 끔.">`+
+          `<input type="checkbox" id="autowrite-toggle" data-path="${escAttr(path)}"${p && p.docs_autowrite ? ' checked' : ''}> 기록 자동 반영(담당이 docs 수정·자동 커밋)</label>`+
         chatMarkup()+
       `</div>`+
     `</div>`;
@@ -1201,6 +1203,18 @@ document.addEventListener('click', e=>{
   if(ex){ excludeProject(ex.getAttribute('data-exclude')); return; }
   const el = e.target.closest('[data-room]');
   if(el) go('#/room/'+encodeURIComponent(el.getAttribute('data-room')));
+});
+
+// 프로젝트별 '기록 자동 반영' 스위치(2026-09-17) — 기본 끔. 켠 프로젝트만 담당이 docs를 고치고 커밋한다.
+document.addEventListener('change', async e=>{
+  const t = e.target;
+  if(!t || t.id!=='autowrite-toggle') return;
+  const r = await fetch('/api/projects/autowrite',{method:'POST',
+    headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({path:t.getAttribute('data-path'), on:t.checked})})
+    .then(r=>r.json()).catch(()=>({ok:false}));
+  if(!r.ok){ t.checked = !t.checked; appAlert('저장 실패', '기록 자동 반영 설정을 저장하지 못했습니다'); return; }
+  const p = PROJECTS.find(x=>x.path===t.getAttribute('data-path')); if(p) p.docs_autowrite = t.checked;
 });
 
 // 프로젝트를 관리에서 제외 — 폴더는 안 건드리고, 이슈·게시판 글/댓글·대화만 정리된다.

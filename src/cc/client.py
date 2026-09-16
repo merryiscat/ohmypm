@@ -57,6 +57,41 @@ def _capture_limit(text: str) -> None:
     logger.info(f"[한도] 세션 한도 감지 — 리셋 {at:%m-%d %H:%M}")
 
 
+# ── 호출 수·비용 집계(2026-09-17) — 그전엔 응답 JSON의 total_cost_usd를 버려 하룻밤에 모델을
+#   몇 번 부르고 얼마를 쓰는지 아무도 몰랐다. 야간 배치가 끝날 때 아침 알림에 한 줄로 붙는다.
+import threading
+
+_STATS = {"calls": 0, "ok": 0, "failed": 0, "cost_usd": 0.0, "output_tokens": 0}
+_STATS_LOCK = threading.Lock()
+
+
+def _count(ok: bool, data: dict | None = None) -> None:
+    with _STATS_LOCK:
+        _STATS["calls"] += 1
+        _STATS["ok" if ok else "failed"] += 1
+        if data:
+            try:
+                _STATS["cost_usd"] += float(data.get("total_cost_usd") or 0)
+                _STATS["output_tokens"] += int((data.get("usage") or {}).get("output_tokens") or 0)
+            except (TypeError, ValueError):
+                pass
+
+
+def stats_snapshot(reset: bool = False) -> dict:
+    """지금까지의 headless 호출 집계. reset=True면 읽고 0으로 되돌린다(야간 배치 시작·종료에 쓴다)."""
+    with _STATS_LOCK:
+        snap = dict(_STATS)
+        if reset:
+            for k in _STATS:
+                _STATS[k] = 0.0 if k == "cost_usd" else 0
+    return snap
+
+
+def stats_line(snap: dict) -> str:
+    return (f"모델 호출 {snap['calls']}건(성공 {snap['ok']}·실패 {snap['failed']}) · "
+            f"비용 ${snap['cost_usd']:.2f} · 출력 토큰 {snap['output_tokens']:,}")
+
+
 def _resolve_bin() -> str:
     """cc_bin 실행파일 경로 해석. Windows에선 `claude`가 claude.CMD 셈이라
     subprocess가 확장자 없이는 못 찾는다 → shutil.which로 실경로를 잡는다."""
@@ -128,8 +163,12 @@ def run_headless(
             _capture_limit(full)   # 한도 429면 리셋 시각을 기억 — 야간 배치가 재개에 쓴다
             detail = ((r.stderr or "").strip() or (r.stdout or "").strip())[:300]
             logger.warning(f"[headless] 종료코드 {r.returncode}: {detail}")
+            _count(False)
             return None
-        return json.loads(r.stdout).get("result")
+        data = json.loads(r.stdout)
+        _count(True, data)
+        return data.get("result")
     except Exception as e:
         logger.warning(f"[headless] 호출 실패: {e}")
+        _count(False)
         return None

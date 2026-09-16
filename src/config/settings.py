@@ -39,6 +39,10 @@ class Settings(BaseSettings):
     daily_soft_deadline_hour: int = 5
     discussion_until_hour: int = 6
     telegram_hour: int = 7   # 일간보고 요약 텔레그램 발송 시각(생성은 새벽, 발송은 아침)
+    # 게시판 경로(기록 정리·글쓰기·둘러보기·반응·대대댓글·조언 반영·보상)를 돌리는 요일 —
+    # 2026-09-17 사용자 확정: 기본 끄고 주 1회. 감지·알림(스캔·판정·일간보고·텔레그램)은 매일.
+    # 쉼표로 여러 요일("2,6"), 빈 값이면 절대 안 돈다. 0=월요일 … 6=일요일
+    board_weekdays: str = "6"
     # 전문가 위키 정기 수집 — 매주 지정 요일·시각(웹 조사라 자주 돌릴 필요 없음)
     expert_collect_weekday: int = 0   # 0=월요일 … 6=일요일
     expert_collect_hour: int = 5      # 새벽(일간보고 흐름과 겹치지 않게)
