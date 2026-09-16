@@ -16,17 +16,71 @@ def upsert_issue(
     title: str,
     due: str | None = None,
     source: str | None = None,
-) -> None:
-    """이슈 등록. 같은 (project,kind,title)이면 중복 생성 안 하고 기한만 갱신."""
-    fp = _fingerprint(project, kind, title)
+    status: str = "open",
+) -> int:
+    """이슈 등록. 같은 안건이면 중복 생성 안 하고 갱신만 한다. **이슈 id 반환**(스캔이 '이번에 본 것'을 기억).
+
+    2026-09-17 정정 두 가지(유령 이슈 reconciliation과 함께):
+    - **같은 안건 판정을 fingerprint(project+kind+title)만이 아니라 (project+title)로도 본다.**
+      판정 에이전트가 kind를 deadline→conditional로 고쳐도 fingerprint는 옛 kind로 남아,
+      파서가 다음 날 같은 제목을 다른 kind로 내면 같은 안건이 두 줄이 됐다.
+    - **due는 파서가 날짜를 냈을 때만 덮는다.** 그전엔 미해결 이슈(날짜 없음)가 매일 재스캔될 때마다
+      due=NULL로 덮여 PM이 잡아준 목표일이 사라지고 기본 재확인일(+14일)로 다시 채워졌다.
+    - 소스에서 사라져 stale 처리됐던 안건이 다시 나타나면 status를 되살린다. 그 외 status는
+      PM·사용자가 옮긴 칸반 상태이므로 건드리지 않는다.
+    """
     db = get_db()
-    db.execute(
-        "INSERT INTO issues (project, kind, title, due, source, fingerprint, created_at) "
-        "VALUES (?, ?, ?, ?, ?, ?, datetime('now','localtime')) "
-        "ON CONFLICT(fingerprint) DO UPDATE SET due=excluded.due",
-        (project, kind, title, due, source, fp),
+    row = db.execute(
+        "SELECT id, status FROM issues WHERE project = ? AND title = ? ORDER BY id LIMIT 1",
+        (project, title),
+    ).fetchone()
+    if row:
+        if due is not None:
+            db.execute("UPDATE issues SET due = ? WHERE id = ?", (due, row["id"]))
+        if row["status"] == "stale":
+            db.execute("UPDATE issues SET status = ? WHERE id = ?", (status, row["id"]))
+        db.commit()
+        return int(row["id"])
+    fp = _fingerprint(project, kind, title)
+    cur = db.execute(
+        "INSERT INTO issues (project, kind, title, due, source, fingerprint, status, created_at) "
+        "VALUES (?, ?, ?, ?, ?, ?, ?, datetime('now','localtime')) "
+        "ON CONFLICT(fingerprint) DO UPDATE SET due=COALESCE(excluded.due, issues.due)",
+        (project, kind, title, due, source, fp, status),
     )
     db.commit()
+    if cur.lastrowid:
+        return int(cur.lastrowid)
+    row = db.execute("SELECT id FROM issues WHERE fingerprint = ?", (fp,)).fetchone()
+    return int(row["id"])
+
+
+# 스캔이 docs에서 읽어 오는 소스 — 이 소스의 이슈만 '이번 스캔에 안 나오면 stale' 대상이다.
+# (daily_report가 만드는 당일 완결 카드 등은 docs에 없으므로 대상 아님)
+SCANNED_SOURCES = ("status.md", "pending.md", "index.md")
+# 아직 살아 있는 칸반 상태 — 이 상태의 이슈만 stale로 바뀐다(완료·drop은 그대로)
+ACTIVE_STATUSES = ("open", "consulting", "deferred", "needs_user")
+
+
+def mark_stale(project: str, seen_ids: set[int]) -> int:
+    """유령 이슈 reconciliation(2026-09-10 사용자 확정, 09-17 구현) — 이번 스캔에서 소스(docs)에
+    더 이상 없는 활성 이슈를 **삭제하지 않고 status='stale'로 표시**한다(되돌릴 수 없는 삭제는
+    자동으로 하지 않는다는 원칙). 소스에 다시 나타나면 upsert_issue가 되살린다. 처리 건수 반환.
+
+    stale 이슈는 list_issues 기본 조회에서 빠져 칸반·PM 팩트·완결 검증 어디에도 안 보인다.
+    보고 싶으면 list_issues(status="stale").
+    """
+    db = get_db()
+    rows = db.execute(
+        f"SELECT id FROM issues WHERE project = ? AND source IN ({','.join('?' * len(SCANNED_SOURCES))}) "
+        f"AND status IN ({','.join('?' * len(ACTIVE_STATUSES))})",
+        (project, *SCANNED_SOURCES, *ACTIVE_STATUSES),
+    ).fetchall()
+    gone = [r["id"] for r in rows if r["id"] not in seen_ids]
+    if gone:
+        db.executemany("UPDATE issues SET status = 'stale' WHERE id = ?", [(i,) for i in gone])
+        db.commit()
+    return len(gone)
 
 
 def set_easy_title(issue_id: int, easy_title: str) -> None:
@@ -61,13 +115,19 @@ def delete_by_project(project: str) -> int:
 
 
 def list_issues(status: str | None = None) -> list[dict]:
-    """이슈 목록. 기한 있는 것 먼저(임박순), 그다음 생성순."""
+    """이슈 목록. 기한 있는 것 먼저(임박순), 그다음 생성순.
+
+    status를 안 주면 **stale(소스에서 사라진 것)은 뺀다** — 유령 이슈가 화면·PM 팩트를 어지럽히지
+    않게. stale만 보려면 status="stale".
+    """
     db = get_db()
     query = "SELECT * FROM issues"
     params: list = []
     if status:
         query += " WHERE status = ?"
         params.append(status)
+    else:
+        query += " WHERE status != 'stale'"
     query += " ORDER BY (due IS NULL), due, created_at"
     return [dict(row) for row in db.execute(query, params)]
 
