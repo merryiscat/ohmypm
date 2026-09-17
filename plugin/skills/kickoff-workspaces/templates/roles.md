@@ -6,8 +6,8 @@
 | 역할 | 자리 | 에이전트 | 모델 | 쓰는 경로 |
 |---|---|---|---|---|
 | main | 원본 체크아웃 | claude | 기본 | 머지·커밋·푸시만 |
-| pl 작성자 | 워크트리 `pl` 터미널 1 | codex | `gpt-6-astra` xhigh | `docs/tasks/`, 설계 문서 |
-| pl2 검토자 | 워크트리 `pl` 터미널 2 | claude | `claude-fable-5-1` | `docs/reviews/`만 |
+| pl 작성자 | 워크트리 `pl` 터미널 1 | codex | `gpt-6-astra` high(xhigh는 지시 시) | `docs/tasks/`만. **스펙 v1·v2 쓸 때만 켠다** — 종량 쿼터 |
+| pl2 검토·배정·검증 | 워크트리 `pl` 터미널 2 | claude | `claude-fable-5-1` | `docs/reviews/`, 스펙의 "검증" 절. 게이트·워커 배정·대기·판정 담당(정액제) |
 | 구현 워커 | 워크트리 `T-NNN-<slug>` | claude | 등급표 | 스펙의 '손대는 파일' |
 
 ## 난이도 등급표
