@@ -2,6 +2,11 @@
 
 프로젝트에 깔린 복사본의 버전은 각 프로젝트 `docs/protocol.md` 첫 줄에 있다. 올리려면 그 프로젝트 main에서 "구조 업데이트하자".
 
+## 0.3.0 — 2026-09-17
+- **차선 S/M/L**(protocol 0절): 실측 20~40분이던 절차를 요청 크기별로. S는 main이 직접(3~5분), M은 짧은 스펙·차단만 검토·v2 생략·게이트 없음·짧은 검증(10분), L은 전체
+- dispatch 0절 차선 판정, 메시지에 차선 명시. CLAUDE.md 블록 마지막 줄 교체(관리 파일이라 업데이트로 반영)
+- 선택: roles.md에 `게이트: M`을 적으면 M도 승인을 묻는다(프로젝트 소유 파일 — 손으로)
+
 ## 0.2.0 — 2026-09-17
 - 버전 관리 시작: 관리 파일에 버전 도장, `scripts/ws-upgrade.sh`로 설치·업데이트 일원화, 이 CHANGELOG
 - 관리 파일(덮어씀): docs/protocol.md, docs/tasks/_template.md, docs/reviews/_template.md, .githooks/pre-commit, AGENTS.md·CLAUDE.md 블록
