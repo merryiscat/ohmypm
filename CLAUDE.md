@@ -12,7 +12,7 @@ docs/는 LLM이 쓰고 사람이 읽는 위키다. git이 못 담는 것만 담�
 - 새 페이지는 `index.md`에 한 줄 등재. **반영이 끝난 페이지는 삭제한다** — 살아있는 건 status·pending·항체뿐
 - 상세 규약(raw 보존, asserted/inferred, 실수 연대기, 정리 기준)은 `docs/conventions-wiki.md`
 
-## 작업 구조 (kickoff-workspaces v0.3.1)
+## 작업 구조 (kickoff-workspaces v0.3.2)
 - 자리·모델·경로는 `docs/roles.md`, 절차는 `docs/protocol.md`
 - `pl` 워크트리의 Claude 터미널 = pl2: ① 검토자 — `docs/reviews/T-NNN.review-vN.md`에 지적만(근거·심각도·차단, 재작성 금지, 없으면 "지적 없음") ② 코디네이터 — 게이트·워커 배정·`check --wait`·검증(스펙 "검증" 절) ③ 구현·문서 작성은 하지 않는다(워커 몫). pl(Codex)은 종량 쿼터라 pl 몫(스펙 v1·v2) 외엔 pl을 부르지 않는다
 - `T-NNN-*` 워크트리의 Claude = 구현 워커: 스펙 밖 변경 금지, `worker_done`에 완료 기준을 항목별 통과/실패로 보고. 스펙에 없는 도구는 설치하지 않는다

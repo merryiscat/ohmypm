@@ -63,7 +63,7 @@ orca terminal send --terminal <pl2> --text "/compact" --enter --json
 orca terminal send --terminal <pl2> --enter --wait-submit 10 --json --text  "이제 protocol 6절: 워커 산출물을 스펙의 완료 기준마다 통과/실패로 판정해 docs/tasks/T-NNN-<slug>.md '검증' 표에 적어라(M이면 기준별 한 줄, 재조회는 차단 기준만). 고치지 않는다. 실패면 사유를 적어 같은 워커에 한 번 되돌린다. 끝나면 한 문단 보고."
 ```
 끝났는지는 스펙의 "검증" 표에 행이 생기고 pl2가 멈췄을 때. 반복 업무를 같은 세션에서 다음 회차로 넘길 때도 회차 사이에 `/compact`.
-**대기는 언제나 백그라운드 + 상한 15분.** 상한이 지나면 pl2 화면을 읽는다 — 같은 명령이 계속 "Moseying/Whirlpooling"이면 멈춘 것이다: `orca terminal send --terminal <pl2> --interrupt --json` 뒤 "그 명령은 끊었다. 산출물을 Read로 읽어 기준별 한 줄로 판정하라. 1분 넘는 명령 금지"를 보낸다. main이 전경 루프로 기다리면 main도 같이 멈춘다(실측).
+**대기는 언제나 백그라운드.** 긴 작업은 괜찮다 — 판단 기준은 시간이 아니라 **진행 신호**다. 주기적으로(10분마다) pl2 화면과 산출물 파일을 본다: 출력·파일·로그가 바뀌고 있으면 계속 기다린다. 같은 명령이 신호 없이 오래(기본 10분, 성격에 따라 더) 서 있으면 멈춘 것이다: `orca terminal send --terminal <pl2> --interrupt --json` 뒤 "그 명령은 신호 없이 멈춰 있어 끊었다. 오래 걸릴 실행은 백그라운드로 돌리고 진행 로그를 남겨라. 산출물부터 읽어 기준별로 판정하라"를 보낸다. main이 전경 루프로 기다리면 main도 같이 멈춘다(실측).
 
 ## 5. 머지 (main)
 
