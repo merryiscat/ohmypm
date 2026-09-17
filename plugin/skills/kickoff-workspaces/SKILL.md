@@ -1,6 +1,6 @@
 ---
 name: kickoff-workspaces
-description: 킥오프 2부(마지막) — 프로젝트에 작업 구조를 깐다. main(통합)·pl(기획·설계·검토, 이종 모델 둘)·구현 워커(난이도 등급별 모델)로 Orca 워크트리를 나누고, 역할표·작업 스펙·검토서 템플릿·브랜치 가드를 설치한 뒤 pl 워크트리를 연다. 발동 — 1부(plan.md) 직후, "작업 구조 세팅하자"·"pl 구조 붙이자"·"워크스페이스 나누자", 기존 프로젝트에 소급 적용할 때, 그리고 "구조 업데이트하자"(플러그인 버전을 프로젝트 복사본에 반영).
+description: 킥오프 2부(마지막) — 프로젝트에 작업 구조를 깐다. main(통합)·pl(기획·설계·검토, 이종 모델 둘)·구현 워커(난이도 등급별 모델)로 Orca 워크트리를 나누고, 역할표·작업 스펙·검토서 템플릿·브랜치 가드를 설치한 뒤 pl 워크트리를 연다. 발동 — 1부(plan.md) 직후, "작업 구조 세팅하자"·"pl 구조 붙이자"·"워크스페이스 나누자", 기존 프로젝트에 소급 적용할 때, 그리고 "구조 업데이트하자"(플러그인 버전을 프로젝트 복사본에 반영), "구조 전체 배포하자"(ohmyPM 저장소에서 로컬 허용 목록의 프로젝트 전부에 한 명령으로 설치·갱신·커밋).
 ---
 
 # 킥오프 2부 — 작업 구조
@@ -97,6 +97,20 @@ pl에 **T-001**을 지시한다: plan(있으면 usecases)의 필요 기술·공�
 ```
 관리 파일(protocol·템플릿 2·pre-commit·AGENTS/CLAUDE 블록)만 갈아 끼우고 diff를 보여 준다. 그 diff를 보고 main이 커밋 → pl 워크트리 ff → **pl·pl2 `/clear`**(규칙 파일이 바뀌었다). 무엇이 바뀌었는지는 플러그인 `CHANGELOG.md`.
 프로젝트 소유 파일(roles·orca.yaml·.worktreeinclude·.gitignore)은 건드리지 않으므로, 템플릿 쪽 변화가 거기 필요하면 CHANGELOG가 그 항목을 따로 부른다.
+
+## 전체 배포 — "구조 전체 배포하자"
+
+ohmyPM 저장소(main 체크아웃, cwd)에서 한 명령으로 여러 프로젝트에 설치·갱신·커밋까지 한다. 플러그인 훅 없이 이 명령이 진입점이고, 재실행해도 같은 버전은 건드리지 않는다:
+```
+"${CLAUDE_PLUGIN_ROOT}"/skills/kickoff-workspaces/scripts/ws-rollout.sh            # 입력 docs/rollout-targets.md, 결과 docs/rollouts/rollout-<일시>.md
+"${CLAUDE_PLUGIN_ROOT}"/skills/kickoff-workspaces/scripts/ws-rollout.sh --dry-run  # 탐색·사전 검사·스택 판별까지만(파일·Git 무변경) — 먼저 이걸로 대상 표를 본다
+```
+- 입력은 **로컬 전용** `docs/rollout-targets.md`(main이 쓴다 — 줄마다 허용 프로젝트 이름/경로, `루트:`·`탐색: api|folder`·`제외: <이름> — <사유>`·`기준:`; 형식은 스크립트 머리 주석). 입력 파일과 `docs/rollouts/`는 `.gitignore`·`.worktreeinclude`에 있어야 하고 Git 미추적·`index.md` 미등재여야 한다 — 아니면 배포 전에 실패한다(공개 저장소에 PC 경로·프로젝트 이름이 새는 것을 막는다)
+- 탐색은 대시보드 `http://127.0.0.1:8123/api/projects`(클라이언트가 `has_wiki=1`만 남긴다) 또는 `탐색: folder`(PROJECTS_ROOT 직하위). API 실패는 실패로 끝내고 범위를 넓히지 않는다. 저장소 루트로 정규화해 중복을 없앤 뒤 허용 목록과 교집합 — 미발견 항목도 사유와 함께 결과에 남는다
+- 쓰기 전 검사: Git 저장소 루트·dirty(untracked 포함)·설치 버전·`core.hooksPath`. Git 없음·dirty·훅 경로가 `.githooks`가 아니면 사유와 함께 건너뛴다. 같은 버전이면 아무것도 바꾸지 않는다
+- 공유 폴더·setup은 스택 선언·잠금 파일로 정한다(Python `.venv`, Node `node_modules`, 혼합은 합집합; `uv.lock`→`uv sync --inexact`, `poetry.lock`→`poetry install`, `package-lock.json`→`npm install` 등 — 공유 환경을 지우는 정확 동기화는 쓰지 않는다). 선언이 없으면 공유 폴더·setup 없음(`sharedDirectories: []`), 선언은 있는데 규칙이 없으면(Cargo.toml만 등) 사유를 남기고 건너뛴다. setup은 `orca.yaml`에 적을 뿐 실행하지 않는다
+- 미설치는 `ws-upgrade.sh --install`, 다른 버전은 `ws-upgrade.sh`(관리 파일·블록만 교체, 프로젝트 소유 파일과 블록 밖 원문 보존). 배포 파일만 명시적으로 stage해 `작업 구조 설치/갱신: kickoff-workspaces v<버전>` 커밋 한 번. 훅은 정상 실행(`--no-verify` 금지), 푸시하지 않는다
+- 한 프로젝트가 실패해도 나머지를 계속하고, 결과 표(프로젝트·경로·설치/갱신/건너뜀/실패·사유·버전·공유폴더·setup·커밋 SHA·변경 잔존)를 저장한 뒤 실패가 있으면 종료 코드 1. 대상 `.env`·비밀 파일은 읽지 않고, dirty 정리·setup 실행·pl 워크트리 개설은 하지 않는다(설치 뒤 3절은 각 프로젝트 main에서)
 
 ## 기존 프로젝트에 소급 적용
 
