@@ -40,3 +40,6 @@ docs/_*.html
 # 전문가 에이전트 자동 생성 지식 위키(런타임 캐시)
 docs/experts/
 docs/manager/
+
+# 이 PC 전용 환경설정 계획 (T-002) — 공개 저장소에 올리지 않는다
+docs/setup-rollout.md
