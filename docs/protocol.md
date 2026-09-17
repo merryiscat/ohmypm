@@ -50,6 +50,7 @@ orca orchestration gate-create --task <taskId> --question "T-NNN: <쟁점 한 �
 ## 4. 게이트와 배정 (pl2)
 
 스펙 승인은 사용자 몫이다. 승인 뒤에만 워커를 띄운다. 이 절은 pl2가 실행한다 — pl은 배정·대기 턴을 쓰지 않는다.
+**배정 전 확인**: 워커 워크트리는 저장소 기본 base(보통 origin/main)에서 뜬다. 승인된 스펙이 그 base에 있어야 하므로, main이 pl 브랜치를 머지·푸시한 뒤 배정한다(2026-09-17 실측 — 원격이 앞서 있어 스펙이 워커 브랜치에 없었다).
 ```
 orca orchestration run-create --objective "<프로젝트> 구현" --json                # 세션당 한 번
 orca orchestration task-create --spec "docs/tasks/T-NNN-<slug>.md 를 읽고 완료 기준을 전부 만족시켜라" --json
