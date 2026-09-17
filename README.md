@@ -164,6 +164,9 @@ main은 직접 하지 않고 pl에 "스펙 써라" 한 줄을 넣습니다. 그 
 **Q. 플러그인을 고쳤는데 반영이 안 돼요.**
 `plugin/.claude-plugin/plugin.json`의 version을 올린 뒤 `claude plugin update ohmypm@ohmypm-local`. 이미 떠 있는 Claude 세션은 새로 열어야 읽습니다.
 
+**Q. 프로젝트마다 깔린 파일은 플러그인을 고치면 어떻게 따라오나요?**
+따라오지 않습니다. 각 프로젝트 `docs/protocol.md` 첫 줄에 깔린 버전이 있고, 그 프로젝트 main에서 "구조 업데이트하자"라고 하면 관리 파일만 새 버전으로 갈아 끼웁니다. 내가 손댄 파일(역할표·orca.yaml 등)은 건드리지 않습니다. 바뀐 점은 `plugin/CHANGELOG.md`.
+
 ---
 
 ## 7. 더 읽기

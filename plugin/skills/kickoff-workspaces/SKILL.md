@@ -1,6 +1,6 @@
 ---
 name: kickoff-workspaces
-description: 킥오프 2부(마지막) — 프로젝트에 작업 구조를 깐다. main(통합)·pl(기획·설계·검토, 이종 모델 둘)·구현 워커(난이도 등급별 모델)로 Orca 워크트리를 나누고, 역할표·작업 스펙·검토서 템플릿·브랜치 가드를 설치한 뒤 pl 워크트리를 연다. 발동 — 1부(plan.md) 직후, "작업 구조 세팅하자"·"pl 구조 붙이자"·"워크스페이스 나누자", 기존 프로젝트에 소급 적용할 때.
+description: 킥오프 2부(마지막) — 프로젝트에 작업 구조를 깐다. main(통합)·pl(기획·설계·검토, 이종 모델 둘)·구현 워커(난이도 등급별 모델)로 Orca 워크트리를 나누고, 역할표·작업 스펙·검토서 템플릿·브랜치 가드를 설치한 뒤 pl 워크트리를 연다. 발동 — 1부(plan.md) 직후, "작업 구조 세팅하자"·"pl 구조 붙이자"·"워크스페이스 나누자", 기존 프로젝트에 소급 적용할 때, 그리고 "구조 업데이트하자"(플러그인 버전을 프로젝트 복사본에 반영).
 ---
 
 # 킥오프 2부 — 작업 구조
@@ -45,7 +45,11 @@ description: 킥오프 2부(마지막) — 프로젝트에 작업 구조를 깐�
 
 ## 2. 파일 세트 설치 (대상 프로젝트)
 
-`templates/`를 복사하되 **있는 파일은 덮지 않고 블록만 추가**한다:
+설치는 스크립트 하나로 한다 — 관리 파일에 버전 도장을 찍고, 프로젝트 소유 파일은 없을 때만 만든다:
+```
+"${CLAUDE_PLUGIN_ROOT}"/skills/kickoff-workspaces/scripts/ws-upgrade.sh <프로젝트경로> --install "<공유 폴더들>" "<setup 명령>"
+```
+스크립트가 하는 일(손으로 할 때의 기준이기도 하다):
 
 0. `PROTOCOL.md` → `docs/protocol.md` (프로젝트가 자급자족해야 pl(Codex)과 다른 PC가 읽는다)
 
@@ -84,6 +88,15 @@ pl에 **T-001**을 지시한다: plan(있으면 usecases)의 필요 기술·공�
 
 `docs/plan.md`에 "작업 구조" 절(규모 판단·역할 요약·roles.md 링크), `log.md`에 매듭 한 줄.
 설치한 것과 건너뛴 것(이유)을 남긴다.
+
+## 업데이트 — "구조 업데이트하자"
+
+플러그인이 바뀌면 프로젝트 복사본은 낡는다. 버전은 프로젝트 `docs/protocol.md` 첫 줄, 플러그인은 `plugin.json`. 차이가 나면:
+```
+"${CLAUDE_PLUGIN_ROOT}"/skills/kickoff-workspaces/scripts/ws-upgrade.sh <프로젝트경로>
+```
+관리 파일(protocol·템플릿 2·pre-commit·AGENTS/CLAUDE 블록)만 갈아 끼우고 diff를 보여 준다. 그 diff를 보고 main이 커밋 → pl 워크트리 ff → **pl·pl2 `/clear`**(규칙 파일이 바뀌었다). 무엇이 바뀌었는지는 플러그인 `CHANGELOG.md`.
+프로젝트 소유 파일(roles·orca.yaml·.worktreeinclude·.gitignore)은 건드리지 않으므로, 템플릿 쪽 변화가 거기 필요하면 CHANGELOG가 그 항목을 따로 부른다.
 
 ## 기존 프로젝트에 소급 적용
 
