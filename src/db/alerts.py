@@ -28,3 +28,15 @@ def is_whitelisted(action: str) -> bool:
     사용자가 등록한 목록에 있는지만 확인한다(confused-deputy 방지).
     """
     return get_setting(f"whitelist.{action}") == "on"
+
+
+# ── 프로젝트별 '기록 자동 반영' 스위치(2026-09-17 사용자 확정: 기본 끔, 프로젝트별 켜기) ──
+# 담당 에이전트가 그 프로젝트 docs를 고치고 코드가 자동 커밋하는 세 단계(기록 정리·일간보고 반영·
+# 조언 반영)는 이 스위치가 켜진 프로젝트에만 돈다. 화이트리스트 원칙 그대로 — 에이전트가
+# "고쳐도 되나"를 판단하지 않고, 사용자가 켰는지만 본다.
+def docs_autowrite(path: str) -> bool:
+    return get_setting(f"docs_autowrite:{path}") == "on"
+
+
+def set_docs_autowrite(path: str, on: bool) -> None:
+    set_setting(f"docs_autowrite:{path}", "on" if on else "off")

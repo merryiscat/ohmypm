@@ -91,51 +91,81 @@ def _parse_status(text: str) -> list[dict]:
     return out
 
 
+# 마감일 칸에서 날짜 옆에 붙어도 되는 '역할 낱말' — 사람이 표만 봐도 그 날짜가 무슨 날인지 알게 하는 장치.
+# 이 낱말을 떼어낸 나머지가 날짜 하나뿐일 때만 기한으로 읽는다(conventions-wiki '2026-09-15에 무엇을 만들지').
+ROLE_WORDS = ("재검토", "마감", "까지", "D-")
+
+
+def _deadline_col(header_cells: list[str]) -> int | None:
+    """표 머리글에서 기한 칸 번호를 찾는다 — '마감일' 우선, 없으면 '재검토'가 든 칸, 둘 다 없으면 None."""
+    for i, c in enumerate(header_cells):
+        if "마감일" in c:
+            return i
+    for i, c in enumerate(header_cells):
+        if "재검토" in c:
+            return i
+    return None
+
+
+def _condition_col(header_cells: list[str]) -> int | None:
+    """표 머리글에서 '조건' 칸 번호 — 마감일 칸을 나눈 새 형식에서 조건 대기 안건을 읽는다."""
+    for i, c in enumerate(header_cells):
+        if c.strip() == "조건" or c.startswith("조건"):
+            return i
+    return None
+
+
+def _single_date(cell: str) -> str | None:
+    """칸 값에서 역할 낱말을 떼어낸 나머지가 **날짜 하나뿐**이면 그 날짜, 아니면 None.
+
+    '2026-09-20', '2026-09-20 마감', '**2026-09-20까지**' → 날짜.
+    '조건: 야간 배치가 2026-08-17 로그처럼 또 죽으면' → None (인용 날짜는 언제나 문장 속에 있다).
+    """
+    s = cell.replace("*", " ")
+    for w in ROLE_WORDS:
+        s = s.replace(w, " ")
+    dates = DATE_RE.findall(s)
+    if len(dates) != 1:
+        return None
+    rest = s.replace(dates[0], " ").strip(" :·—-()[]`")
+    return dates[0] if not rest else None
+
+
 def _parse_pending(text: str) -> list[dict]:
-    """pending.md 표에서 날짜(재검토 시점) 있는 행을 기한 후보로 추출.
+    """pending.md 표에서 기한(마감일) 후보와 조건 대기 안건을 추출.
 
-    ★ 여기서 뽑는 건 '후보'다 — 표 행의 날짜가 마감일인지 보류일인지, 조건인지는
-       판정 에이전트(cc/judge)가 소스를 열어 가린다. 다만 이미 버린 안건(취소선·미채택)은
-       판정할 것도 없으니 값싸게 선거른다(에이전트 호출·화면 노이즈 절감).
+    2026-09-17 칸 인식으로 전환(설계는 09-14 확정, conventions-wiki '2026-09-15에 무엇을 만들지'):
+      ① 표 머리글(구분선 `|---|` 바로 윗줄)에서 기한 칸을 찾는다 — '마감일' 우선, 없으면 '재검토'
+      ② 그 칸 값에서 역할 낱말(재검토·마감·까지·D-)을 뗀 나머지가 날짜 하나뿐일 때만 kind="deadline"
+      ③ 날짜 말고 다른 글자가 남거나 날짜가 없으면(조건 문장) kind="conditional", due 없음 —
+         칸반의 '조건 대기'로 들어가고 기한 목록에는 오르지 않는다
+      ④ 기한 칸이 없는 옛 표(다른 프로젝트)는 종전대로 행 전체에서 날짜를 찾아 후보로 올린다 —
+         이 경우만 판정 에이전트(cc/judge)가 마감/조건을 가른다(모델 호출)
 
-    ★ 알려진 오탐 원인(2026-09-10 게시판 kickoff_pack 왕복) — 아래 DATE_RE는 **행 전체**에서
-       날짜를 찾는다. 그래서 '재검토 시점' 칸이 아니라 보류 이유 칸의 등재일이나 배경 링크의
-       로그 날짜(예: `[log 09-08]`가 아니라 `2026-08-17` 같은 표기)까지 마감일로 둔갑한다.
-       실제로 두 프로젝트에서 '기한 초과'가 잘못 떴다(한 곳은 등재일, 다른 곳은 조건 대기 3건).
-       고칠 방향은 '칸을 알아보고 재검토 시점 칸의 날짜만 쓰기'다 — 표 머리글에 '재검토'가
-       있으면 그 칸 번호를 기억했다가 그 칸만 보고, 없으면 지금처럼 행 전체를 본다.
-       지금 안 고치는 이유: 이 함수의 결과가 25개 프로젝트 기한 목록을 그대로 바꾸므로
-       야간 배치가 걸린 날 즉흥으로 손대지 않는다 → docs/pending.md에 안건으로 등재.
+    그전엔 행 전체에서 날짜를 찾아 등재일·배경 링크 날짜까지 마감으로 둔갑했고(실제 오탐 2건),
+    판정 에이전트가 모델 호출로 사후에 갈라내고 있었다 — 원인을 두고 증상만 막는 구조.
 
-    ★ 2026-09-14 게시판 왕복으로 위 '고칠 방향'이 한 겹 더 좁혀졌다(착수 2026-09-15, 마감 09-20).
-       칸만 좁혀도 구멍이 남는다 — 조건 문장 안에 인용된 날짜("2026-08-17 로그처럼 또 죽으면")를
-       그 칸에서 그대로 읽어버린다. 그래서 칸 한정에 더해 **값의 모양**까지 본다:
-         ① 머리글에서 '마감일' 칸을 찾는다
-         ② 그 칸 값에서 역할 낱말(재검토·마감·까지·D-)을 떼어낸 나머지가
-            **날짜 하나뿐일 때만** kind="deadline"으로 올린다
-         ③ 날짜 외 글자가 남으면 조건형으로 보고 기한 목록에서 뺀다(인용 날짜는 항상 문장 속이라 여기서 걸린다)
-       옛 형식 호환은 필수다 — '마감일' 칸이 없으면 '재검토'가 든 칸에 같은 단일 날짜 규칙을,
-       그 칸도 없으면 지금처럼 행 전체를 본다(다른 24개 프로젝트 표를 한꺼번에 못 바꾼다).
-       쓰는 쪽 규약은 docs/conventions-wiki.md '2026-09-15에 무엇을 만들지' 절에 있다 —
-       읽는 쪽만 고치면 오탐이 안 끝난다(쓰는 쪽 칸 분리와 같은 날 함께 손댄다).
+    이미 버린 안건(취소선·미채택)은 종전대로 값싸게 선거른다.
     """
     out: list[dict] = []
-    title_idx = 0            # 머리글에서 '안건' 칸을 찾으면 그 번호로 바뀐다
-    for line in text.splitlines():
+    lines = text.splitlines()
+    col: int | None = None          # 현재 표의 기한 칸 번호(표마다 구분선에서 다시 잡는다)
+    ccol: int | None = None         # '조건' 칸 번호(새 형식에만 있다)
+    tcol = 0                        # '안건' 칸 번호 — 번호 칸이 앞에 오는 표(odin-3.0)용, 2026-09-16
+    for idx, line in enumerate(lines):
         st = line.strip()
-        if not st.startswith("|") or "---" in st:
+        if not st.startswith("|"):
+            continue
+        if "---" in st:             # 구분선 — 바로 윗줄이 머리글
+            prev = lines[idx - 1].strip() if idx else ""
+            hdr = [c.strip() for c in prev.strip("|").split("|")]
+            col, ccol = _deadline_col(hdr), _condition_col(hdr)
+            tcol = _title_col(hdr) or 0
             continue
         cells = [c.strip() for c in st.strip("|").split("|")]
-        if not cells or not any(cells):
+        if not cells or not any(cells) or _title_col(cells) is not None:  # 빈 행·머리글 행 스킵
             continue
-        head = _title_col(cells)      # 머리글 행이면 안건 칸 번호를 기억하고 넘어간다
-        if head is not None:
-            title_idx = head
-            continue
-        m = DATE_RE.search(st)
-        if not m:
-            continue
-        title = _row_title(cells, title_idx)
+        title = _row_title(cells, tcol)   # 숫자만 든 번호 칸은 제목이 아니다
         if not title:
             continue
         # 선거름 ①: 안건 칸이 취소선(~~...~~) = 이미 해소/폐기
@@ -144,9 +174,23 @@ def _parse_pending(text: str) -> list[dict]:
         # 선거름 ②: 행 어디든 '미채택/제외/폐기…' = 버린 안건
         if any(mk in st for mk in DEAD_MARKERS):
             continue
-        out.append(
-            {"kind": "deadline", "title": title[:200], "due": m.group(0), "source": "pending.md"}
-        )
+        if col is None:
+            # 옛 표(기한 칸 없음) — 종전 방식: 행 전체 날짜 → 후보, 판정 에이전트가 가린다
+            m = DATE_RE.search(st)
+            if m:
+                out.append({"kind": "deadline", "title": title[:200], "due": m.group(0),
+                            "source": "pending.md"})
+            continue
+        cell = cells[col] if col < len(cells) else ""
+        cond = cells[ccol] if ccol is not None and ccol < len(cells) else ""
+        due = _single_date(cell)
+        if due:
+            out.append({"kind": "deadline", "title": title[:200], "due": due, "source": "pending.md"})
+        elif cell or cond:
+            # 기한 칸에 날짜 아닌 글자가 남았거나(옛 형식의 조건 문장), 조건 칸이 차 있으면 조건 대기
+            out.append({"kind": "conditional", "title": title[:200], "due": None,
+                        "source": "pending.md", "status": "deferred"})
+        # 둘 다 비어 있으면 기한도 조건도 없는 안건 — 후보로 올리지 않는다
     return out
 
 

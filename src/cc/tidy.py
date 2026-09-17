@@ -125,6 +125,8 @@ def run_tidy(paths: list[str] | None = None) -> dict:
     if paths:
         wanted = set(paths)
         projects = [p for p in projects if p["path"] in wanted]
+    # ★ 기록 자동 반영이 켜진 프로젝트만(2026-09-17 사용자 확정 — 기본 끔, 룸에서 프로젝트별 켜기)
+    projects = [p for p in projects if alerts_db.docs_autowrite(p["path"])]
 
     committed, asks, results = 0, [], []
     for p in projects:

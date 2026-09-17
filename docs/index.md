@@ -8,6 +8,7 @@
 - [protocol.md](protocol.md) — 작업 절차: 단일 패스 교차 검토·게이트·워커 배정·검증 (ohmypm 플러그인 PROTOCOL.md 복사본)
 - [roles.md](roles.md) — 작업 구조: 자리·모델·난이도 등급표·이름 규칙 (kickoff-workspaces, 2026-09-17)
 - `tasks/` — pl이 쓰는 작업 스펙 `T-NNN-<slug>.md` (템플릿 `_template.md`) · `reviews/` — pl2 교차 검토서
+- [review-2026-09-17.md](review-2026-09-17.md) — 모델 교체 후 전면 재평가(목적·설계·운영·권고) + 오늘 조치·결정 대기 *(흡수 후 삭제 대상)*
 - [setup.md](setup.md) — 다른 PC 재현 절차 (PC마다 **독립 인스턴스** 전제, wizard 5단계, 하드코딩 금지 규칙)
 
 ## 위키 운영

@@ -238,6 +238,10 @@ def run_reprocess(paths: list[str] | None = None) -> dict:
     if paths:
         wanted = set(paths)
         targets = {k: v for k, v in targets.items() if k in wanted}
+    # ★ 기록 자동 반영이 켜진 프로젝트만(2026-09-17 사용자 확정 — 기본 끔, 룸에서 프로젝트별 켜기)
+    from src.db import alerts as alerts_db
+
+    targets = {k: v for k, v in targets.items() if alerts_db.docs_autowrite(k)}
 
     committed, results = 0, []
     for path, name in targets.items():

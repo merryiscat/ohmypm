@@ -239,12 +239,22 @@ def _apply_updates(updates: list, valid_ids: set[int], path: str = "", date: str
 
 
 def _agent_call(name: str, path: str, question: str, history: str) -> str:
+    # ★ 기록 자동 반영은 프로젝트별 스위치(2026-09-17 사용자 확정, 기본 끔). 꺼진 프로젝트의
+    #   담당은 읽기만 하고 답한다 — 도구 자체를 빼서(Edit/Write 없음) 프롬프트가 아니라 층에서 막는다.
+    from src.db import alerts as alerts_db
+
+    writable = alerts_db.docs_autowrite(path)
+    task = "daily_agent" if writable else "daily_pm"
+    prompt = agents_db.persona_prefix(path) + daily_agent_answer(name, path, question, history)
+    if not writable:
+        prompt += ("\n\n[주의] 이 프로젝트는 '기록 자동 반영'이 꺼져 있다. 파일을 고치지 말고 "
+                   "읽고 답만 하라. 고쳐야 할 것이 보이면 답에 '기록장에 반영 필요: …'로 적어라.")
     r = run_headless(
-        prompt=agents_db.persona_prefix(path) + daily_agent_answer(name, path, question, history),
+        prompt=prompt,
         cwd=_neutral_cwd(),
-        allowed_tools=tools_for("daily_agent")[0],
-        disallowed_tools=tools_for("daily_agent")[1],
-        permission_mode="acceptEdits",   # 답하면서 기록장 수정 — 저장 자동 승인(Bash는 없음)
+        allowed_tools=tools_for(task)[0],
+        disallowed_tools=tools_for(task)[1],
+        permission_mode="acceptEdits" if writable else "default",
         timeout=AGENT_TIMEOUT,
         append_system_prompt=ROOM_SYSTEM,
         add_dirs=[path],
@@ -851,6 +861,16 @@ def run_reply_followup(paths: list[str] | None = None, deadline_ts: float | None
     return {"replied": replied}
 
 
+def _board_weekdays() -> set[int]:
+    """settings.board_weekdays("6" / "2,6" / "")를 요일 집합으로. 잘못된 값은 무시한다."""
+    out: set[int] = set()
+    for tok in (settings.board_weekdays or "").split(","):
+        tok = tok.strip()
+        if tok.isdigit() and 0 <= int(tok) <= 6:
+            out.add(int(tok))
+    return out
+
+
 def run_nightly() -> dict:
     """01:00 cron 진입점 — 총괄 관리자가 지휘하는 하루.
 
@@ -943,7 +963,17 @@ def run_nightly() -> dict:
     from src.cc.tidy import run_tidy
     from src.scan import run_scan
 
-    tidied = run_tidy()
+    # ★ 2026-09-17 사용자 확정 — 야간 배치를 두 경로로 나눈다. 감지·알림(스캔·판정·일간보고·
+    #   텔레그램)은 매일, 게시판 경로(기록 정리·글쓰기·둘러보기·반응·대대댓글·조언 반영·보상)는
+    #   settings.board_weekdays 요일(기본 일요일)만. 그전엔 하룻밤 모델 호출의 대부분이 게시판이었다.
+    board_day = now.weekday() in _board_weekdays()
+    from src.cc import client as cc_client
+
+    cc_client.stats_snapshot(reset=True)   # 오늘 밤 호출 수·비용 집계 시작
+    if board_day:
+        tidied = run_tidy()
+    else:
+        tidied = {"committed": 0, "asks": [], "results": [], "skipped": "오늘은 게시판 요일이 아님"}
     run_scan()
     guidance = manager.plan_day(projects)                        # ① 아침 계획
     report = run_daily_report(deadline_ts=_at(settings.daily_soft_deadline_hour),
@@ -980,32 +1010,43 @@ def run_nightly() -> dict:
     #   글쓰기를 '변화 있던 담당'으로 좁혔더니 사용자가 자주 안 건드리는 프로젝트는 글을 쓸 일이
     #   영영 없었다(2026-09-08 사용자: "자주 안 만지면 게시판 글 올릴 일이 없잖아, 주제는 자유").
     #   → 전원에게 기회를 주고 쓸지 말지는 담당이 판단한다(억지 글은 프롬프트가 막는다).
-    wiki_paths = [p["path"] for p in projects if p.get("has_wiki")]
-    # 재개로 새벽 마감(4시)을 이미 넘겼으면 마감 없이 진행 — 사용량이 리셋 직후라 여유가 있다
-    disc_deadline: float | None = _at(settings.discussion_until_hour)
-    if time.time() > disc_deadline:
-        disc_deadline = None
-    posts_res = run_board_posts(paths=wiki_paths, deadline_ts=disc_deadline) \
-        if wiki_paths else {"posted": 0}                                             # ③a 글쓰기(창작)
-    board = run_board_discussion(paths=wiki_paths, deadline_ts=disc_deadline)        # ③b 둘러보기·댓글
-    feedback = run_post_feedback(paths=wiki_paths, deadline_ts=disc_deadline)        # ④ 대댓글 필수
-    followup = run_reply_followup(paths=wiki_paths, deadline_ts=disc_deadline)       # ④b 대대댓글 선택
-    # ★ 게시판 단계 한도 재개(2026-09-07 실증: 글 3편은 올라갔는데 둘러보기부터 429 전멸 —
-    #   조회·댓글 0의 원인. 보고 단계만 감싸던 재개를 게시판 단계에도) — 전멸했을 때만 1회 재시도.
-    reset_at2 = cc_client.limit_reset_at()
-    if reset_at2 and board.get("commented", 0) == 0 and feedback.get("reacted", 0) == 0:
-        wait = min(max(reset_at2 - time.time(), 0) + 120, 6 * 3600)
-        logger.info(f"[야간] 게시판 단계 한도 소진 — {wait / 60:.0f}분 뒤 리셋에 재개")
-        time.sleep(wait)
-        cc_client.clear_limit()
-        board = run_board_discussion(paths=wiki_paths, deadline_ts=None)
-        feedback = run_post_feedback(paths=wiki_paths, deadline_ts=None)
-        followup = run_reply_followup(paths=wiki_paths, deadline_ts=None)
-    reprocess = run_reprocess()                                   # ⑤ 문서 재가공(docs 커밋·push 안 함)
-    rewards = run_rewards()                                       # ⑥ 보상
+    if board_day:
+        wiki_paths = [p["path"] for p in projects if p.get("has_wiki")]
+        # 재개로 새벽 마감(4시)을 이미 넘겼으면 마감 없이 진행 — 사용량이 리셋 직후라 여유가 있다
+        disc_deadline: float | None = _at(settings.discussion_until_hour)
+        if time.time() > disc_deadline:
+            disc_deadline = None
+        posts_res = run_board_posts(paths=wiki_paths, deadline_ts=disc_deadline) \
+            if wiki_paths else {"posted": 0}                                             # ③a 글쓰기(창작)
+        board = run_board_discussion(paths=wiki_paths, deadline_ts=disc_deadline)        # ③b 둘러보기·댓글
+        feedback = run_post_feedback(paths=wiki_paths, deadline_ts=disc_deadline)        # ④ 대댓글 필수
+        followup = run_reply_followup(paths=wiki_paths, deadline_ts=disc_deadline)       # ④b 대대댓글 선택
+        # ★ 게시판 단계 한도 재개(2026-09-07 실증: 글 3편은 올라갔는데 둘러보기부터 429 전멸 —
+        #   조회·댓글 0의 원인. 보고 단계만 감싸던 재개를 게시판 단계에도) — 전멸했을 때만 1회 재시도.
+        reset_at2 = cc_client.limit_reset_at()
+        if reset_at2 and board.get("commented", 0) == 0 and feedback.get("reacted", 0) == 0:
+            wait = min(max(reset_at2 - time.time(), 0) + 120, 6 * 3600)
+            logger.info(f"[야간] 게시판 단계 한도 소진 — {wait / 60:.0f}분 뒤 리셋에 재개")
+            time.sleep(wait)
+            cc_client.clear_limit()
+            board = run_board_discussion(paths=wiki_paths, deadline_ts=None)
+            feedback = run_post_feedback(paths=wiki_paths, deadline_ts=None)
+            followup = run_reply_followup(paths=wiki_paths, deadline_ts=None)
+        reprocess = run_reprocess()                                   # ⑤ 문서 재가공(docs 커밋·push 안 함)
+        rewards = run_rewards()                                       # ⑥ 보상
+    else:
+        skipped = {"skipped": "게시판 요일 아님"}
+        posts_res = board = feedback = followup = reprocess = rewards = skipped
+        logger.info(f"[야간] 게시판 경로 건너뜀 — 게시판 요일은 {settings.board_weekdays}")
     synthesis = manager.close_day(date, report.get("results", []))   # ⑦ 저녁 종합
-    # 아침 발송용 요약 = 관리자 종합(없으면 기본 텔레그램 텍스트)
-    alerts_db.set_setting(f"daily_summary:{date}", synthesis or report.get("telegram_preview", ""))
+    # 아침 발송용 요약 = 관리자 종합(없으면 기본 텔레그램 텍스트) + 오늘 밤 호출 수·비용 한 줄
+    stats = cc_client.stats_snapshot(reset=True)
+    logger.info(f"[야간] {cc_client.stats_line(stats)}")
+    summary_text = (synthesis or report.get("telegram_preview", "")).rstrip()
+    summary_text += f"\n\n[오늘 밤] {cc_client.stats_line(stats)}"
+    if not board_day:
+        summary_text += f" · 게시판 경로는 쉼(요일 {settings.board_weekdays})"
+    alerts_db.set_setting(f"daily_summary:{date}", summary_text)
     # 재개 대기로 아침 발송 시각(07시)을 넘겨 끝났으면 즉시 발송 — 그날 07시 cron은 요약이
     # 아직 없어 빈손으로 지나갔으므로 중복 발송이 아니다.
     if time.time() > _at(settings.telegram_hour):

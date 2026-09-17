@@ -15,8 +15,28 @@ router = APIRouter(prefix="/api")
 
 @router.get("/projects")
 def get_projects() -> list[dict]:
-    """관리 대상 프로젝트 목록."""
-    return projects_db.list_projects()
+    """관리 대상 프로젝트 목록(+ 프로젝트별 '기록 자동 반영' 스위치)."""
+    from src.db import alerts as alerts_db
+
+    out = projects_db.list_projects()
+    for p in out:
+        p["docs_autowrite"] = alerts_db.docs_autowrite(p["path"])
+    return out
+
+
+class AutowriteReq(BaseModel):
+    path: str
+    on: bool
+
+
+@router.post("/projects/autowrite")
+def set_autowrite(req: AutowriteReq) -> dict:
+    """프로젝트별 '기록 자동 반영' 켜기/끄기(2026-09-17). 켜진 프로젝트만 담당이 docs를 고치고
+    코드가 커밋한다(기록 정리·일간보고 반영·조언 반영). 기본은 끔."""
+    from src.db import alerts as alerts_db
+
+    alerts_db.set_docs_autowrite(req.path, req.on)
+    return {"ok": True, "path": req.path, "on": req.on}
 
 
 @router.get("/agents")

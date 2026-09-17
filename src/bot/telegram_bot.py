@@ -29,7 +29,14 @@ async def send_telegram(text: str) -> bool:
                     "disable_web_page_preview": True,
                 },
             )
-        return resp.status_code == 200
+        # ★ 성공도 남긴다(2026-09-17) — 그전엔 성공 흔적이 어디에도 없어 "알림이 갔는지"를
+        #   2주치 로그로도 확인할 수 없었다. 감지·알림 도구의 알림이 검증 불가면 성공 기준
+        #   ("안 봐도 안 놓친다")을 아무도 확인 못 한다.
+        if resp.status_code == 200:
+            logger.info(f"[텔레그램] 발송 성공 ({len(text)}자)")
+            return True
+        logger.warning(f"[텔레그램] 발송 거절 HTTP {resp.status_code}: {resp.text[:200]}")
+        return False
     except Exception as e:
         logger.warning(f"[텔레그램] 발송 실패: {e}")
         return False
@@ -56,7 +63,11 @@ def send_telegram_sync(text: str) -> bool:
                         "disable_web_page_preview": True,
                     },
                 )
-                ok = ok and resp.status_code == 200
+                if resp.status_code != 200:
+                    ok = False
+                    logger.warning(f"[텔레그램] 발송 거절 HTTP {resp.status_code}: {resp.text[:200]}")
+        if ok:
+            logger.info(f"[텔레그램] 발송 성공 ({len(chunks)}건, {len(text)}자)")
         return ok
     except Exception as e:
         logger.warning(f"[텔레그램] 발송 실패: {e}")
