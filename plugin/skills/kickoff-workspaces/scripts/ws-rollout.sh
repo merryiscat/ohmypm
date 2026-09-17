@@ -321,7 +321,9 @@ for a, d, key in targets:
             row.update(result='실패', reason='커밋 실패 rc=%d(훅 거부 등, 우회 없음): %s' % (r.returncode, ' '.join((r.stderr or r.stdout).strip().splitlines()[:2])), residual='예(stage된 변경 남음: %s)' % ', '.join(changed)); continue
         sha = git(p, 'rev-parse', '--short', 'HEAD').stdout.strip()
         files = git(p, 'show', '--name-only', '--format=', 'HEAD').stdout.split()
-        row.update(result='설치' if cur is None else '갱신', sha=sha, residual='아니오', reason=row['reason'] + ' — 커밋 파일 %d개: %s' % (len(files), ', '.join(files)))
+        ignored = [f for f in DEPLOY_FILES if os.path.exists(os.path.join(p, f)) and git(p, 'check-ignore', '-q', f).returncode == 0]
+        row.update(result='설치' if cur is None else '갱신', sha=sha, residual='아니오', reason=row['reason'] + ' — 커밋 파일 %d개: %s' % (len(files), ', '.join(files))
+                   + (' — 주의: 프로젝트 .gitignore가 무시해 커밋에서 빠진 배포 파일 %d개(강제 추가하지 않음): %s' % (len(ignored), ', '.join(ignored)) if ignored else ''))
     except Exception as e:
         failures += 1
         resid = git(p, 'status', '--porcelain', '--', *DEPLOY_FILES).stdout.strip() if os.path.isdir(p) else ''
