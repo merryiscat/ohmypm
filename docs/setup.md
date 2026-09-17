@@ -54,7 +54,7 @@ claude plugin install ohmypm@ohmypm-local --scope user -y
 claude plugin list                                                                # ohmypm 0.1.0 enabled
 ```
 
-스킬은 `ohmypm:kickoff-interview`처럼 이름공간이 붙는다. `plugin/`을 고쳤으면 `claude plugin update ohmypm@ohmypm-local`.
+스킬은 `ohmypm:kickoff-interview`처럼 이름공간이 붙는다. `plugin/`을 고쳤으면 plugin.json의 version을 올리고 `claude plugin update ohmypm@ohmypm-local` — 버전이 같으면 갱신하지 않는다.
 Codex(pl)는 플러그인을 못 읽으므로 프로젝트가 필요로 하는 것(protocol·roles·템플릿)은 kickoff-workspaces가 대상 프로젝트 `docs/`로 복사한다.
 
 > screen-plan·grill 등 범용 글로벌 스킬과 Orca 동봉 스킬(orca-cli·orchestration·computer-use, `~/.agents/skills` + junction)은 플러그인 밖이다.
