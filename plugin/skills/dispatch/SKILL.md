@@ -63,6 +63,7 @@ orca terminal send --terminal <pl2> --text "/compact" --enter --json
 orca terminal send --terminal <pl2> --enter --wait-submit 10 --json --text  "이제 protocol 6절: 워커 산출물을 스펙의 완료 기준마다 통과/실패로 판정해 docs/tasks/T-NNN-<slug>.md '검증' 표에 적어라(M이면 기준별 한 줄, 재조회는 차단 기준만). 고치지 않는다. 실패면 사유를 적어 같은 워커에 한 번 되돌린다. 끝나면 한 문단 보고."
 ```
 끝났는지는 스펙의 "검증" 표에 행이 생기고 pl2가 멈췄을 때. 반복 업무를 같은 세션에서 다음 회차로 넘길 때도 회차 사이에 `/compact`.
+**대기는 언제나 백그라운드 + 상한 15분.** 상한이 지나면 pl2 화면을 읽는다 — 같은 명령이 계속 "Moseying/Whirlpooling"이면 멈춘 것이다: `orca terminal send --terminal <pl2> --interrupt --json` 뒤 "그 명령은 끊었다. 산출물을 Read로 읽어 기준별 한 줄로 판정하라. 1분 넘는 명령 금지"를 보낸다. main이 전경 루프로 기다리면 main도 같이 멈춘다(실측).
 
 ## 5. 머지 (main)
 
@@ -90,3 +91,4 @@ orca terminal send --terminal <pl2> --text "/clear" --enter --json
 - 목록으로 터미널 닫기 — 내가 만든 핸들만 닫는다
 - 사용자 세션(제목에 ✳, 또는 pl 워크트리 밖) 건드리기
 - main2 만들기, pl에 두 스펙을 동시에 시키기, 대기를 전경(foreground)에서 돌려 main을 막기
+- 일하는 중인 터미널("esc to interrupt / ctrl+b")에 메시지·`/clear`·`/compact` 보내기 — 실행 중 명령의 입력으로 들어간다. 여러 터미널에 목록으로 뿌리지 않는다
