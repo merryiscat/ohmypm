@@ -29,7 +29,7 @@ main이 원격보다 뒤져 있으면 먼저 `git fetch` + ff — 워커 워크�
 orca terminal send --terminal <pl> --enter --wait-submit 10 --json --text \
  "사용자 요청: <원문>. 이걸 docs/tasks/T-NNN-<slug>.md 스펙 하나로 써라(_template.md 형식, 완료 기준 ≤ 8, 한 장). 셸은 docs 읽기·쓰기에만, src·코드 실행 금지. 다 쓰면 한 줄 보고하고 멈춰라."
 ```
-번호 NNN은 `docs/tasks/`의 다음 번호. 끝났는지는 **파일 생성 + 화면에 "esc to interrupt"가 사라짐**으로 판단(폴링 5초). `terminal wait --for tui-idle`은 Codex에서 이르게 풀린다.
+번호 NNN은 `docs/tasks/`의 다음 번호. **보내기 전에 pl이 비어 있는지** 확인한다 — 이전 태스크 문맥이 남아 있으면 `/clear`부터(종량). 끝났는지는 **파일 생성 + 화면에 "esc to interrupt"가 사라짐**으로 판단(폴링 5초). `terminal wait --for tui-idle`은 Codex에서 이르게 풀린다.
 
 ## 3. pl2에 검토 지시
 
@@ -55,6 +55,12 @@ orca terminal send --terminal <pl2> --enter --wait-submit 10 --json --text \
 ## 5. 머지 (main)
 
 pl2 판정을 pl 브랜치에 커밋 → main ff → 워커 브랜치 머지(로컬 전용 산출물이면 파일을 main·pl로 복사) → 푸시 → `orca worktree rm --force` 워커 정리 → 스펙 상태 줄을 `머지`로 → `docs/log.md` 한 줄.
+마지막으로 **세션을 비운다**(protocol 8절) — pl은 v2 보고 직후에 이미 비웠어야 하고, pl2는 여기서:
+```
+orca terminal send --terminal <pl> --text "/clear" --enter --json     # 아직 안 비웠으면
+orca terminal send --terminal <pl2> --text "/clear" --enter --json
+```
+규칙 파일(AGENTS·CLAUDE·protocol·roles)을 고쳤을 때도 둘 다 즉시 비운다.
 
 ## 하지 않는 것
 
