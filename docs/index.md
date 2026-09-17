@@ -4,6 +4,7 @@
 - [plan.md](plan.md) — 목적·형태·MVP·**스택·하네스 확정(2·3부)**·미확정 질문
 - [references.md](references.md) — 레퍼런스: 기능별 keep 표 23 + 드랍 18(사유) + 미검증 83 (재검수 종결)
 - [usecases.md](usecases.md) — 킥오프 2부: 18케이스(해피/배드/필요기술) + 공통전제 + 선결 과제
+- [design.md](design.md) — 설계 한 장(T-001): 스택표(케이스·가중합·채택/보류)·주 흐름·결정론/LLM 역할·자율 경계·보류와 사용자 질문
 - [deliverables.md](deliverables.md) — 산출물 대장: 단계(기획·설계·구축·검증·운영)별 산출물 기준표, PM이 단계 판단·요구에 쓴다
 - [protocol.md](protocol.md) — 작업 절차: 단일 패스 교차 검토·게이트·워커 배정·검증 (ohmypm 플러그인 PROTOCOL.md 복사본)
 - [roles.md](roles.md) — 작업 구조: 자리·모델·난이도 등급표·이름 규칙 (kickoff-workspaces, 2026-09-17)
