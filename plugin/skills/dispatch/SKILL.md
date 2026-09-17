@@ -42,15 +42,22 @@ orca terminal send --terminal <pl2> --enter --wait-submit 10 --json --text \
 ... --text "pl2 검토서 docs/reviews/T-NNN.review-v1.md가 나왔다. [사용자 결정: …] 지적마다 '검토 반영' 표에 수용/기각(근거)을 적고 본문을 v2로 고쳐라(상태: 검토 반영 v2, 기준 ≤ 8). 이 턴 하나로 끝낸다. 끝나면 '차단 기각 있음/없음' 한 줄만."
 ```
 
-## 4. 게이트와 배정 (pl2)
+## 4. 게이트와 배정 (pl2) — 배정·대기와 검증 사이에 `/compact`
 
-스펙·검토서를 pl 브랜치에 커밋 → main에 ff 머지 → **푸시**(원격이 있으면) → 사용자에게 승인 질문(스펙 목표·범위 밖·산출물을 두 문장으로). 승인되면:
+스펙·검토서를 pl 브랜치에 커밋 → main에 ff 머지 → **푸시**(원격이 있으면) → 사용자에게 승인 질문(스펙 목표·범위 밖·산출물을 두 문장으로). 승인되면 **4a 배정·대기**:
 ```
-orca terminal send --terminal <pl2> --enter --wait-submit 10 --json --text \
- "사용자가 T-NNN v2를 승인했다. protocol 4·5·6절대로: run-create(있으면 재사용) → task-create --spec '<스펙 경로를 읽고 완료 기준 전부 만족. 손대는 파일·금지는 스펙대로. worker_done에 기준별 통과/실패>' → worker-start --task <id> --worktree new-top-level --name T-NNN-<slug> --agent claude --model <등급 모델> --effort high (launch.effective 확인) → check --wait → 산출물을 8개 기준으로 판정해 스펙 '검증' 표에 기록(고치지 않는다) → 한 문단 보고."
+orca terminal send --terminal <pl2> --enter --wait-submit 10 --json --text  "사용자가 T-NNN v2를 승인했다. protocol 4·5절대로: run-create(있으면 재사용) → task-create --spec '<스펙 경로를 읽고 완료 기준 전부 만족. 손대는 파일·금지는 스펙대로. worker_done에 기준별 통과/실패>' → worker-start --task <id> --worktree new-top-level --name T-NNN-<slug> --agent claude --model <등급 모델> --effort high (launch.effective 확인) → check --wait(질문은 스펙으로 답할 수 있는 것만) → worker_done을 받으면 검증은 하지 말고 '워커 완료, 워크트리 <경로>, 커밋 <sha>' 한 줄만 보고하고 멈춰라."
 ```
 반복 업무 재배정은 같은 메시지에서 "스펙 T-NNN 재사용, 기준일 오늘"만 바꾼다.
-끝났는지는 스펙의 "검증" 표에 행이 생기고 pl2 화면에 "esc to interrupt / ctrl+b to run / Waiting for"가 없을 때.
+완료 한 줄이 오면(pl2 화면에 "esc to interrupt / ctrl+b to run / Waiting for"가 없을 때) **main이 압축을 보낸다**(protocol 8절 — 상태를 들고 있어 clear는 못 한다):
+```
+orca terminal send --terminal <pl2> --text "/compact" --enter --json
+```
+그 다음 **4b 검증**:
+```
+orca terminal send --terminal <pl2> --enter --wait-submit 10 --json --text  "이제 protocol 6절: 워커 산출물을 스펙의 완료 기준마다 통과/실패로 판정해 docs/tasks/T-NNN-<slug>.md '검증' 표에 적어라. 고치지 않는다. 실패면 사유를 적어 같은 워커에 한 번 되돌린다. 끝나면 한 문단 보고."
+```
+끝났는지는 스펙의 "검증" 표에 행이 생기고 pl2가 멈췄을 때. 반복 업무를 같은 세션에서 다음 회차로 넘길 때도 회차 사이에 `/compact`.
 
 ## 5. 머지 (main)
 
