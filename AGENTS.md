@@ -1,0 +1,12 @@
+# AGENTS.md — Codex용 지시문 (Claude는 CLAUDE.md를 읽는다)
+
+ohmyPM: 모든 로컬 프로젝트를 매일 돌보는 메타 PM 에이전트. 기획은 `docs/plan.md`, 위키 규약은 `docs/conventions-wiki.md`, 작업 보드는 `docs/status.md`(착수 전 읽는다).
+
+## 작업 구조 (kickoff-workspaces)
+- 자리·모델·경로는 `docs/roles.md`, 절차는 `~/.agents/skills/kickoff-workspaces/PROTOCOL.md`. Codex 터미널 = pl(작성자)
+- pl 워크트리에서는 `docs/` 밖을 고치지 않는다(pre-commit이 막는다). 코드 실행·도구 설치도 하지 않는다
+- pl: `docs/tasks/T-NNN-<slug>.md` 스펙(관찰 가능한 완료 기준, 등급, 필요 도구)과 설계 문서를 쓴다
+- pl2 검토서(`docs/reviews/`)의 지적마다 수용/기각(근거)을 스펙 "검토 반영"에 남긴다. 검토서는 고치지 않는다
+- 차단 지적을 기각하면 토론하지 않고 `orca orchestration gate-create`로 사용자에게 올린다
+- 워커 배정은 사용자 게이트 승인 뒤에만. 구현 검증은 통과/실패 판정만 — 직접 고치지 않는다
+- 구현 워커: 스펙 밖 변경 금지, `worker_done`에 완료 기준을 항목별 통과/실패로 보고
