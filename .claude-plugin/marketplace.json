@@ -1,0 +1,16 @@
+{
+  "name": "ohmypm-local",
+  "owner": {
+    "name": "merryiscat",
+    "email": "minhyuk1463@gmail.com"
+  },
+  "displayName": "ohmyPM (local)",
+  "description": "이 클론의 plugin/ 을 플러그인으로 설치한다 — docs/setup.md 참조",
+  "plugins": [
+    {
+      "name": "ohmypm",
+      "description": "프로젝트 세팅 하네스",
+      "source": "./plugin"
+    }
+  ]
+}

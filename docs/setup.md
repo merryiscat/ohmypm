@@ -43,16 +43,22 @@ cd ohmypm
 uv sync
 ```
 
-## 3. 글로벌 스킬 — 킥오프팩 (`~/.claude/skills`)
+## 3. 하네스 플러그인 — 이 저장소의 `plugin/` (2026-09-17, kickoff_pack 대체)
 
-킥오프 체인·screen-plan·grill·llmwiki 등은 글로벌이라 프로젝트에 안 딸린다:
+킥오프(interview → workspaces)·선택 스킬(refsweep·usecases)·llmwiki는 **이 저장소 안의 Claude Code 플러그인**이다.
+클론이 곧 마켓플레이스라 별도 다운로드가 없다:
 
 ```powershell
-npx skills add merryiscat/kickoff_pack --all -g
+claude plugin marketplace add D:\dev\project\ohmypm\.claude-plugin\marketplace.json   # 클론 경로에 맞춘다
+claude plugin install ohmypm@ohmypm-local --scope user -y
+claude plugin list                                                                # ohmypm 0.1.0 enabled
 ```
 
-> 참고: 팩 개발 PC는 글로벌 스킬이 kickoff_pack에 **junction**으로 연결돼 있다.
-> 일반 PC는 위 명령으로 설치한다.
+스킬은 `ohmypm:kickoff-interview`처럼 이름공간이 붙는다. `plugin/`을 고쳤으면 `claude plugin update ohmypm@ohmypm-local`.
+Codex(pl)는 플러그인을 못 읽으므로 프로젝트가 필요로 하는 것(protocol·roles·템플릿)은 kickoff-workspaces가 대상 프로젝트 `docs/`로 복사한다.
+
+> screen-plan·grill 등 범용 글로벌 스킬과 Orca 동봉 스킬(orca-cli·orchestration·computer-use, `~/.agents/skills` + junction)은 플러그인 밖이다.
+> 구 kickoff_pack(`npx skills add merryiscat/kickoff_pack`)은 더 쓰지 않는다 — kickoff-harness는 폐기됐고 나머지는 여기로 옮겼다.
 
 ## 4. 프로젝트 로컬 스킬 재설치 (skills-lock.json 기반)
 
@@ -94,7 +100,11 @@ scripts\run_ohmypm.cmd          # 창 + 실시간 로그로 기동 (http://127.0
 scripts\stop_ohmypm.cmd         # 종료 (8123 리스닝 프로세스를 잡아 끈다)
 ```
 
-`data/ohmypm.db`는 첫 기동에 생성된다. 대시보드에서 발견된 프로젝트 목록이 보이면 성공.
+`data/ohmypm.db`는 첫 기동에 생성된다. 프로젝트 발견은 기동이 아니라 **스캔**에서 일어난다 —
+새 PC는 대시보드 '스캔' 버튼(`POST /api/scan`)을 한 번 눌러 목록이 보이면 성공.
+
+**정시 배치를 안 쓰는 PC**: `.env`에 `SCHEDULER_ENABLED=false`. 폴더로만 관리하는 프로젝트가 많거나
+인터넷이 제한적인 PC용 — cron(스캔·일간보고·게시판·전문가수집)을 걸지 않고 대시보드/API로만 돌린다.
 일간보고를 즉시 한 번 돌려보려면 `scripts\run_report_once.cmd`.
 
 **로그인 시 자동 실행**(창 없이):
@@ -107,6 +117,13 @@ powershell -NoProfile -ExecutionPolicy Bypass -File scripts\startup_shortcut.ps1
 시작프로그램 폴더에 `ohmyPM.lnk`를 만든다. 대상은 `.venv\Scripts\pythonw.exe`
 (GUI 서브시스템 = 콘솔 창이 아예 없음) + `scripts\run_ohmypm_hidden.py`.
 창이 없으니 로그는 `logs\server_console.log`로 간다.
+
+**오르카에서 이 방을 열면 자동 기동**(2026-09-16 사용자 확정, 이 PC 기본):
+`.claude/hooks/ohmypm-server.ps1`을 SessionStart 훅으로 걸어 뒀다(`.claude/settings.json`).
+127.0.0.1:8123을 누가 듣고 있으면 아무것도 안 하고, 비어 있으면 위 자동 실행과 같은 방식
+(`pythonw` + `run_ohmypm_hidden.py`)으로 띄운 뒤 포트가 잡힐 때까지 최대 8초 기다렸다 보고한다.
+Orca 자동화(`orca automations`)는 스케줄 트리거뿐이라 '앱 실행 시'로는 못 건다.
+로그인 자동 실행과 같이 쓸 필요는 없다 — 둘 중 하나면 충분하다(중복 기동은 포트 확인으로 막힌다).
 
 > **막다른 길 둘 (2026-09-10 실측, 되풀이 금지)**
 > - `schtasks /create /sc onlogon`은 **관리자 권한**을 요구한다(액세스 거부). 시작프로그램

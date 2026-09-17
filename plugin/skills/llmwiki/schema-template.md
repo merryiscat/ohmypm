@@ -1,7 +1,10 @@
-# ohmyPM
+# 스키마 템플릿
 
-모든 로컬 프로젝트를 매일 돌보는 메타 PM 에이전트 (Claude Code 기반). 기획은 `docs/plan.md`.
+init이 프로젝트 CLAUDE.md에 붙여 넣는 블록. **10줄 예산** — 모든 상시 지시는 매 턴 주의력을
+지불하므로, 여기엔 매 턴 필요한 규칙만 남기고 상세 규약은 `docs/conventions-wiki.md`(검색 가능,
+필요할 때 로드)로 뺀다. 블록을 늘리고 싶으면 먼저 뺄 줄을 찾는다.
 
+```markdown
 ## docs/ — LLM 위키
 
 docs/는 LLM이 쓰고 사람이 읽는 위키다. git이 못 담는 것만 담는다: 결정과 근거, 실수와 항체, 기각된 대안.
@@ -11,9 +14,4 @@ docs/는 LLM이 쓰고 사람이 읽는 위키다. git이 못 담는 것만 담�
 - **버려지는 안건은 `docs/pending.md`에 재검토 시점(날짜/조건)과 함께** — 시점 없이 "나중에"로 넘기지 않는다
 - 새 페이지는 `index.md`에 한 줄 등재. **반영이 끝난 페이지는 삭제한다** — 살아있는 건 status·pending·항체뿐
 - 상세 규약(raw 보존, asserted/inferred, 실수 연대기, 정리 기준)은 `docs/conventions-wiki.md`
-
-## 작업 구조 (kickoff-workspaces)
-- 자리·모델·경로는 `docs/roles.md`, 절차는 `docs/protocol.md`
-- `pl` 워크트리의 Claude 터미널 = pl2(검토자): `docs/reviews/T-NNN.review-vN.md`**만** 쓴다. 재작성 금지 — 지적은 근거·심각도·차단 여부. 산출물만 보고, 없으면 "지적 없음"
-- `T-NNN-*` 워크트리의 Claude = 구현 워커: 스펙 밖 변경 금지, `worker_done`에 완료 기준을 항목별 통과/실패로 보고. 스펙에 없는 도구는 설치하지 않는다
-- 원본 체크아웃(main) = 머지·커밋·푸시만. main에서 코드를 고치지 않는다
+```
