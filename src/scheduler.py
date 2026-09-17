@@ -142,4 +142,5 @@ def start_scheduler() -> None:
 
 def stop_scheduler() -> None:
     """서버 shutdown에서 호출."""
-    scheduler.shutdown(wait=False)
+    if scheduler.running:   # SCHEDULER_ENABLED=false면 시작된 적이 없다
+        scheduler.shutdown(wait=False)

@@ -7,6 +7,11 @@
             "type": "command",
             "command": "powershell -NoProfile -ExecutionPolicy Bypass -File .claude/hooks/llmwiki-sessionstart.ps1",
             "timeout": 10
+          },
+          {
+            "type": "command",
+            "command": "powershell -NoProfile -ExecutionPolicy Bypass -File .claude/hooks/ohmypm-server.ps1",
+            "timeout": 15
           }
         ]
       }

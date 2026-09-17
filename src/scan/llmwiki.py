@@ -120,17 +120,24 @@ def _parse_pending(text: str) -> list[dict]:
        읽는 쪽만 고치면 오탐이 안 끝난다(쓰는 쪽 칸 분리와 같은 날 함께 손댄다).
     """
     out: list[dict] = []
+    title_idx = 0            # 머리글에서 '안건' 칸을 찾으면 그 번호로 바뀐다
     for line in text.splitlines():
         st = line.strip()
         if not st.startswith("|") or "---" in st:
             continue
+        cells = [c.strip() for c in st.strip("|").split("|")]
+        if not cells or not any(cells):
+            continue
+        head = _title_col(cells)      # 머리글 행이면 안건 칸 번호를 기억하고 넘어간다
+        if head is not None:
+            title_idx = head
+            continue
         m = DATE_RE.search(st)
         if not m:
             continue
-        cells = [c.strip() for c in st.strip("|").split("|")]
-        if not cells or not cells[0] or "안건" in cells[0]:  # 헤더 행 스킵
+        title = _row_title(cells, title_idx)
+        if not title:
             continue
-        title = cells[0]
         # 선거름 ①: 안건 칸이 취소선(~~...~~) = 이미 해소/폐기
         if title.startswith("~~") or "~~" in title:
             continue
@@ -141,6 +148,29 @@ def _parse_pending(text: str) -> list[dict]:
             {"kind": "deadline", "title": title[:200], "due": m.group(0), "source": "pending.md"}
         )
     return out
+
+
+def _title_col(cells: list[str]) -> int | None:
+    """머리글 행이면 '안건' 칸의 번호를, 아니면 None을 준다.
+
+    ★ 2026-09-16 사용자 지적("뭐야 이 숫자들은") — 달력·칸반에 제목이 `8`·`9`·`12`로 떴다.
+       odin-3.0 표는 `| # | 안건 | 왜 미뤘나 | 다시 볼 시점·조건 |`처럼 **번호 칸이 앞에 있는데**
+       파서가 무조건 첫 칸을 제목으로 썼다. 머리글을 보고 안건 칸을 고른다.
+       (옛 머리글 없는 표는 _row_title의 숫자 칸 건너뛰기로 건진다 — 25개 표를 한꺼번에 못 바꾼다.)
+    """
+    for idx, c in enumerate(cells):
+        if c in ("안건", "제목", "항목") or c.startswith("안건"):
+            return idx
+    return None
+
+
+def _row_title(cells: list[str], title_idx: int) -> str:
+    """행에서 제목 칸을 고른다. 번호처럼 숫자만 든 칸은 제목이 아니므로 다음 칸으로 넘긴다."""
+    idx = title_idx if title_idx < len(cells) else 0
+    for c in cells[idx:]:
+        if c and not c.strip("#").strip().isdigit():
+            return c
+    return ""
 
 
 def _issue(title: str, source: str) -> dict:

@@ -31,6 +31,13 @@ AUDIT_CONCURRENCY = 3          # 한도(속도/사용량) 폭주 방지 — 일�
 # 코드가 커밋을 허용하는 경로(그 외 에이전트가 쓴 것은 커밋 안 됨 = 안전 스코프)
 COMMIT_ALLOWLIST = ["CLAUDE.md", ".gitignore", "README.md", "docs", ".claude"]
 
+# 처음 세팅 시 .gitignore에 넣는 docs 차단 줄(2026-09-14 사용자 지시 — odin-3.0에서 작업 보드·
+# 보류 대장이 공개 저장소에 올라간 뒤 뒤늦게 뺐다). ohmyPM은 docs를 로컬 파일로 직접 읽으므로 연동 무관.
+DOCS_IGNORE_BLOCK = (
+    "# 위키(docs/) — 작업 보드·보류 대장 등 내부 기록이라 로컬 전용(ohmyPM은 로컬 파일을 직접 읽는다)\n"
+    "/docs/\n"
+)
+
 
 def _git(path: str, *args: str, timeout: int = 30) -> subprocess.CompletedProcess:
     return subprocess.run(
@@ -38,6 +45,38 @@ def _git(path: str, *args: str, timeout: int = 30) -> subprocess.CompletedProces
         capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=timeout,
         creationflags=NO_WINDOW,
     )
+
+
+def _is_first_setup(path: str) -> bool:
+    """계약 파일(status.md·pending.md)이 아직 없음 = 골격 생성 전 = 처음 세팅."""
+    docs = Path(path) / "docs"
+    return not ((docs / "status.md").exists() and (docs / "pending.md").exists())
+
+
+def _ensure_docs_ignored(path: str) -> dict:
+    """처음 세팅 때 .gitignore에 docs 차단을 코드가 결정론으로 넣는다(에이전트 재량에 안 맡김).
+
+    이미 막혀 있으면 손대지 않는다. 이미 git이 추적 중인 docs 파일은 .gitignore로 안 빠지므로
+    (추적 해제 = 다음 push에 원격에서 사라짐 → 사용자 결정) 목록만 돌려줘 리포트에 올린다.
+    """
+    if not (Path(path) / ".git").exists():
+        return {"added": False, "tracked": []}
+    tracked = [f for f in _git(path, "ls-files", "--", "docs").stdout.splitlines() if f.strip()]
+    # 존재하지 않는 경로도 패턴으로 판정된다 — docs/·/docs/·docs 등 어떤 표기든 한 번에 확인
+    if _git(path, "check-ignore", "-q", "--no-index", "docs/status.md").returncode == 0:
+        return {"added": False, "tracked": tracked}
+    gi = Path(path) / ".gitignore"
+    text = ""
+    if gi.exists():   # newline="" — 읽을 때 CRLF를 LF로 바꾸면 기존 줄바꿈 형식이 통째로 뒤바뀐다
+        with open(gi, encoding="utf-8", errors="replace", newline="") as f:
+            text = f.read()
+    nl = "\r\n" if "\r\n" in text else "\n"
+    if text and not text.endswith(("\n", "\r")):
+        text += nl
+    text += (nl if text else "") + DOCS_IGNORE_BLOCK.replace("\n", nl)
+    with open(gi, "w", encoding="utf-8", newline="") as f:
+        f.write(text)
+    return {"added": True, "tracked": tracked}
 
 
 def _commit_harness(path: str, date: str) -> dict:
@@ -71,6 +110,9 @@ def audit_one(path: str, name: str, date: str) -> dict:
     #   쓰기는 add_dir 안의 절대경로로 하고, git 커밋은 코드가 git -C로 한다.
     from src.cc.onboarding import meta_block
 
+    # 처음 세팅이면 에이전트가 docs를 만들기 **전에** .gitignore부터 막는다(커밋에 섞이지 않게)
+    docs_ignore = _ensure_docs_ignored(path) if _is_first_setup(path) else None
+
     report = run_headless(
         prompt=harness_audit_prompt(name, path, BASELINE_NOTE, meta_block(path)),
         cwd=_neutral_cwd(),
@@ -85,6 +127,15 @@ def audit_one(path: str, name: str, date: str) -> dict:
     if not report:   # headless 실패(한도 등) — 커밋도 하지 않는다
         return {"name": name, "path": path, "failed": True, "committed": False,
                 "report": "(하네스 감사 무응답 — 재시도 필요)"}
+    if docs_ignore and (docs_ignore["added"] or docs_ignore["tracked"]):
+        notes = []
+        if docs_ignore["added"]:
+            notes.append("- .gitignore에 `/docs/` 추가 — 위키는 로컬 전용(ohmyPM 코드가 처음 세팅 때 자동 반영)")
+        if docs_ignore["tracked"]:
+            files = ", ".join(docs_ignore["tracked"][:10])
+            notes.append(f"- ⚠ 이미 git이 추적 중인 docs 파일이 있어 .gitignore만으로는 안 빠짐: {files}"
+                         " — 빼려면 `git rm -r --cached docs` 후 커밋(푸시 시 원격에서 사라짐, 사용자 결정)")
+        report += "\n\n## docs 로컬 전용 처리\n" + "\n".join(notes)
     commit = _commit_harness(path, date)
     return {"name": name, "path": path, "failed": False, "report": report, **commit}
 
