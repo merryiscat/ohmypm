@@ -54,6 +54,11 @@ claude plugin install ohmypm@ohmypm-local --scope user -y
 claude plugin list                                                                # ohmypm 0.1.0 enabled
 ```
 
+다른 프로젝트 전부에 작업 구조를 깔거나 올리려면(발동어 "구조 전체 배포하자") 이 저장소에서 한 명령 — 입력은 로컬 전용 `docs/rollout-targets.md`, 결과는 `docs/rollouts/`(둘 다 gitignore):
+```powershell
+sh plugin/skills/kickoff-workspaces/scripts/ws-rollout.sh     # 탐색(대시보드 API) → 설치/갱신 → 한국어 커밋(푸시 없음) → 결과 저장
+```
+
 스킬은 `ohmypm:kickoff-interview`처럼 이름공간이 붙는다. `plugin/`을 고쳤으면 plugin.json의 version을 올리고 `claude plugin update ohmypm@ohmypm-local` — 버전이 같으면 갱신하지 않는다.
 Codex(pl)는 플러그인을 못 읽으므로 프로젝트가 필요로 하는 것(protocol·roles·템플릿)은 kickoff-workspaces가 대상 프로젝트 `docs/`로 복사한다.
 
