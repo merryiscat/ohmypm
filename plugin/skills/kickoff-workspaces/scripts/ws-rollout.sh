@@ -1,6 +1,7 @@
 #!/bin/sh
 # kickoff-workspaces 전체 배포 — 발동어 "구조 전체 배포하자" (T-003).
-# 사용: ws-rollout.sh [--targets <허용목록 파일>] [--report <결과 파일>] [--api <URL>] [--dry-run]
+# 사용: ws-rollout.sh [--targets <허용목록 파일>] [--report <결과 파일>] [--api <URL>] [--dry-run] [--force]
+#   --force: dirty 저장소도 배포 파일만 stage해 커밋하고(배포 파일 자체에 사용자 변경이 있으면 그 대상은 건너뜀), 스택 판별 불가는 공유 폴더·setup 없음으로 설치한다 (2026-09-18 사용자 지시)
 #   ohmyPM 저장소(cwd가 속한 git 저장소)의 로컬 전용 docs/rollout-targets.md를 읽어
 #   대상을 탐색(대시보드 API 또는 PROJECTS_ROOT 직하위 폴더) → 허용 목록과 교집합 → 사전 검사(git 루트·dirty·설치 버전·훅 경로)
 #   → 스택 판별(공유 폴더·setup) → ws-upgrade.sh로 설치/갱신 → 배포 파일만 stage → 한국어 커밋(푸시 없음)
@@ -29,6 +30,7 @@ MANAGED = ['docs/protocol.md', 'docs/tasks/_template.md', 'docs/reviews/_templat
 OWNED = ['docs/roles.md', 'orca.yaml', '.worktreeinclude']
 DEPLOY_FILES = MANAGED + OWNED
 DRY = '--dry-run' in ARGV          # 탐색·사전 검사·스택 판별까지만, 파일·Git은 건드리지 않는다
+FORCE = '--force' in ARGV          # dirty 무시(배포 파일만 stage)·판별 불가는 스택 없음으로 설치
 STARTED = time.strftime('%Y-%m-%d %H:%M:%S')
 STAMP = time.strftime('%Y%m%d-%H%M%S')
 
@@ -282,15 +284,21 @@ for a, d, key in targets:
             resid = [s for s in st if s[3:].strip().strip('"') in DEPLOY_FILES]
             if resid: extra.append('배포 파일 미커밋 잔존 %d건(이전 실패분 — 손으로 커밋/정리)' % len(resid))
             row.update(result='건너뜀', reason='같은 버전 v%s — 파일·Git 설정·커밋 무변경' % V + ((' (참고: ' + ', '.join(extra) + ')') if extra else ''), version='v%s' % V); continue
-        if st:
+        pre_dirty_deploy = [s[3:].strip().strip('"') for s in st if s[3:].strip().strip('"') in DEPLOY_FILES]
+        if st and not FORCE:
             row.update(result='건너뜀', reason='dirty(staged/unstaged/untracked %d건: %s%s)' % (len(st), '; '.join(s.strip() for s in st[:3]), ' …' if len(st) > 3 else '')); continue
+        if st and pre_dirty_deploy:
+            row.update(result='건너뜀', reason='강제 모드지만 배포 파일 자체에 사용자 변경이 있어 섞일 수 있음: %s' % ', '.join(pre_dirty_deploy)); continue
         if hp_bad:
             row.update(result='건너뜀', reason='core.hooksPath=%s (.githooks 아님 — 기존 훅 보존)' % hp); continue
         cmd = ['sh', UPGRADE, p]
         if cur is None:
             shared, setup, why = detect_stack(p)
             if shared is None:
-                row.update(result='건너뜀', reason=why); continue
+                if not FORCE:
+                    row.update(result='건너뜀', reason=why); continue
+                shared, setup, why = [], '', '강제: ' + why + ' → 공유 폴더·setup 없음으로 설치'
+            if st: why = '강제(dirty %d건 무시, 배포 파일만 stage) — ' % len(st) + why
             row.update(shared=' '.join(shared) or '(없음)', setup=setup or '(없음)', reason='설치 — ' + why)
             cmd += ['--install', ' '.join(shared), setup]
         else:

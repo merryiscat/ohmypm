@@ -2,6 +2,9 @@
 
 프로젝트에 깔린 복사본의 버전은 각 프로젝트 `docs/protocol.md` 첫 줄에 있다. 올리려면 그 프로젝트 main에서 "구조 업데이트하자".
 
+## 0.3.5 — 2026-09-18
+- ws-rollout.sh `--force`: dirty 저장소도 배포 파일만 stage해 커밋(배포 파일에 사용자 변경이 있으면 건너뜀), 스택 판별 불가는 공유 폴더·setup 없음으로 설치 — 사용자 지시 "건너뜀 10도 강제로 커밋"
+
 ## 0.3.4 — 2026-09-18
 - 결함 수정: `ws-upgrade.sh --install`이 `docs/protocol.md` 없는 신규 프로젝트에서 `set -e` + sed 실패로 조용히 종료(rc=2)하던 것 — 버전 읽기 줄에 `|| true`. T-003 실측(기존 설치가 있던 ohmyPM에서만 통과했었다)
 - `scripts/ws-rollout.sh` 신설 — 발동어 "구조 전체 배포하자": 로컬 허용 목록(`docs/rollout-targets.md`)의 프로젝트를 API/폴더로 탐색해 설치·갱신·한국어 커밋·결과 저장(`docs/rollouts/`). `--dry-run`으로 대상 표만 볼 수 있다
