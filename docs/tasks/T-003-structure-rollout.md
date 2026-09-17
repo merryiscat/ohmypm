@@ -1,4 +1,4 @@
-﻿# T-003 다른 프로젝트에 작업 구조 자동 배포
+# T-003 다른 프로젝트에 작업 구조 자동 배포
 
 - 상태: 검토 반영 v2
 - 등급: L (차선 L) — 운영 저장소를 포함한 여러 프로젝트의 구조·Git 설정 변경과 커밋
@@ -45,5 +45,17 @@
 | 7 | API 주소와 has_wiki 필터 주체 누락 | 수용 | 로컬 API 주소를 명시하고 has_wiki는 클라이언트 필터로 확정. |
 
 ## 검증 (pl2, 구현 후)
+범위 추가(사용자 결정 2026-09-18): ws-upgrade.sh 15행 최소 수정·plugin.json 0.3.4·CHANGELOG 절
+
 | 기준 | 판정 | 확인한 방법 |
 |---|---|---|
+| 1 | 통과 | 브랜치 diff: SKILL.md 설명줄·"전체 배포" 절과 docs/setup.md 설치 안내 뒤 한 줄이 `scripts/ws-rollout.sh` 한 명령을 가리킴, 플러그인 훅 없음. 로컬 증거 폴더의 임시 저장소 folder 탐색 3회 실행 기록: 1차(설치·건너뜀·실패 혼재) → 2차 재실행에 성공분 추가 커밋 없음(전후 스냅샷 HEAD 동일), 프로젝트별 추가 지시 없이 결과 파일 저장. |
+| 2 | 통과 | 스크립트 코드: 기본 API 주소 고정, `has_wiki`를 클라이언트에서 필터, 실패 시 "탐색 실패(범위를 넓히지 않고 중단)" 후 종료, 실경로·git 루트 정규화로 중복 제거, 허용 목록 미발견은 사유(경로 없음/has_wiki=0/탐색 결과에 없음) 기록. 가짜 API·닫힌 포트·folder 탐색 실행 기록(로컬 증거)에서 각 경로 확인. |
+| 3 | 통과 | 사전 검사 코드(git 루트, porcelain untracked 포함, 설치 버전, hooksPath 정규화 비교)와 임시 저장소 실행표: Git 아님·dirty·다른 hooksPath 각 건너뜀, 같은 버전은 HEAD·설정 불변. 1차 실행의 hooksPath 정규화 결함은 c84efe8에서 수정돼 2차 실행에서 갱신됨을 확인. |
+| 4 | 통과 | `detect_stack` 규칙(uv.lock→`uv sync --inexact` 등 잠금 파일별 setup, 혼합은 합집합, 선언 없음→`sharedDirectories: []`, 규칙 없는 선언→판별 불가 건너뜀). 임시 저장소 4종의 orca.yaml과 실제 대상 중 Python형·무스택형 orca.yaml을 직접 열어 확인. setup은 orca.yaml 기록만, 실행 없음. |
+| 5 | 통과 | 실제 설치된 모든 대상을 직접 재조회: HEAD와 부모 사이 CLAUDE.md·AGENTS.md diff 삭제 줄 0(블록 밖 원문 보존), 이미 있던 소유 파일(roles·orca.yaml·.worktreeinclude·.gitignore)은 커밋에 포함되지 않음. 다른 버전 갱신·소유 파일 보존은 임시 저장소 oldversion·existing 기록. 참고: 프로젝트 소유 `.gitignore`가 배포 파일 일부를 가려 커밋에서 빠진 대상이 있음(강제 추가 안 함, 로컬 보고서에 기록) — 예외 등재 여부는 main 결정. |
+| 6 | 통과 | 실제 설치 대상 전부 직접 재조회: `작업 구조 설치/갱신: kickoff-workspaces v0.3.4` 커밋 1건, 커밋 파일 = 배포 파일만, 원격 대비 ahead(푸시 없음), 트리 clean, `core.hooksPath=.githooks`. 스크립트에 `--no-verify` 없음. 훅 거부 임시 저장소는 "[pl guard]" 거부 → 실패·stage 잔존 기록. |
+| 7 | 통과 | 임시 실행: 훅 거부 실패 뒤 나머지 대상 계속 처리, 종료 코드 1, 결과 표 열(프로젝트·경로·결과·사유·버전·공유폴더·setup·커밋 SHA·변경 잔존)과 설치기·커밋 출력 포함. 실제 2차 재실행은 전부 건너뜀·종료 코드 0, 전후 스냅샷 diff 없음. |
+| 8 | 통과 | 허용 목록의 모든 대상이 설치 또는 규칙(dirty·판별 불가)에 따른 건너뜀으로 기록되고 실패 없음 — 워커 로컬 보고서와 대상 저장소 직접 재조회가 일치. 로컬 보고서에 실행 일시·명령·탐색 출처·제외 사유·기준별 증거 있음. 입력 파일·결과 디렉터리는 `.gitignore`·`.worktreeinclude` 등재, 브랜치 `git ls-tree` 미추적, `docs/index.md` 미등재. 이 표에 로컬 식별 정보 없음. |
+
+결론: 8/8 통과 → main 머지 요청. 범위: 브랜치 변경 파일 6개 = 스펙 "손대는 파일"(ws-rollout.sh·SKILL.md·docs/setup.md) + 사용자 추가 3개(ws-upgrade.sh는 15행 `|| true` 한 토큰만, plugin.json 0.3.4, CHANGELOG 0.3.4 절). `.gitignore`·`.worktreeinclude` 등재는 main 9640bb4에서 선행돼 워커 변경 없음. main 결정 사항: 소유 `.gitignore`가 배포 파일을 가린 대상의 예외 등재, dirty로 건너뛴 대상은 정리 뒤 같은 명령 재실행.
