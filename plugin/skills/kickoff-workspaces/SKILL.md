@@ -1,6 +1,6 @@
 ---
 name: kickoff-workspaces
-description: 킥오프 2부(마지막) — 프로젝트에 작업 구조를 깐다. main(통합)·pl(기획·설계·검토, 이종 모델 둘)·구현 워커(난이도 등급별 모델)로 Orca 워크트리를 나누고, 역할표·작업 스펙·검토서 템플릿·브랜치 가드를 설치한 뒤 pl 워크트리를 연다. 발동 — 1부(plan.md) 직후, "작업 구조 세팅하자"·"pl 구조 붙이자"·"워크스페이스 나누자", 기존 프로젝트에 소급 적용할 때, 그리고 "구조 업데이트하자"(플러그인 버전을 프로젝트 복사본에 반영).
+description: 킥오프 2부(마지막) — 프로젝트에 작업 구조를 깐다. main(통합)·pl(기획·설계·검토, 이종 모델 둘 + 코디네이터 하위 모델)·구현 워커(난이도 등급별 모델)로 Orca 워크트리를 나누고, 역할표·작업 스펙·검토서 템플릿·브랜치 가드를 설치한 뒤 pl 워크트리를 연다. 발동 — 1부(plan.md) 직후, "작업 구조 세팅하자"·"pl 구조 붙이자"·"워크스페이스 나누자", 기존 프로젝트에 소급 적용할 때, 그리고 "구조 업데이트하자"(플러그인 버전을 프로젝트 복사본에 반영).
 ---
 
 # 킥오프 2부 — 작업 구조
@@ -10,7 +10,7 @@ description: 킥오프 2부(마지막) — 프로젝트에 작업 구조를 깐�
 둘 사이의 계약은 **작업 스펙(검증 가능한 완료 기준)** 하나다 — 스펙 없이 구현 워커를 띄우지 않는다.
 
 > **산출물 계약**: 대상 프로젝트에 역할표(`docs/roles.md`)·스펙/검토 폴더·`orca.yaml`·`.worktreeinclude`·
-> `AGENTS.md`/`CLAUDE.md` 역할 블록·브랜치 가드가 설치되고, pl 워크트리가 두 터미널(작성자·검토자)로 열려
+> `AGENTS.md`/`CLAUDE.md` 역할 블록·브랜치 가드가 설치되고, pl 워크트리가 세 터미널(작성자·검토자·코디네이터)로 열려
 > 첫 작업 스펙(T-001)이 pl에 지시된 상태.
 > **이 절차는 접근법이지 정답 경로가 아니다** — 프로젝트가 작으면 구조를 깔지 않는 것이 정답이다.
 > 절차 상세와 근거는 [PROTOCOL.md](PROTOCOL.md)(설치 시 대상 프로젝트 `docs/protocol.md`로 복사 — Codex는 플러그인을 못 읽는다),
@@ -36,10 +36,11 @@ description: 킥오프 2부(마지막) — 프로젝트에 작업 구조를 깐�
 |---|---|---|---|---|
 | main | 원본 체크아웃 | claude | 기본 | 머지·커밋·푸시만 |
 | pl 작성자 | 워크트리 `pl` 터미널 1 | codex | `gpt-6-astra` xhigh | `docs/tasks/`, 설계 문서 |
-| pl2 검토자 | 워크트리 `pl` 터미널 2 | claude | `claude-fable-5-1` | `docs/reviews/`만 |
+| pl2 검토자 | 워크트리 `pl` 터미널 2 | claude | `claude-fable-5-1` | `docs/reviews/`만 — 검토서 한 장, 태스크마다 `/clear` |
+| pl3 코디네이터 | 워크트리 `pl` 터미널 3 | claude | `claude-opus-5` | 스펙 "검증" 절. 게이트·배정·대기·판정 — 배관은 하위 모델 |
 | 구현 워커 | 워크트리 `T-NNN-<slug>` | claude | 등급표(S 소넷 5 / M 오퍼스 5 / L 페이블 5.1) | 스펙의 '손대는 파일' |
 
-작성자·검토자를 서로 다른 벤더로 두는 이유와 검토자에게 재작성을 금지하는 이유는 PROTOCOL "근거".
+작성자·검토자를 서로 다른 벤더로 두는 이유와 검토자에게 재작성을 금지하는 이유는 PROTOCOL "근거". 코디네이터를 검토자와 분리해 하위 모델에 두는 이유는 PROTOCOL "토큰 규율"(최상위 모델 세션이 오케스트레이션 JSON을 끌어안고 커지지 않게).
 전제 확인: `codex --version`·`claude --version`이 돌고, Codex 전역 설정(`~/.codex/config.toml`)에
 `model`·`model_reasoning_effort`가 있어야 한다 — Orca의 `--agent codex`는 모델 플래그를 못 받는다.
 
@@ -72,17 +73,18 @@ description: 킥오프 2부(마지막) — 프로젝트에 작업 구조를 깐�
 orca repo list --json                                   # <repoId> 확인
 orca worktree create --repo id:<repoId> --name pl --agent codex --no-parent --comment "기획·설계·검토" --json
 orca terminal create --worktree name:pl --title pl2 --command "claude --model claude-fable-5-1 --dangerously-skip-permissions" --json
-orca terminal wait --terminal <pl2 handle> --for tui-idle --timeout-ms 60000 --json
+orca terminal create --worktree name:pl --title pl3 --command "claude --model claude-opus-5 --dangerously-skip-permissions" --json
+orca terminal wait --terminal <handle> --for tui-idle --timeout-ms 60000 --json      # pl2·pl3 각각
 ```
-`wait.satisfied`가 true일 때만 send 한다. 두 터미널에 각각 `templates/prompt-pl.md`·`prompt-pl2.md`의
-역할 지시를 첫 메시지로 보낸다(`orca terminal send --text ... --enter`).
+`wait.satisfied`가 true일 때만 send 한다. 세 터미널에 각각 `templates/prompt-pl.md`·`prompt-pl2.md`·`prompt-pl3.md`의
+역할 지시를 첫 메시지로 보낸다(`orca terminal send --text ... --enter`). 새 폴더 신뢰창이 뜨면 프롬프트가 먹힌다 — wait 뒤 화면을 한 번 본다.
 브랜치는 Orca가 워크트리 이름에서 만든다(`<git-username>/pl` 꼴) — 가드는 마지막 세그먼트로 판정한다.
 
 ## 4. 첫 스펙 지시
 
 pl에 **T-001**을 지시한다: plan(있으면 usecases)의 필요 기술·공통 전제를 집계해 스택을 확정하고 `docs/design.md`
 (구성 한 장 — 산출물 대장의 설계 산출물)를 쓰는 작업. 화면이 있으면 T-002로 screen-plan(와이어프레임)을 잇는다.
-이후 흐름은 PROTOCOL: 스펙 v1 → pl2 단일 패스 검토 → v2 → 사용자 게이트 → 워커 배정 → pl 검증 → main 머지.
+이후 흐름은 PROTOCOL: 스펙 v1 → pl2 단일 패스 검토 → v2 → 사용자 게이트 → pl3 워커 배정 → pl3 검증 → main 머지.
 
 ## 5. 기록
 
@@ -95,7 +97,7 @@ pl에 **T-001**을 지시한다: plan(있으면 usecases)의 필요 기술·공�
 ```
 "${CLAUDE_PLUGIN_ROOT}"/skills/kickoff-workspaces/scripts/ws-upgrade.sh <프로젝트경로>
 ```
-관리 파일(protocol·템플릿 2·pre-commit·AGENTS/CLAUDE 블록)만 갈아 끼우고 diff를 보여 준다. 그 diff를 보고 main이 커밋 → pl 워크트리 ff → **pl·pl2 `/clear`**(규칙 파일이 바뀌었다). 무엇이 바뀌었는지는 플러그인 `CHANGELOG.md`.
+관리 파일(protocol·템플릿 2·pre-commit·AGENTS/CLAUDE 블록)만 갈아 끼우고 diff를 보여 준다. 그 diff를 보고 main이 커밋 → pl 워크트리 ff → **pl·pl2·pl3 `/clear`**(규칙 파일이 바뀌었다). 스크립트가 `WARN`을 찍으면 프로젝트 소유 파일에 손댈 게 있다는 뜻 — CHANGELOG 항목대로 손으로. 무엇이 바뀌었는지는 플러그인 `CHANGELOG.md`.
 프로젝트 소유 파일(roles·orca.yaml·.worktreeinclude·.gitignore)은 건드리지 않으므로, 템플릿 쪽 변화가 거기 필요하면 CHANGELOG가 그 항목을 따로 부른다.
 
 ## 기존 프로젝트에 소급 적용

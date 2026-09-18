@@ -52,4 +52,5 @@ if [ "$MODE" = "--install" ]; then
   [ -f .worktreeinclude ] || printf '# 새 워크트리마다 복사되는 gitignore 파일 (Orca .worktreeinclude)\n.env\n.claude/settings.local.json\n' > .worktreeinclude
 fi
 echo "--- changed:"; git status --short -- docs/protocol.md docs/tasks/_template.md docs/reviews/_template.md .githooks/pre-commit AGENTS.md CLAUDE.md docs/roles.md orca.yaml .worktreeinclude 2>/dev/null || true
-echo "done: v$V  (pl·pl2 세션은 /clear — 규칙 파일이 바뀌었다)"
+grep -q "pl3" docs/roles.md 2>/dev/null || echo "WARN: docs/roles.md에 pl3(코디네이터) 행이 없다 — 프로젝트 소유 파일이라 손으로: templates/roles.md 참고 (v0.4.0)"
+echo "done: v$V  (pl·pl2·pl3 세션은 /clear — 규칙 파일이 바뀌었다)"
