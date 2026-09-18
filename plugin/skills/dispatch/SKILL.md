@@ -77,7 +77,7 @@ pl3 판정을 pl 브랜치에 커밋 → main ff → 워커 브랜치 머지(로
 orca terminal send --terminal <pl> --text "/clear" --enter --json     # 아직 안 비웠으면
 orca terminal send --terminal <pl3> --text "/clear" --enter --json
 ```
-규칙 파일(AGENTS·CLAUDE·protocol·roles)을 고쳤을 때도 셋 다 즉시 비운다.
+규칙 파일(AGENTS·CLAUDE·protocol·roles)을 고쳤을 때도 셋 다 즉시 비운다 — 단 **하단에 "shell still running / ← agent"가 있는 자리는 대기를 쥔 것이라 그 건이 끝날 때까지 두고**, 보낸 뒤엔 화면을 읽어 실제로 비워졌는지 본다(protocol 8절 보내기 전·후 확인).
 
 ## 6. 동시 요청 — main은 하나, 기다림은 백그라운드
 
