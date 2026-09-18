@@ -20,6 +20,7 @@ mkdir -p docs/tasks docs/reviews .githooks
 { stamp; cat "$K/PROTOCOL.md"; } > docs/protocol.md
 { stamp; cat "$T/task.md"; }    > docs/tasks/_template.md
 { stamp; cat "$T/review.md"; }  > docs/reviews/_template.md
+[ -f docs/benchmark.md ] || cp "$T/benchmark.md" docs/benchmark.md
 { printf '#!/bin/sh\n# kickoff-workspaces v%s (관리 파일 — 플러그인에서 갱신)\n' "$V"; sed '1{/^#!/d;}' "$T/pre-commit"; } > .githooks/pre-commit
 git config core.hooksPath .githooks 2>/dev/null || true
 
@@ -52,5 +53,6 @@ if [ "$MODE" = "--install" ]; then
   [ -f .worktreeinclude ] || printf '# 새 워크트리마다 복사되는 gitignore 파일 (Orca .worktreeinclude)\n.env\n.claude/settings.local.json\n' > .worktreeinclude
 fi
 echo "--- changed:"; git status --short -- docs/protocol.md docs/tasks/_template.md docs/reviews/_template.md .githooks/pre-commit AGENTS.md CLAUDE.md docs/roles.md orca.yaml .worktreeinclude 2>/dev/null || true
-grep -q "pl3" docs/roles.md 2>/dev/null || echo "WARN: docs/roles.md에 pl3(코디네이터) 행이 없다 — 프로젝트 소유 파일이라 손으로: templates/roles.md 참고 (v0.4.0)"
-echo "done: v$V  (pl·pl2·pl3 세션은 /clear — 규칙 파일이 바뀌었다)"
+grep -q "pl3" docs/roles.md 2>/dev/null && echo "WARN: docs/roles.md에 pl3 행이 남아 있다 — 0.7.0에서 걷어냈다. 소유 파일이라 손으로: templates/roles.md 참고"
+grep -q "구현 워커" docs/roles.md 2>/dev/null && echo "WARN: docs/roles.md에 구현 워커 행이 남아 있다 — 구현은 main이 한다(0.7.0)"
+echo "done: v$V  (pl·pl2 세션은 /clear — 규칙 파일이 바뀌었다)"
