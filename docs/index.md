@@ -9,6 +9,7 @@
 - [deliverables.md](deliverables.md) — 산출물 대장: 단계(기획·설계·구축·검증·운영)별 산출물 기준표, PM이 단계 판단·요구에 쓴다
 - [protocol.md](protocol.md) — 작업 절차: 단일 패스 교차 검토·게이트·워커 배정·검증 (ohmypm 플러그인 PROTOCOL.md 복사본)
 - [roles.md](roles.md) — 작업 구조: 자리·모델·난이도 등급표·이름 규칙 (kickoff-workspaces, 2026-09-17)
+- [research-multiagent.md](research-multiagent.md) — 멀티 에이전트 구조 외부 실측·실무 후기(2026-09-18). 구조 결정이 끝나면 지운다
 - `tasks/` — pl이 쓰는 작업 스펙 `T-NNN-<slug>.md` (템플릿 `_template.md`) · `reviews/` — pl2 교차 검토서(검증 판정은 pl3가 스펙에)
 - [review-2026-09-17.md](review-2026-09-17.md) — 모델 교체 후 전면 재평가(목적·설계·운영·권고) + 오늘 조치·결정 대기 *(흡수 후 삭제 대상)*
 - [setup.md](setup.md) — 다른 PC 재현 절차 (PC마다 **독립 인스턴스** 전제, wizard 5단계, 하드코딩 금지 규칙)
