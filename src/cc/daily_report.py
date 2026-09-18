@@ -73,18 +73,80 @@ def _cancelled(title: str) -> bool:
 QUIET_SUMMARY = "작업 내용 없음(어제 이후 새 커밋·새 이슈 없음) — 점검 생략"
 
 
+# 활동 신호에서 제외할 커밋 — 제목에 이 말이 들어간 커밋은 도구가 만든 것으로 본다(대소문자 무시).
+#   ohmypm             : ohmyPM이 밤마다 스스로 남기는 커밋
+#                        (재가공 '(ohmyPM 담당)'·하네스감사 '(ohmyPM)')
+#   kickoff-workspaces : 작업 구조 배포(T-003)가 대상 프로젝트에 남기는 커밋. 2026-09-18 하루에
+#                        23개 프로젝트에 찍힐 예정이었고, 그러면 다음 날 전 프로젝트가
+#                        '활동 있음'으로 잡혀 점검 23회가 헛돌 판이었다.
+# ★ 대소문자를 무시하는 이유: 종전 판정은 대문자 'ohmyPM' 글자 그대로만 찾아서, 커밋 제목을
+#   소문자로 쓴 자동 커밋('chore: ohmypm ...')은 사람 커밋으로 새어 나갔다.
+TOOL_COMMIT_MARKS = ("ohmypm", "kickoff-workspaces")
+
+# PM 팩트·활동 판정에서 '열린 이슈'로 보는 칸반 상태 — 할일·진행중·내 차례.
+# resolved(완료)·deferred(보류)·stale(소스에서 사라진 것)은 열린 것이 아니다.
+OPEN_STATUSES = ("open", "consulting", "needs_user")
+# 끝난·멈춘 상태 — 팩트에는 제목·기한 없이 개수만 넣는다(괄호 안은 PM에게 보여줄 우리말 이름).
+CLOSED_STATUS_LABELS = (("resolved", "완료"), ("deferred", "보류"), ("stale", "지난 것"))
+
+
+def _tool_commit(subject: str) -> bool:
+    """커밋 제목이 도구가 만든 것인지 — 대소문자를 구분하지 않고 표식을 찾는다."""
+    low = subject.lower()
+    return any(mark in low for mark in TOOL_COMMIT_MARKS)
+
+
+def _issue_activity(path: str, now: datetime) -> bool:
+    """최근 24시간에 생긴 '사람이 문서를 고쳐서 생긴 이슈'가 있는지.
+
+    ★ 2026-09-18 T-004. 그전엔 "최근 24시간에 생긴 이슈가 하나라도 있으면 활동"이었는데,
+      이슈가 생기는 길이 사람의 문서 수정만은 아니어서 두 가지로 오탐했다:
+        ① 09-17 파서 변경 — 제목·fingerprint가 바뀌자 옛 안건이 '새 이슈'로 다시 등재돼
+           09-18에 13개 프로젝트를 점검했다. 문서는 아무도 안 고쳤다.
+        ② 일간보고 자신이 만드는 당일 완결 카드(source='daily_report') — 어제 점검이
+           오늘 점검을 부르는 자기 되먹임이 된다.
+      그래서 **원본 문서를 확인할 수 있는 스캔 이슈만** 활동으로 인정하고, 그 원본 파일의
+      mtime까지 같은 24시간 창 안에 있을 때만 통과시킨다. 파서만 바뀐 재등재는 문서 mtime을
+      건드리지 않으므로 여기서 걸러진다 — 스키마나 스캔 회차 기록을 늘리지 않고 되는 방법.
+
+    판정 시각(now)은 호출부에서 한 번 받아 창의 양끝을 같은 기준으로 잡는다.
+    창은 [now-24시간, now] 닫힌 구간 — mtime이 미래인 파일(시계 뒤틀림)은 인정하지 않는다.
+    """
+    from pathlib import Path as _P
+
+    lo = now - timedelta(hours=24)
+    # issues.created_at은 로컬시각 문자열(2026-09-10 UTC→로컬 통일) → 로컬 문자열로 비교.
+    # 예전엔 저장이 UTC라 여기서만 UTC로 맞췄는데, 그 보정을 잊은 자리가 생기면 9시간 어긋난다.
+    cutoff = lo.strftime("%Y-%m-%d %H:%M:%S")
+    for i in issues_db.list_issues():
+        if i["project"] != path or (i.get("created_at") or "") < cutoff:
+            continue
+        if i.get("verdict") == "drop" or (i.get("status") or "open") not in OPEN_STATUSES:
+            continue
+        src = (i.get("source") or "").strip()
+        if src not in issues_db.SCANNED_SOURCES:
+            continue   # 도구 출처('daily_report' 등)·출처 없음 — 대조할 원본 문서가 없다
+        try:
+            mtime = datetime.fromtimestamp((_P(path) / "docs" / src).stat().st_mtime)
+        except OSError:
+            continue   # 원본 파일이 없거나 못 읽음 — 확인 불가는 인정하지 않는다
+        if lo <= mtime <= now:
+            return True
+    return False
+
+
 def _has_activity(path: str) -> bool:
     """어제 이후 '사람의 작업'이 있었는지 — 없으면 LLM을 아예 안 부른다(토큰 절약의 핵심).
 
     변화 없는 프로젝트도 매일 PM↔담당 인터뷰를 돌면, 어제와 똑같은 보고를 어제와 같은
     토큰을 들여 재생산한다(2026-09-02 사용자 지적). 신호 두 가지로 변화를 판정한다:
-      ① 최근 24시간 git 커밋 — 단, ohmyPM이 밤마다 만드는 자동 커밋(재가공 '(ohmyPM 담당)'·
-         하네스감사 '(ohmyPM)')은 제외. 안 그러면 매일 '변화 있음'으로 오탐한다.
-      ② 최근 24시간 새 이슈(정시 스캔이 docs에서 발견) — 커밋 없이 docs만 고쳐도 잡힌다.
+      ① 최근 24시간 git 커밋 — 단, 도구가 만든 커밋(TOOL_COMMIT_MARKS)은 제외.
+      ② 최근 24시간 새 이슈 중 원본 문서도 그 창 안에 고쳐진 것(_issue_activity).
     git 확인이 실패하면 True(모르면 점검하는 쪽 — 놓침0 원칙).
     """
     from pathlib import Path as _P
 
+    now = datetime.now()   # 판정 시각 — 커밋·문서 mtime을 같은 기준으로 본다
     if (_P(path) / ".git").exists():
         try:
             r = subprocess.run(
@@ -94,44 +156,57 @@ def _has_activity(path: str) -> bool:
             )
             if r.returncode != 0:
                 return True  # git 조회 실패 — 모르면 점검하는 쪽으로
-            if any(s.strip() and "ohmyPM" not in s for s in r.stdout.splitlines()):
-                return True  # 사람(또는 다른 도구)의 커밋이 있다
+            if any(s.strip() and not _tool_commit(s) for s in r.stdout.splitlines()):
+                return True  # 사람(또는 도구 아닌 다른 것)의 커밋이 있다
         except Exception:
             return True
-    # 비git 폴더는 커밋 신호가 없다 — 매일 점검(콜 낭비) 대신 새 이슈 신호만 본다
-    # 새 이슈: issues.created_at은 로컬시각 문자열(2026-09-10 UTC→로컬 통일) → 로컬로 비교.
-    # 예전엔 저장이 UTC라 여기서만 UTC로 맞췄는데, 그 보정을 잊은 자리가 생기면 9시간 어긋난다.
-    cutoff = (datetime.now() - timedelta(hours=24)).strftime("%Y-%m-%d %H:%M:%S")
-    return any(
-        i["project"] == path and (i.get("created_at") or "") >= cutoff
-        for i in issues_db.list_issues()
-    )
+    # 커밋 신호가 없어도(비git 폴더·도구 커밋만) 문서 수정으로 생긴 새 이슈는 활동이다
+    return _issue_activity(path, now)
+
+
+def _fact_rows(path: str) -> list[dict]:
+    """팩트 집계 대상 — 이 프로젝트 이슈 중 drop·취소선만 뺀 전부(stale 포함).
+
+    list_issues()는 기본 조회에서 stale을 빼므로 stale은 따로 한 번 더 읽는다.
+    stale은 '지난 것' 개수로만 쓰이고 제목·기한은 어디에도 나가지 않는다.
+    """
+    rows = issues_db.list_issues() + issues_db.list_issues(status="stale")
+    return [
+        i for i in rows
+        if i["project"] == path and i.get("verdict") != "drop" and not _cancelled(i["title"])
+    ]
 
 
 def build_facts(path: str) -> str:
-    """결정론 현황(팩트) 문자열 — PM 프롬프트에 주입(환각 방지). issues DB에서 뽑는다."""
-    items = [
-        i for i in issues_db.list_issues()
-        if i["project"] == path and i.get("verdict") != "drop" and not _cancelled(i["title"])
-    ]
+    """결정론 현황(팩트) 문자열 — PM 프롬프트에 주입(환각 방지). issues DB에서 뽑는다.
+
+    ★ 2026-09-18 T-004: **제목·기한은 열린 이슈만** 넣는다(할일·진행중·내 차례).
+      그전엔 verdict=drop만 빼고 전부 넣어서, 이미 끝난 안건이 기한 목록에 그대로 남아
+      PM이 매일 같은 것을 되물었다 — 사용자가 09-06에 "구글 권한 공개해뒀다"고 알려
+      완료로 옮긴 건이 09-15 기한으로 매일 다시 주입됐다. 끝난·보류·지난 것은 개수만
+      알려준다: PM이 '남은 게 이만큼'은 알되, 되물을 실마리(제목·날짜)는 못 얻게.
+      drop(판정이 버린 것)은 개수에서도 빠진다.
+    """
+    rows = _fact_rows(path)
+    items = [i for i in rows if (i.get("status") or "open") in OPEN_STATUSES]
+    closed = " · ".join(
+        f"{label} {sum(1 for i in rows if (i.get('status') or 'open') == status)}"
+        for status, label in CLOSED_STATUS_LABELS
+    )
     if not items:
-        return "추적 중인 이슈 없음(조용한 프로젝트)."
+        return f"열린 이슈 없음(조용한 프로젝트). 끝난·멈춘 것(개수만): {closed}"
     u = sum(1 for i in items if i["kind"] == "unresolved")
     d = sum(1 for i in items if i["kind"] == "deadline")
-    st = {"open": 0, "consulting": 0, "resolved": 0, "deferred": 0, "needs_user": 0}
-    for i in items:
-        st[i.get("status") or "open"] = st.get(i.get("status") or "open", 0) + 1
-    deadlines = sorted(
-        (i for i in items if i.get("due")), key=lambda i: i["due"]
-    )
+    st = {k: sum(1 for i in items if (i.get("status") or "open") == k) for k in OPEN_STATUSES}
+    deadlines = sorted((i for i in items if i.get("due")), key=lambda i: i["due"])
     dl_txt = "\n".join(f"  - {i['due']} {i['title'][:80]}" for i in deadlines[:8]) or "  (없음)"
     top = "\n".join(f"  - [{i['kind']}] {i['title'][:90]}" for i in items[:12])
     return (
-        f"이슈 {len(items)}건 (미해결 {u}·기한 {d}) / 칸반 상태: 할일 {st['open']}·"
-        f"진행중 {st['consulting']}·조건대기 {st['deferred']}·내차례 {st['needs_user']}·"
-        f"완료 {st['resolved']}\n"
-        f"임박/기한:\n{dl_txt}\n"
-        f"이슈 목록(일부):\n{top}"
+        f"열린 이슈 {len(items)}건 (미해결 {u}·기한 {d}) / 칸반 상태: 할일 {st['open']}·"
+        f"진행중 {st['consulting']}·내 차례 {st['needs_user']}\n"
+        f"끝난·멈춘 것(개수만 — 제목·기한은 주지 않는다): {closed}\n"
+        f"임박/기한(열린 것만):\n{dl_txt}\n"
+        f"열린 이슈 목록(일부):\n{top}"
     )
 
 
@@ -319,14 +394,14 @@ def report_one_project(path: str, name: str, date: str, guidance: str = "",
         pm_body = summary + (f"\n▸ 담당에게: {pm['ask']}" if pm["ask"] and not pm["done"] else "")
         pm_out = pm_body.strip()
         messages_db.add_message(room, "pm", pm_out)
-        # ★ 룸 피드에도 그대로 흘린다 — 일간보고가 프로젝트 룸 대화로 곧장 이어지게
-        #   (2026-09-04 사용자 확정). 첫 발화에만 날짜 태그를 붙여 어디부터가 보고인지 표시.
-        messages_db.add_message(path, "pm", (f"[일간보고 {date}]\n" if rounds == 1 else "") + pm_out)
+        # ★ 2026-09-18 T-004: 룸 피드 이중 저장 폐지. 09-04엔 일간보고를 룸 대화로 이으려고
+        #   같은 발화를 프로젝트 방에도 넣었는데, 담당 방 패널이 매일 보고 사본으로 덮여
+        #   사용자와 담당의 실제 대화가 묻혔다(사용자 지적). 보고는 일간 방에만 쌓고,
+        #   룸 담당은 필요하면 reprocess.daily_transcript로 그날 방을 읽는다.
         if pm["done"] or not pm["ask"]:
             break
         ans = _agent_call(name, path, pm["ask"], hist)
         messages_db.add_message(room, "agent", ans)
-        messages_db.add_message(path, "agent", ans)
         turns.append((pm["ask"], ans))
     # 대화 종료 후: PM이 칸반 상태·일정을 확정해 실제 반영(전용 관리 호출)
     transcript = "\n".join(f"PM: {q}\n담당: {a}" for q, a in turns) or summary

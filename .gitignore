@@ -43,3 +43,8 @@ docs/manager/
 
 # 이 PC 전용 환경설정 계획 (T-002) — 공개 저장소에 올리지 않는다
 docs/setup-rollout.md
+
+# T-003 작업 구조 배포 — 이 PC의 대상 목록·결과 보고서는 로컬 전용(공개 저장소에 PC 고유 정보 금지)
+docs/rollout-targets.md
+docs/rollouts/
+docs/benchmark.md

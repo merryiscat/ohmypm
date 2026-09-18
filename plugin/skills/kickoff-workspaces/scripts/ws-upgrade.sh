@@ -12,7 +12,7 @@ V=$(sed -n 's/.*"version": *"\([^"]*\)".*/\1/p' "$ROOT/.claude-plugin/plugin.jso
 T="$K/templates"
 [ -d "$P" ] || { echo "no such project: $P" >&2; exit 2; }
 cd "$P"
-CUR=$(sed -n '1s/.*kickoff-workspaces v\([0-9.]*\).*/\1/p' docs/protocol.md 2>/dev/null)
+CUR=$(sed -n '1s/.*kickoff-workspaces v\([0-9.]*\).*/\1/p' docs/protocol.md 2>/dev/null) || true
 echo "project: $P"; echo "installed: ${CUR:-none}  ->  plugin: $V"
 
 stamp() { printf '<!-- kickoff-workspaces v%s — 원본은 ohmypm 플러그인. 여기서 고치지 말고 플러그인을 고친 뒤 "구조 업데이트하자" -->\n' "$V"; }
