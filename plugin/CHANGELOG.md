@@ -2,6 +2,12 @@
 
 프로젝트에 깔린 복사본의 버전은 각 프로젝트 `docs/protocol.md` 첫 줄에 있다. 올리려면 그 프로젝트 main에서 "구조 업데이트하자".
 
+## 0.5.0 — 2026-09-18
+- **모델 모드 스위치** `scripts/ws-model.sh <fable-out|fable-in|status> <프로젝트>...` — 페이블 주간 한도가 소진되면 roles.md의 페이블 자리(pl2 검토자·L 등급 워커)를 오퍼스로 내리고 **pl3를 열지 않는다**(pl2가 오퍼스라 검토·코디를 겸한다). 되돌리기는 `fable-in`
+- 근거: Claude Code는 쿼터 소진으로 모델을 자동으로 내리지 않는다 — `--fallback-model`·settings.json `fallbackModel`은 과부하·미사용 가능만 대체하고 rate limit·요금 오류는 대체하지 않는다(공식 문서 model-config). 자동화할 수 있는 건 한 번에 전부 내리는 것뿐
+- PROTOCOL "모델 모드" 절, dispatch 1절(모드 줄 먼저 읽기)·하지 않는 것, workspaces 1·3절
+- 항체: Git Bash에서 `orca terminal send --text "/clear"`를 보내면 MSYS 경로 변환이 `C:/Program Files/Git/clear`로 바꿔 텍스트로 꽂힌다(두 번 실측) — PowerShell이나 `MSYS_NO_PATHCONV=1`
+
 ## 0.4.1 — 2026-09-18
 - 항체 2(protocol 8절·dispatch 5절): `❯`여도 하단 "shell still running / ← agent"면 백그라운드 대기를 쥔 자리 — 비우지 않는다 / `/clear`는 텍스트로 들어가기도 하니 보낸 뒤 화면을 읽어 확인
 

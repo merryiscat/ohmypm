@@ -38,6 +38,8 @@ description: 킥오프 2부(마지막) — 프로젝트에 작업 구조를 깐�
 | pl 작성자 | 워크트리 `pl` 터미널 1 | codex | `gpt-6-astra` xhigh | `docs/tasks/`, 설계 문서 |
 | pl2 검토자 | 워크트리 `pl` 터미널 2 | claude | `claude-fable-5-1` | `docs/reviews/`만 — 검토서 한 장, 태스크마다 `/clear` |
 | pl3 코디네이터 | 워크트리 `pl` 터미널 3 | claude | `claude-opus-5` | 스펙 "검증" 절. 게이트·배정·대기·판정 — 배관은 하위 모델 |
+
+페이블 한도가 소진된 주에는 `scripts/ws-model.sh fable-out <프로젝트>`로 페이블 자리를 오퍼스로 내리고 pl3를 열지 않는다(PROTOCOL "모델 모드"). 쿼터 소진은 Claude Code가 자동으로 내려 주지 않는다.
 | 구현 워커 | 워크트리 `T-NNN-<slug>` | claude | 등급표(S 소넷 5 / M 오퍼스 5 / L 페이블 5.1) | 스펙의 '손대는 파일' |
 
 작성자·검토자를 서로 다른 벤더로 두는 이유와 검토자에게 재작성을 금지하는 이유는 PROTOCOL "근거". 코디네이터를 검토자와 분리해 하위 모델에 두는 이유는 PROTOCOL "토큰 규율"(최상위 모델 세션이 오케스트레이션 JSON을 끌어안고 커지지 않게).
@@ -73,7 +75,7 @@ description: 킥오프 2부(마지막) — 프로젝트에 작업 구조를 깐�
 orca repo list --json                                   # <repoId> 확인
 orca worktree create --repo id:<repoId> --name pl --agent codex --no-parent --comment "기획·설계·검토" --json
 orca terminal create --worktree name:pl --title pl2 --command "claude --model claude-fable-5-1 --dangerously-skip-permissions" --json
-orca terminal create --worktree name:pl --title pl3 --command "claude --model claude-opus-5 --dangerously-skip-permissions" --json
+orca terminal create --worktree name:pl --title pl3 --command "claude --model claude-opus-5 --dangerously-skip-permissions" --json   # roles.md가 fable-out이면 열지 않는다
 orca terminal wait --terminal <handle> --for tui-idle --timeout-ms 60000 --json      # pl2·pl3 각각
 ```
 `wait.satisfied`가 true일 때만 send 한다. 세 터미널에 각각 `templates/prompt-pl.md`·`prompt-pl2.md`·`prompt-pl3.md`의

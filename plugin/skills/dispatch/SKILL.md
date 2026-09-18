@@ -24,7 +24,8 @@ main에서 일을 직접 하면 구조가 죽는다. 요청을 받으면 **① �
 ```
 orca terminal list --worktree name:pl --json
 ```
-`pl` 워크트리의 터미널 중 **Codex 프로세스 = pl, Claude 프로세스는 명령줄 `--model`로 — 페이블 = pl2(검토), 오퍼스 = pl3(코디네이터)**(제목이 아니라 명령으로 판별, roles.md가 단일 출처). 셋 중 없는 것이 있으면 kickoff-workspaces 3절대로 연다.
+`pl` 워크트리의 터미널 중 **Codex 프로세스 = pl, Claude 프로세스는 명령줄 `--model`로 — 페이블 = pl2(검토), 오퍼스 = pl3(코디네이터)**(제목이 아니라 명령으로 판별, roles.md가 단일 출처). 없는 것이 있으면 kickoff-workspaces 3절대로 연다.
+**먼저 roles.md 맨 위 모드 줄을 본다.** `fable-out`(페이블 한도 소진)이면 pl 워크트리의 Claude 터미널은 **pl2 하나뿐이고 오퍼스**다 — 아래에서 pl3로 보내는 것(4·5절)을 전부 그 pl2에 보내고, pl3를 새로 열지 않는다.
 main이 원격보다 뒤져 있으면 먼저 `git fetch` + ff — 워커 워크트리는 origin/main에서 뜬다(protocol 4절).
 
 ## 2. pl에 스펙 지시 (Codex 턴 1)
@@ -91,7 +92,8 @@ orca terminal send --terminal <pl3> --text "/clear" --enter --json
 ## 하지 않는 것
 
 - M·L 요청을 main이 직접 하기("금방 하니까"가 구조를 죽인다). S는 직접 하는 게 맞다 — 차선을 먼저 말하고 한다
-- pl에 조사·질문·대기 시키기, pl에 세 번째 메시지 보내기. pl2에 검토 외의 것(배정·대기·검증) 시키기
+- pl에 조사·질문·대기 시키기, pl에 세 번째 메시지 보내기. pl2에 검토 외의 것(배정·대기·검증) 시키기 — 단 `fable-out` 모드에서는 pl2가 겸한다
+- Git Bash에서 `orca terminal send --text "/clear"` 보내기 — MSYS가 경로로 바꾼다. PowerShell이나 `MSYS_NO_PATHCONV=1`로
 - 목록으로 터미널 닫기 — 내가 만든 핸들만 닫는다
 - 사용자 세션(제목에 ✳, 또는 pl 워크트리 밖) 건드리기
 - main2 만들기, pl에 두 스펙을 동시에 시키기, 대기를 전경(foreground)에서 돌려 main을 막기
