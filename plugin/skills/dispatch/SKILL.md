@@ -36,6 +36,7 @@ orca terminal list --worktree path:<pl 워크트리 절대경로> --json
 **모델은 `docs/roles.md`의 벤더별 우선순위로 맨 앞부터 부른다**(protocol 10절). 터미널이
 `out of usage credits` 류로 답하면 **같은 벤더의 다음 모델**로 `/model`을 보내고 다시 지시한다.
 벤더를 넘어가지 않는다 — 한 벤더가 통째로 막히면 그 자리는 멈추고 사용자에게 알린다.
+**실제로 응답한 모델을 `--model`로 로그에 적는다.** `roles.md`도 터미널 배너도 설정값이지 가용성의 증거가 아니다(2026-09-19 오독 실측).
 
 ## 2. pl에 스펙 지시
 
@@ -50,7 +51,7 @@ orca terminal list --worktree path:<pl 워크트리 절대경로> --json
 2. 보낸다:
 ```
 python <플러그인>/skills/kickoff-workspaces/scripts/pipeline-log.py send \
-  --task T-NNN --to pl --terminal <pl handle> --file docs/_ask/T-NNN.md --stage "스펙 v1 지시"
+  --task T-NNN --to pl --terminal <pl handle> --file docs/_ask/T-NNN.md --stage "스펙 v1 지시" \n  --model <그 자리가 실제로 응답한 모델>
 ```
 3. 끝났는지는 **파일 생성 + 화면에서 작업 표시가 사라짐**으로 판단한다. 기다릴 때는 **실패도 함께 본다** —
    파일만 기다리는 대기는 에이전트가 오류로 멈춰도 영원히 기다린다(2026-09-19 실측).
@@ -69,8 +70,8 @@ pipeline-log.py recv --task T-NNN --from pl --file docs/tasks/T-NNN-<slug>.md --
 **주는 것은 요청 원문·스펙·산출물뿐이다** — main의 세션 로그나 추론은 주지 않는다(독립성).
 
 ```
-pipeline-log.py send --task T-NNN --to pl2 --terminal <pl2 handle> --file docs/_ask/T-NNN-review.md --stage "검토 지시"
-pipeline-log.py recv --task T-NNN --from pl2 --file docs/reviews/T-NNN.review-v1.md --stage "검토서 v1"
+pipeline-log.py send --task T-NNN --to pl2 --terminal <pl2 handle> --file docs/_ask/T-NNN-review.md --stage "검토 지시" --model <실제 응답 모델>
+pipeline-log.py recv --task T-NNN --from pl2 --file docs/reviews/T-NNN.review-v1.md --stage "검토서 v1" --model <실제 응답 모델>
 ```
 
 검토서가 나오면 **pl2를 비운다**(PowerShell에서 — Git Bash는 `/clear`를 경로로 바꾼다):
