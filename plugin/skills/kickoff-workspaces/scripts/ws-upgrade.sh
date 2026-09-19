@@ -55,4 +55,6 @@ fi
 echo "--- changed:"; git status --short -- docs/protocol.md docs/tasks/_template.md docs/reviews/_template.md .githooks/pre-commit AGENTS.md CLAUDE.md docs/roles.md orca.yaml .worktreeinclude 2>/dev/null || true
 grep -q "pl3" docs/roles.md 2>/dev/null && echo "WARN: docs/roles.md에 pl3 행이 남아 있다 — 0.7.0에서 걷어냈다. 소유 파일이라 손으로: templates/roles.md 참고"
 grep -q "구현 워커" docs/roles.md 2>/dev/null && echo "WARN: docs/roles.md에 구현 워커 행이 남아 있다 — 구현은 main이 한다(0.7.0)"
+grep -q "모델 우선순위" docs/roles.md 2>/dev/null || echo "WARN: docs/roles.md가 아직 모델 이름 하나를 박고 있다 — 0.8.0은 벤더별 우선순위 목록이다. 소유 파일이라 손으로: templates/roles.md 참고"
+grep -q "페이블 소진" docs/roles.md 2>/dev/null && echo "WARN: docs/roles.md에 수동 모델 모드 줄이 남아 있다 — ws-model.sh는 0.8.0에서 폐기됐다. 그 줄을 지우고 우선순위 표로 바꾼다"
 echo "done: v$V  (pl·pl2 세션은 /clear — 규칙 파일이 바뀌었다)"

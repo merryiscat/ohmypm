@@ -6,7 +6,8 @@ description: 킥오프 2부(마지막) — 프로젝트에 작업 구조를 깐�
 # 킥오프 2부 — 작업 구조
 
 **생각하는 자리와 손대는 자리를 나눈다.** 기획·설계·검토는 서로 다른 벤더의 프론티어 모델 둘이 한 워크트리에서
-하고, 구현은 작업 스펙의 난이도 등급에 맞는 모델이 별도 워크트리에서 한다. main은 합치기만 한다.
+하고, **구현은 main이 직접** 한다(워커 워크트리는 2026-09-18에 걷어냈다 — 아래 1절).
+설계에는 시간·토큰 상한을 두지 않고, 대신 오간 원문과 토큰을 전부 로그에 남긴다(2026-09-19).
 둘 사이의 계약은 **작업 스펙(검증 가능한 완료 기준)** 하나다 — 스펙 없이 구현 워커를 띄우지 않는다.
 
 > **산출물 계약**: 대상 프로젝트에 역할표(`docs/roles.md`)·스펙/검토 폴더·`orca.yaml`·`.worktreeinclude`·
@@ -35,11 +36,11 @@ description: 킥오프 2부(마지막) — 프로젝트에 작업 구조를 깐�
 | 역할 | 자리 | 에이전트 | 모델 | 쓰는 경로 |
 |---|---|---|---|---|
 | main | 원본 체크아웃 | claude | 기본 | 머지·커밋·푸시만 |
-| pl 작성자 | 워크트리 `pl` 터미널 1 | codex | `gpt-6-astra` xhigh | `docs/tasks/`, 설계 문서 |
-| pl2 검토 | 워크트리 `pl` 터미널 2 | claude | `claude-fable-5-1` | `docs/reviews/`, 스펙 "검증" 절 — 스펙 1회·산출물 1회 |
+| pl 작성자 | 워크트리 `pl` 터미널 1 | codex | **Codex 고정** `gpt-6-astra high` | `docs/tasks/`, 설계 문서. 대상 코드는 읽되 실행하지 않는다 |
+| pl2 검토 | 워크트리 `pl` 터미널 2 | claude | **Claude 고정** `fable` → `opus` → `sonnet` | `docs/reviews/`, 스펙 "검증" 절 — 내용이 달라진 판만 |
 
 **구현은 main이 한다.** 2026-09-18에 코디네이터 자리와 워커 워크트리를 걷어냈다(PROTOCOL 0절 — 근거가 없었다).
-페이블 한도가 소진된 주에는 `scripts/ws-model.sh fable-out <프로젝트>`로 페이블 자리를 오퍼스로 내린다. 쿼터 소진은 Claude Code가 자동으로 내려 주지 않는다.
+모델은 **벤더별 우선순위**로 적고 매 태스크마다 맨 앞부터 부른다. 소진 응답이면 같은 벤더의 다음으로 내리고, 한도가 회복되면 다음 태스크에서 저절로 돌아온다 — 벤더는 넘지 않는다(교차 검토 전제). 손으로 넘기던 `ws-model.sh`는 0.8.0에서 폐기했다. 쿼터 소진을 Claude Code가 자동으로 내려 주지 않는다는 것은 2026-09-19에 확인했다(`out of usage credits` → `/model to switch models`). 절차는 PROTOCOL 10절.
 
 작성자·검토자를 서로 다른 벤더로 두는 이유와 검토자에게 재작성을 금지하는 이유는 PROTOCOL "근거". 코디네이터를 검토자와 분리해 하위 모델에 두는 이유는 PROTOCOL "토큰 규율"(최상위 모델 세션이 오케스트레이션 JSON을 끌어안고 커지지 않게).
 전제 확인: `codex --version`·`claude --version`이 돌고, Codex 전역 설정(`~/.codex/config.toml`)에
@@ -72,13 +73,17 @@ description: 킥오프 2부(마지막) — 프로젝트에 작업 구조를 깐�
 
 ```
 orca repo list --json                                   # <repoId> 확인
-orca worktree create --repo id:<repoId> --name pl --agent codex --no-parent --comment "기획·설계·검토" --json
-orca terminal create --worktree name:pl --title pl2 --command "claude --model claude-fable-5-1 --dangerously-skip-permissions" --json
+orca worktree create --repo id:<repoId> --name pl --agent codex --no-parent --setup skip --comment "기획·설계·검토" --json
+orca terminal create --worktree path:<pl 워크트리 절대경로> --title pl2 --command "claude --model fable --dangerously-skip-permissions" --json
 orca terminal wait --terminal <pl2 handle> --for tui-idle --timeout-ms 60000 --json
 ```
 `wait.satisfied`가 true일 때만 send 한다. 두 터미널에 각각 `templates/prompt-pl.md`·`prompt-pl2.md`의
 역할 지시를 첫 메시지로 보낸다(`orca terminal send --text ... --enter`). 새 폴더 신뢰창이 뜨면 프롬프트가 먹힌다 — wait 뒤 화면을 한 번 본다.
 브랜치는 Orca가 워크트리 이름에서 만든다(`<git-username>/pl` 꼴) — 가드는 마지막 세그먼트로 판정한다.
+**`--setup skip`을 쓴다** — pl은 `docs/`만 쓰고 코드를 실행하지 않으므로 venv·node_modules 설치가 필요 없다.
+워크트리는 기본적으로 **`origin/main` 기준**으로 만들어진다 — 방금 만든 로컬 커밋(푸시 전)은 들어오지 않으니
+만든 직후 `git -C <pl> merge --ff-only <main 브랜치>`로 맞추고 구조 파일이 있는지 눈으로 본다(2026-09-19 실측).
+**터미널 선택자로 `name:pl`을 쓰지 않는다** — 작업 구조가 깔린 프로젝트가 여럿이면 모호하다. `path:`로 짚는다.
 
 ## 4. 첫 스펙 지시
 
