@@ -83,6 +83,10 @@ S 판정이 틀려 커지면 그 자리에서 멈추고 M으로 올린다 — �
 **pl은 되묻는다.** 모르는 것을 지어내지 말고 물어라. main이 그 자리에서 사용자에게 올리고 답을 실어 다시 지시한다.
 질문은 **한 번에 몰아서** 한다 — 하나씩 세 번 묻지 않는다. 답이 필요 없는 가정은 스펙에 "가정:"으로 적고 진행한다.
 
+**질문은 화면이 아니라 파일로 내놓는다** — `docs/_ask/T-NNN.question.md`에 쓰고 멈춘다.
+화면에만 쓰면 아무도 읽지 않는다. 그래서 pl이 턴을 끝내는 길은 **셋뿐**이다:
+**①스펙 파일 ②질문 파일 ③오류로 멈춤.** main은 그 셋을 파일 유무로 가른다(7절).
+
 pl이 하지 않는 것: 코드 실행·테스트·설치·서버 기동(읽기는 하되 돌리지 않는다 — 쓰기는 단일 스레드다),
 `docs/` 밖 쓰기, 서브에이전트·ultra 모드, 요청받지 않은 재작성.
 
@@ -123,6 +127,12 @@ M은 기준별 한 줄, 재조회·재실행은 차단 기준에만.
 ## 7. 구현 (main)
 
 승인된 스펙의 완료 기준을 만족시킨다. **스펙 밖은 고치지 않는다** — 필요해지면 멈추고 사용자에게 묻는다.
+
+**기다리기는 파일이 아니라 "에이전트가 멈췄다"로 건다.** 산출물 파일만 기다리면 에이전트가 오류나
+한도 소진으로 멈춰도 영원히 기다린다(2026-09-19에 두 번 실측했고, 두 번 다 사용자가 먼저 발견했다).
+`pipeline-log.py wait`가 `orca terminal wait --for tui-idle`로 멈춤을 잡고 결말 셋을 가른다 —
+**산출물이면 진행, 질문 파일이면 즉시 사용자에게, 둘 다 없으면 오류·소진이니 화면을 읽는다.**
+결말은 로그에 남는다.
 
 **pl·pl2가 올린 질문은 즉시 사용자에게 올린다.** 재확인 주기를 두지 않고, 쌓아 둘 큐도 두지 않는다 —
 주기를 두면 그 주기만큼 늦어지고, 큐를 두면 아무도 안 보는 자리가 하나 더 생긴다. 09-18의 병목은
@@ -195,6 +205,7 @@ Orca를 재시작했으면 터미널 핸들이 바뀐다 — `orca terminal list
 pipeline-log.py send   --task T-NNN --to pl --terminal <handle> --file docs/_ask/T-NNN.md --stage "스펙 v1 지시"
 pipeline-log.py recv   --task T-NNN --from pl --file docs/tasks/T-NNN-<slug>.md --stage "스펙 v1"
 pipeline-log.py usage  --task T-NNN --role pl --raw "<`/status`가 찍은 Token usage 줄 그대로>"
+pipeline-log.py wait   --task T-NNN --terminal <handle> --expect docs/tasks/T-NNN-<slug>.md                        --question docs/_ask/T-NNN.question.md --who pl
 pipeline-log.py report --task T-NNN
 ```
 

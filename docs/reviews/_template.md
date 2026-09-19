@@ -1,4 +1,4 @@
-<!-- kickoff-workspaces v0.8.0 — 원본은 ohmypm 플러그인. 여기서 고치지 말고 플러그인을 고친 뒤 "구조 업데이트하자" -->
+<!-- kickoff-workspaces v0.9.0 — 원본은 ohmypm 플러그인. 여기서 고치지 말고 플러그인을 고친 뒤 "구조 업데이트하자" -->
 # T-NNN 검토서 v1
 
 - 대상: `docs/tasks/T-NNN-<slug>.md` vN — **내용이 달라진 판만 본다**(protocol 4절). 같은 내용이면 검토하지 않는다

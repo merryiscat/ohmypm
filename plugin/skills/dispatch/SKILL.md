@@ -54,8 +54,12 @@ python <플러그인>/skills/kickoff-workspaces/scripts/pipeline-log.py send \
   --task T-NNN --to pl --terminal <pl handle> --file docs/_ask/T-NNN.md \
   --stage "스펙 v1 지시" --model <그 자리가 실제로 응답한 모델>
 ```
-3. 끝났는지는 **파일 생성 + 화면에서 작업 표시가 사라짐**으로 판단한다. 기다릴 때는 **실패도 함께 본다** —
-   파일만 기다리는 대기는 에이전트가 오류로 멈춰도 영원히 기다린다(2026-09-19 실측).
+3. 끝났는지는 **멈춤**으로 판단한다 — 파일만 기다리면 오류·소진에 영원히 걸린다(2026-09-19 두 번 실측):
+```
+pipeline-log.py wait --task T-NNN --terminal <pl handle> --who pl   --expect docs/tasks/T-NNN-<slug>.md --question docs/_ask/T-NNN.question.md
+```
+   결말은 셋이다. **산출물**이면 4절로, **질문**이면 그 파일을 열어 **즉시 사용자에게**,
+   **둘 다 없으면** 화면을 읽는다(한도 소진이면 같은 벤더의 다음 모델로 — 1절).
 4. 받은 산출물을 로그에 남긴다:
 ```
 pipeline-log.py recv --task T-NNN --from pl --file docs/tasks/T-NNN-<slug>.md --stage "스펙 v1" --model <pl이 실제로 응답한 모델>
@@ -63,6 +67,10 @@ pipeline-log.py recv --task T-NNN --from pl --file docs/tasks/T-NNN-<slug>.md --
 
 **pl이 되물으면** 그 자리에서 사용자에게 올린다 — 재확인 주기도, 쌓아 둘 큐도 두지 않는다.
 답을 받으면 `docs/_ask/T-NNN-answer.md`에 **사용자 말 그대로** 적어 다시 `send`한다. 왕복 횟수에 상한은 없다.
+질문 파일은 답을 실어 보낸 뒤 지운다 — 남겨 두면 다음 `wait`가 옛 질문을 새 질문으로 읽는다.
+
+지시서에는 **질문을 어디에 쓸지 한 줄로 적어 준다**: "모르는 것은 `docs/_ask/T-NNN.question.md`에
+한 번에 몰아 쓰고 멈춰라. 화면에만 쓰면 아무도 읽지 않는다."
 
 ## 3. pl2에 검토 지시
 
@@ -133,6 +141,7 @@ pipeline-log.py time --task T-NNN      # 에이전트·구현·사람 대기
 - **`pipeline-log.py send`를 건너뛰고 `orca terminal send`로 직접 보내기** — 로그가 비면 그 바퀴는 측정 실패다
 - `/status`를 걷기 전에 `/clear` 하기 — 숫자가 사라진다
 - **`--model`을 빼고 보내기** — 어느 자리든 한 건이라도 비면 그 자리의 모델을 모르는 것이다. `report`가 자리별로 경고한다
+- **산출물 파일만 기다리기** — `wait`로 멈춤을 잡는다. 오류·소진은 파일을 만들지 않는다
 - pl2에게 **같은 내용**을 두 번 검토시키기, main의 세션 로그·추론을 주기
 - **워커 워크트리 띄우기, `orca orchestration` 쓰기** — 2026-09-18 걷어냈다
 - 질문을 쌓아 두고 나중에 올리기 — 즉시 올린다. 09-18 병목의 원인은 아무도 보지 않는 대기였다

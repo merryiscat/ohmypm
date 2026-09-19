@@ -286,6 +286,40 @@ def cmd_time(a):
     return 0
 
 
+def cmd_wait(a):
+    """에이전트가 **멈추는 순간**을 잡고, 무엇이 생겼는지로 결말을 가른다.
+
+    파일만 기다리면 에이전트가 오류·한도 소진으로 멈춰도 영원히 기다린다(2026-09-19 실측 2회).
+    멈춤은 `orca terminal wait --for tui-idle`로 잡히므로, 그다음에 파일 유무만 보면 된다:
+      산출물 있음 → 진행 / 질문 있음 → **즉시 사용자에게**(protocol 7절) / 둘 다 없음 → 오류·소진
+    """
+    r = subprocess.run(['orca', 'terminal', 'wait', '--terminal', a.terminal,
+                        '--for', 'tui-idle', '--timeout-ms', str(a.timeout_ms), '--json'],
+                       capture_output=True, text=True, encoding='utf-8')
+    idle = '"ok": true' in (r.stdout or '')
+    got_out = bool(a.expect and os.path.exists(a.expect))
+    got_q = bool(a.question and os.path.exists(a.question))
+    if got_out:
+        결말 = '산출물'
+    elif got_q:
+        결말 = '질문'
+    else:
+        결말 = '멈춤(오류·소진 의심)' if idle else '시간 초과'
+    append(a.task, {'방향': '%s 멈춤' % (a.who or 'pl'), '단계': '대기 결말', '종류': '대기',
+                    '모델': a.model or '미기록', '원문': 결말,
+                    '주': 'idle=%s / 산출물=%s / 질문=%s' % (idle, got_out, got_q)})
+    print('결말: %s' % 결말)
+    if 결말 == '질문':
+        print('  → %s' % a.question)
+        print('  **즉시 사용자에게 올린다.** 재확인 주기도 큐도 두지 않는다(protocol 7절)')
+        return 2
+    if 결말 == '산출물':
+        print('  → %s' % a.expect)
+        return 0
+    print('  화면을 읽어 무엇이 막았는지 본다 — 한도 소진이면 같은 벤더의 다음 모델로(protocol 10절)')
+    return 1
+
+
 def main():
     ap = argparse.ArgumentParser(description='파이프라인 로그')
     sub = ap.add_subparsers(dest='cmd')
@@ -305,11 +339,17 @@ def main():
     n.add_argument('--stage', help='게이트 승인은 --stage "게이트 승인"으로 남긴다 — time이 구현 시작점으로 쓴다')
     p = sub.add_parser('report'); p.add_argument('--task', required=True)
     t = sub.add_parser('time'); t.add_argument('--task', required=True)
+    w = sub.add_parser('wait')
+    w.add_argument('--task', required=True); w.add_argument('--terminal', required=True)
+    w.add_argument('--expect', help='기대하는 산출물 경로(스펙·검토서 등)')
+    w.add_argument('--question', help='질문 파일 경로. 기본 docs/_ask/<task>.question.md')
+    w.add_argument('--who'); w.add_argument('--model')
+    w.add_argument('--timeout-ms', dest='timeout_ms', type=int, default=900000)
     a = ap.parse_args()
     if not a.cmd:
         ap.print_help(); return 2
-    return {'send': cmd_send, 'recv': cmd_recv, 'usage': cmd_usage,
-            'note': cmd_note, 'report': cmd_report, 'time': cmd_time}[a.cmd](a)
+    return {'send': cmd_send, 'recv': cmd_recv, 'usage': cmd_usage, 'note': cmd_note,
+            'report': cmd_report, 'time': cmd_time, 'wait': cmd_wait}[a.cmd](a)
 
 
 if __name__ == '__main__':
