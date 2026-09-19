@@ -19,6 +19,7 @@
   pipeline-log.py usage  --task T-005 --role pl --raw "Token usage: total=76,449 input=70,580 (+ 367,872 cached) output=5,869"
   pipeline-log.py note   --task T-005 --text "사용자 게이트 승인" [--role user]
   pipeline-log.py report --task T-005
+  pipeline-log.py time   --task T-005      # 에이전트·구현·사람 대기를 기록에서 계산
 """
 import argparse, io, json, os, re, subprocess, sys, time
 
@@ -153,7 +154,7 @@ def cmd_usage(a):
 
 
 def cmd_note(a):
-    append(a.task, {'방향': a.role or 'main', '단계': '메모', '종류': '메모', '원문': a.text,
+    append(a.task, {'방향': a.role or 'main', '단계': a.stage or '메모', '종류': '메모', '원문': a.text,
                     '모델': a.model or '미기록'})
     print('기록:', a.text[:60])
     return 0
@@ -219,6 +220,59 @@ def cmd_report(a):
     return 0
 
 
+def fmt(sec):
+    if sec is None:
+        return '미측정'
+    m, x = divmod(int(sec), 60)
+    return '%d분 %d초' % (m, x) if m else '%d초' % x
+
+
+def cmd_time(a):
+    """시간을 기억이 아니라 기록에서 뽑는다. 오늘(2026-09-19) 눈대중으로 적은 숫자가
+    실제의 두 배를 넘었다 — 사람이 옮겨 적는 구간이 있으면 또 틀린다."""
+    p = logpath(a.task)
+    if not os.path.exists(p):
+        print('기록 없음: %s' % p)
+        return 1
+    recs = [json.loads(l) for l in read(p).splitlines() if l.strip()]
+    agent = human = 0
+    gate = None
+    for r in recs:
+        gap = r.get('직전_기록으로부터_초') or 0
+        k = r.get('종류')
+        if k == '산출물':          # send -> recv : 에이전트가 돈 시간
+            agent += gap
+        elif k in ('지시서', '메모', '사용량'):   # recv -> send : main 판단 + 사용자 대기
+            human += gap
+        if r.get('단계') == '게이트 승인':
+            gate = r.get('시각')
+    # 구현 시간 = 게이트 승인 -> 최종 커밋
+    impl = None
+    r = subprocess.run(['git', 'log', '-1', '--format=%ct'], capture_output=True, text=True,
+                       encoding='utf-8')
+    if gate and r.returncode == 0 and r.stdout.strip():
+        g = time.mktime(time.strptime(gate, '%Y-%m-%d %H:%M:%S'))
+        impl = max(int(r.stdout.strip()) - g, 0)
+    total_goal = agent + (impl or 0)
+
+    print('# %s 시간 (기록에서 계산)\n' % a.task)
+    print('| 구간 | 값 | 무엇인가 |')
+    print('|---|---|---|')
+    print('| 에이전트 | %s | send → recv, pl·pl2가 실제로 돈 시간 |' % fmt(agent))
+    print('| 구현 | %s | 게이트 승인 → 최종 커밋 |' % fmt(impl))
+    print('| **목표 대상(에이전트+구현)** | **%s** | 차선 판정을 진단하는 값 |' % fmt(total_goal))
+    print('| 사람 대기 | %s | recv → 다음 send. 사용자가 답을 쥐고 있던 시간 |' % fmt(human))
+    if gate is None:
+        print('\n- 게이트 승인 기록이 없어 구현 시간을 못 냈다 — 승인 순간에'
+              ' `note --stage "게이트 승인"`을 남겨라')
+    zero = sum(1 for r in recs if r.get('종류') == '산출물' and not r.get('직전_기록으로부터_초'))
+    if zero:
+        print('- **산출물 %d건의 간격이 0초다 — 소급 기록으로 보인다.** 그 바퀴의 에이전트 시간은 믿지 않는다'
+              ' (로거를 그 순간에 불러야 한다)' % zero)
+    print('\n벤치마크에 옮길 두 칸: 시간(목표대상) `%s` · 사람 대기 `%s`' % (fmt(total_goal), fmt(human)))
+    return 0
+
+
 def main():
     ap = argparse.ArgumentParser(description='파이프라인 로그')
     sub = ap.add_subparsers(dest='cmd')
@@ -235,12 +289,14 @@ def main():
     n = sub.add_parser('note')
     n.add_argument('--task', required=True); n.add_argument('--text', required=True)
     n.add_argument('--role'); n.add_argument('--model')
+    n.add_argument('--stage', help='게이트 승인은 --stage "게이트 승인"으로 남긴다 — time이 구현 시작점으로 쓴다')
     p = sub.add_parser('report'); p.add_argument('--task', required=True)
+    t = sub.add_parser('time'); t.add_argument('--task', required=True)
     a = ap.parse_args()
     if not a.cmd:
         ap.print_help(); return 2
     return {'send': cmd_send, 'recv': cmd_recv, 'usage': cmd_usage,
-            'note': cmd_note, 'report': cmd_report}[a.cmd](a)
+            'note': cmd_note, 'report': cmd_report, 'time': cmd_time}[a.cmd](a)
 
 
 if __name__ == '__main__':

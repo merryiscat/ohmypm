@@ -111,8 +111,13 @@ orca terminal send --terminal <pl handle> --text "/clear" --enter --json
 pipeline-log.py report --task T-NNN                                            # 집계를 사용자에게 보인다
 ```
 
-마지막으로 **실제 걸린 시간을 사용자에게 말하고** `docs/benchmark.md`에 한 줄 적는다
-(요청 일치·검토 차단·산출물 실패·시간·사람 개입·**토큰 실측**).
+시간은 세지 말고 **뽑는다**:
+```
+pipeline-log.py time --task T-NNN      # 에이전트·구현·사람 대기
+```
+게이트에서 승인을 받은 그 순간에 `note --stage "게이트 승인"`을 남겨 두어야 구현 시간이 나온다.
+그 출력을 그대로 사용자에게 말하고 `docs/benchmark.md`에 한 줄 적는다
+(요청 일치·검토 차단·산출물 실패·**시간(목표대상)·사람 대기**·사람 개입·**토큰 실측**).
 
 ## 7. 동시 요청
 
