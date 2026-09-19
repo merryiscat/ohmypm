@@ -58,7 +58,7 @@ python <플러그인>/skills/kickoff-workspaces/scripts/pipeline-log.py send \
    파일만 기다리는 대기는 에이전트가 오류로 멈춰도 영원히 기다린다(2026-09-19 실측).
 4. 받은 산출물을 로그에 남긴다:
 ```
-pipeline-log.py recv --task T-NNN --from pl --file docs/tasks/T-NNN-<slug>.md --stage "스펙 v1"
+pipeline-log.py recv --task T-NNN --from pl --file docs/tasks/T-NNN-<slug>.md --stage "스펙 v1" --model <pl이 실제로 응답한 모델>
 ```
 
 **pl이 되물으면** 그 자리에서 사용자에게 올린다 — 재확인 주기도, 쌓아 둘 큐도 두지 않는다.
@@ -106,7 +106,7 @@ orca terminal send --terminal <pl2 handle> --text "/clear" --enter --json
 전부 통과면 **토큰을 걷고 나서** 비운다 — 순서를 바꾸면 숫자가 사라진다:
 ```
 orca terminal send --terminal <pl handle> --text "/status" --enter --json     # Token usage 줄을 읽는다
-pipeline-log.py usage --task T-NNN --role pl --raw "<그 줄 그대로>"
+pipeline-log.py usage --task T-NNN --role pl --raw "<그 줄 그대로>" --model <pl이 실제로 응답한 모델>
 orca terminal send --terminal <pl handle> --text "/clear" --enter --json
 pipeline-log.py report --task T-NNN                                            # 집계를 사용자에게 보인다
 ```
@@ -127,6 +127,7 @@ pipeline-log.py report --task T-NNN                                            #
 - **긴 지시를 `--text`로 보내기** — 지시서 파일 + 경로 한 줄. `send`가 그렇게 한다
 - **`pipeline-log.py send`를 건너뛰고 `orca terminal send`로 직접 보내기** — 로그가 비면 그 바퀴는 측정 실패다
 - `/status`를 걷기 전에 `/clear` 하기 — 숫자가 사라진다
+- **`--model`을 빼고 보내기** — 어느 자리든 한 건이라도 비면 그 자리의 모델을 모르는 것이다. `report`가 자리별로 경고한다
 - pl2에게 **같은 내용**을 두 번 검토시키기, main의 세션 로그·추론을 주기
 - **워커 워크트리 띄우기, `orca orchestration` 쓰기** — 2026-09-18 걷어냈다
 - 질문을 쌓아 두고 나중에 올리기 — 즉시 올린다. 09-18 병목의 원인은 아무도 보지 않는 대기였다

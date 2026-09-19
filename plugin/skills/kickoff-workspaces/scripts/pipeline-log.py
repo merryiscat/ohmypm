@@ -202,9 +202,17 @@ def cmd_report(a):
     if models:
         for k, v in models.items():
             print('- %s 가 실제로 돈 모델: %s' % (k, ', '.join(sorted(v))))
-    else:
+    if not models:
         print('- 모델이 한 건도 기록되지 않았다. roles.md는 설정이지 실물의 증거가 아니다'
               ' — send/recv/usage에 --model을 붙여라(protocol 10절)')
+    # 자리별로 본다 — 한 자리라도 비면 그 자리의 모델은 모르는 것이다.
+    # "한 건도 없을 때만" 경고하면 main 행 하나로 조용히 지나간다(pl2 지적, 2026-09-19).
+    blank = {}
+    for r in recs:
+        if r.get('종류') in ('지시서', '산출물', '사용량') and r.get('모델', '미기록') == '미기록':
+            blank[r.get('방향', '')] = blank.get(r.get('방향', ''), 0) + 1
+    for k, v in sorted(blank.items()):
+        print('- **%s: 모델 미기록 %d건** — 그 자리가 어느 모델로 돌았는지 이 바퀴에서는 알 수 없다' % (k, v))
     if not meas:
         print('- 실측 토큰이 한 건도 없다. 종량 자리는 실측이 필수다(protocol 7절)'
               ' — 태스크 끝에 /status를 걷어라')
