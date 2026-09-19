@@ -84,7 +84,13 @@ def append(task, rec):
     if prev and prev.get('시각'):
         a = time.mktime(time.strptime(prev['시각'], '%Y-%m-%d %H:%M:%S'))
         b = time.mktime(time.strptime(rec['시각'], '%Y-%m-%d %H:%M:%S'))
-        rec['직전_기록으로부터_초'] = int(b - a)
+        gap = int(b - a)
+        rec['직전_기록으로부터_초'] = gap
+        # 시계가 튀면 간격이 거짓말을 한다. 2026-09-19에 실행 환경의 시계가 한 바퀴 도중
+        # 6시간 33분 앞으로 뛰었다(커밋 하나는 16:39, 다음이 23:12). 음수이거나 터무니없이
+        # 크면 그 간격은 시간 계산에서 뺀다 — 조용히 합산하면 숫자가 통째로 망가진다.
+        if gap < 0 or gap > 6 * 3600:
+            rec['시계_이상'] = True
     with io.open(p, 'a', encoding='utf-8', newline='\n') as f:
         f.write(json.dumps(rec, ensure_ascii=False) + '\n')
     return rec
@@ -237,7 +243,11 @@ def cmd_time(a):
     recs = [json.loads(l) for l in read(p).splitlines() if l.strip()]
     agent = human = 0
     gate = None
+    skipped = 0
     for r in recs:
+        if r.get('시계_이상'):
+            skipped += 1
+            continue                 # 시계가 튄 구간은 합산하지 않는다
         gap = r.get('직전_기록으로부터_초') or 0
         k = r.get('종류')
         if k == '산출물':          # send -> recv : 에이전트가 돈 시간
@@ -265,6 +275,9 @@ def cmd_time(a):
     if gate is None:
         print('\n- 게이트 승인 기록이 없어 구현 시간을 못 냈다 — 승인 순간에'
               ' `note --stage "게이트 승인"`을 남겨라')
+    if skipped:
+        print('- **시계가 튄 구간 %d건을 뺐다** — 실행 환경의 시계가 바퀴 도중에 이동하면'
+              ' 간격이 거짓말을 한다(2026-09-19 실측: 6시간 33분 점프). 그만큼 실제보다 짧게 나온다' % skipped)
     zero = sum(1 for r in recs if r.get('종류') == '산출물' and not r.get('직전_기록으로부터_초'))
     if zero:
         print('- **산출물 %d건의 간격이 0초다 — 소급 기록으로 보인다.** 그 바퀴의 에이전트 시간은 믿지 않는다'
