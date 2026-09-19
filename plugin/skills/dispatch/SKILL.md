@@ -51,7 +51,8 @@ orca terminal list --worktree path:<pl 워크트리 절대경로> --json
 2. 보낸다:
 ```
 python <플러그인>/skills/kickoff-workspaces/scripts/pipeline-log.py send \
-  --task T-NNN --to pl --terminal <pl handle> --file docs/_ask/T-NNN.md --stage "스펙 v1 지시" \n  --model <그 자리가 실제로 응답한 모델>
+  --task T-NNN --to pl --terminal <pl handle> --file docs/_ask/T-NNN.md \
+  --stage "스펙 v1 지시" --model <그 자리가 실제로 응답한 모델>
 ```
 3. 끝났는지는 **파일 생성 + 화면에서 작업 표시가 사라짐**으로 판단한다. 기다릴 때는 **실패도 함께 본다** —
    파일만 기다리는 대기는 에이전트가 오류로 멈춰도 영원히 기다린다(2026-09-19 실측).
