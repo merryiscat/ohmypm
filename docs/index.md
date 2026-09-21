@@ -1,6 +1,7 @@
 # 인덱스
 
 ## 기획
+- [reviews/T-005.runtime.md](reviews/T-005.runtime.md) — 1.0 자동 검증과 실제 Orca 연동 확인 범위
 - [tasks/T-005-v1-workflow.md](tasks/T-005-v1-workflow.md) — **1.0.0 작업 구조**: 합의한 설계·완료 기준·구현 확인 결과
 - [../README.md](../README.md) — 1.0 역할·설치·사용 안내
 - [plan.md](plan.md) — 목적·형태·MVP·**스택·하네스 확정(2·3부)**·미확정 질문
