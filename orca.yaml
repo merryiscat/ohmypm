@@ -1,8 +1,4 @@
-# Orca 워크트리 설정 (kickoff-workspaces). 무거운 gitignore 폴더는 공유(symlink) — 공유하는 .venv를 setup이 정확 동기화(uv sync)하면 main에서 수동 설치한 패키지가 지워진다. --inexact로 둔다.
+# ohmyPM 1.0: 새 work는 의존성을 공유하지 않는다. 기존 작업의 폴더·링크는 보존한다.
 worktree:
-  sharedDirectories:
-    - .venv
-    - node_modules
-scripts:
-  setup: |
-    uv sync --all-extras --inexact
+  sharedDirectories: []
+# 설치·검증 명령은 승인된 작업 manifest의 harness.setup에서 실행한다.

@@ -48,3 +48,7 @@ docs/setup-rollout.md
 docs/rollout-targets.md
 docs/rollouts/
 docs/benchmark.md
+
+# ohmyPM task-local runtime
+/.ohmypm-work/
+/docs/benchmark.md

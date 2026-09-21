@@ -1,10 +1,10 @@
 #!/bin/sh
 # kickoff-workspaces 전체 배포 — 발동어 "구조 전체 배포하자" (T-003).
-# 사용: ws-rollout.sh [--targets <허용목록 파일>] [--report <결과 파일>] [--api <URL>] [--dry-run] [--force]
-#   --force: dirty 저장소도 배포 파일만 stage해 커밋하고(배포 파일 자체에 사용자 변경이 있으면 그 대상은 건너뜀), 스택 판별 불가는 공유 폴더·setup 없음으로 설치한다 (2026-09-18 사용자 지시)
+# 사용: ws-rollout.sh [--targets <허용목록 파일>] [--report <결과 파일>] [--api <URL>] [--dry-run] [--force] [--migrate-v1]
+#   --force: dirty 저장소도 배포 파일만 커밋한다. 배포 파일 자체에 사용자 변경이 있으면 건너뛴다.
 #   ohmyPM 저장소(cwd가 속한 git 저장소)의 로컬 전용 docs/rollout-targets.md를 읽어
 #   대상을 탐색(대시보드 API 또는 PROJECTS_ROOT 직하위 폴더) → 허용 목록과 교집합 → 사전 검사(git 루트·dirty·설치 버전·훅 경로)
-#   → 스택 판별(공유 폴더·setup) → ws-upgrade.sh로 설치/갱신 → 배포 파일만 stage → 한국어 커밋(푸시 없음)
+#   → ws_upgrade.py로 설치/갱신 → 배포 파일만 stage → 한국어 커밋(푸시 없음)
 #   → docs/rollouts/rollout-<일시>.md 결과 저장. 한 대상의 실패는 기록하고 다음으로 간다. 실패가 하나라도 있으면 종료 코드 1.
 # 재실행 안전: 설치 버전이 플러그인 버전과 같으면 파일·Git 설정·커밋을 건드리지 않는다.
 # 허용 목록 파일 형식(줄 단위, `#`·`>` 줄은 주석):
@@ -24,13 +24,15 @@ import io, json, os, re, subprocess, sys, time, urllib.request
 K, REPO, SELF = sys.argv[1], sys.argv[2], sys.argv[3]
 ARGV = sys.argv[4:]
 PLUGIN_ROOT = os.path.normpath(os.path.join(K, '..', '..'))
-UPGRADE = os.path.join(K, 'scripts', 'ws-upgrade.sh')
+UPGRADE = os.path.join(K, 'scripts', 'ws_upgrade.py')
 DEFAULT_API = 'http://127.0.0.1:8123/api/projects'
-MANAGED = ['docs/protocol.md', 'docs/tasks/_template.md', 'docs/reviews/_template.md', '.githooks/pre-commit', 'AGENTS.md', 'CLAUDE.md']
-OWNED = ['docs/roles.md', 'orca.yaml', '.worktreeinclude']
+MANAGED = ['docs/protocol.md', 'docs/tasks/_template.md', 'docs/reviews/_template.md', '.githooks/pre-commit', 'AGENTS.md', 'CLAUDE.md',
+           '.ohmypm/bin/workflow.py', '.ohmypm/bin/workflow_core.py', 'docs/workflow-guide.md', '.gitignore']
+OWNED = ['docs/roles.md', 'docs/workflow.json', 'orca.yaml', '.worktreeinclude']
 DEPLOY_FILES = MANAGED + OWNED
-DRY = '--dry-run' in ARGV          # 탐색·사전 검사·스택 판별까지만, 파일·Git은 건드리지 않는다
-FORCE = '--force' in ARGV          # dirty 무시(배포 파일만 stage)·판별 불가는 스택 없음으로 설치
+DRY = '--dry-run' in ARGV          # 탐색·사전 검사까지만, 파일·Git은 건드리지 않는다
+FORCE = '--force' in ARGV          # dirty 무시(배포 파일만 stage)
+MIGRATE = '--migrate-v1' in ARGV
 STARTED = time.strftime('%Y-%m-%d %H:%M:%S')
 STAMP = time.strftime('%Y%m%d-%H%M%S')
 
@@ -229,33 +231,6 @@ for a in allow:
 outside = [d['name'] for d in discovered if d['key'] not in {k for _, _, k in targets}]
 note('허용 목록 %d건 중 탐색과 교집합 %d건, 미발견 %d건; 탐색됐으나 허용 목록 밖 %d건(미처리): %s' % (len(allow), len(targets), len(allow) - len(targets), len(outside), ', '.join(outside) or '없음'))
 
-# ---------- 4. 스택 판별 ----------
-def detect_stack(p):
-    ex = lambda *fs: [f for f in fs if os.path.exists(os.path.join(p, f))]
-    py = ex('uv.lock', 'poetry.lock', 'Pipfile.lock', 'Pipfile', 'requirements.txt', 'pyproject.toml', 'setup.py', 'setup.cfg')
-    node = ex('pnpm-lock.yaml', 'yarn.lock', 'bun.lock', 'bun.lockb', 'package-lock.json', 'package.json')
-    other = ex('environment.yml', 'environment.yaml', 'Cargo.toml', 'go.mod', 'Gemfile', 'pom.xml', 'build.gradle', 'build.gradle.kts', 'mix.exs')
-    shared, setup, why = [], [], []
-    if py:
-        shared.append('.venv')
-        if 'uv.lock' in py: setup.append('uv sync --inexact'); why.append('uv.lock → uv sync --inexact(정확 동기화 금지)')
-        elif 'poetry.lock' in py: setup.append('poetry install'); why.append('poetry.lock → poetry install(--sync 없이)')
-        elif 'Pipfile.lock' in py or 'Pipfile' in py: setup.append('pipenv install'); why.append('Pipfile → pipenv install')
-        elif 'requirements.txt' in py: setup.append('uv pip install -r requirements.txt'); why.append('requirements.txt(잠금 없음) → uv pip install -r')
-        elif 'pyproject.toml' in py: setup.append('uv sync --inexact'); why.append('pyproject.toml(잠금 없음) → uv sync --inexact')
-        else: setup.append('uv pip install -e .'); why.append('setup.py/cfg → uv pip install -e .')
-    if node:
-        shared.append('node_modules')
-        if 'pnpm-lock.yaml' in node: setup.append('pnpm install'); why.append('pnpm-lock.yaml → pnpm install')
-        elif 'yarn.lock' in node: setup.append('yarn install'); why.append('yarn.lock → yarn install')
-        elif 'bun.lock' in node or 'bun.lockb' in node: setup.append('bun install'); why.append('bun.lock → bun install')
-        else: setup.append('npm install'); why.append('%s → npm install(npm ci는 node_modules를 지우므로 피함)' % ('package-lock.json' if 'package-lock.json' in node else 'package.json'))
-    if py and node: why.append('혼합 → 공유 폴더 합집합')
-    if not py and not node:
-        if other: return None, None, '판별 불가: %s만 있음(대응하는 공유 폴더·setup 규칙 없음)' % ', '.join(other)
-        return [], '', '스택 선언 없음 → 공유 폴더·setup 없음'
-    return shared, ' && '.join(setup), '; '.join(why)
-
 # ---------- 5. 대상별 처리 ----------
 def installed_version(p):
     f = os.path.join(p, 'docs', 'protocol.md')
@@ -291,38 +266,26 @@ for a, d, key in targets:
             row.update(result='건너뜀', reason='강제 모드지만 배포 파일 자체에 사용자 변경이 있어 섞일 수 있음: %s' % ', '.join(pre_dirty_deploy)); continue
         if hp_bad:
             row.update(result='건너뜀', reason='core.hooksPath=%s (.githooks 아님 — 기존 훅 보존)' % hp); continue
-        cmd = ['sh', UPGRADE, p]
-        if cur is None:
-            shared, setup, why = detect_stack(p)
-            if shared is None:
-                if not FORCE:
-                    row.update(result='건너뜀', reason=why); continue
-                shared, setup, why = [], '', '강제: ' + why + ' → 공유 폴더·setup 없음으로 설치'
-            if st: why = '강제(dirty %d건 무시, 배포 파일만 stage) — ' % len(st) + why
-            row.update(shared=' '.join(shared) or '(없음)', setup=setup or '(없음)', reason='설치 — ' + why)
-            cmd += ['--install', ' '.join(shared), setup]
-        else:
-            row.update(shared='(기존 orca.yaml 보존)', setup='(기존 orca.yaml 보존)', reason='갱신 — 관리 파일·블록 교체, 소유 파일 보존')
+        if os.path.exists(os.path.join(p, 'docs/protocol.md')) and not MIGRATE:
+            row.update(result='건너뜀', reason='1.0 전환은 --migrate-v1 명시 필요; 진행 중 작업 보존'); continue
+        cmd = [sys.executable, UPGRADE, p] + (['--migrate-v1'] if MIGRATE else [])
+        row.update(shared='기존 설정 보존 / 신규는 공유 없음', setup='작업별 승인 manifest',
+                   reason='1.0 설치/이전 — 기존 작업·모델 설정 보존, 역할표는 백업 후 갱신')
         if DRY:
             row.update(result='예정(dry-run)', reason=row['reason'] + ' — 쓰지 않음'); continue
-        pre_owned = {f: os.path.exists(os.path.join(p, f)) for f in OWNED}
         r = sh(cmd, cwd=p)
         row['log'] = '$ ' + ' '.join(cmd) + '\n' + (r.stdout or '') + (r.stderr or '')
         if r.returncode != 0:
             failures += 1
             resid = git(p, 'status', '--porcelain', '--', *DEPLOY_FILES).stdout.strip()
             row.update(result='실패', reason='설치기 rc=%d — %s' % (r.returncode, (r.stderr or r.stdout).strip().splitlines()[-1:] or ''), residual='예' if resid else '아니오'); continue
-        if cur is None and not pre_owned['orca.yaml'] and not shared:
-            oy = os.path.join(p, 'orca.yaml')
-            s = read(oy).replace('  sharedDirectories:\n', '  sharedDirectories: []\n', 1)
-            with io.open(oy, 'w', encoding='utf-8', newline='\n') as f: f.write(s)
         changed = [l[3:].strip().strip('"') for l in git(p, 'status', '--porcelain', '--', *DEPLOY_FILES).stdout.splitlines()]
         if not changed:
             row.update(result='건너뜀', reason='설치기 실행 후 변경 없음'); continue
         r = git(p, 'add', '--', *changed)
         if r.returncode != 0: raise RuntimeError('git add 실패: ' + r.stderr.strip())
         msg = '작업 구조 설치/갱신: kickoff-workspaces v%s' % V
-        r = git(p, 'commit', '-m', msg)
+        r = git(p, 'commit', '--only', '-m', msg, '--', *changed)
         row['log'] += '$ git add -- %s\n$ git commit -m "%s"\n%s%s' % (' '.join(changed), msg, r.stdout or '', r.stderr or '')
         if r.returncode != 0:
             failures += 1

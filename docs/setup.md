@@ -51,16 +51,29 @@ uv sync
 ```powershell
 claude plugin marketplace add D:\dev\project\ohmypm\.claude-plugin\marketplace.json   # 클론 경로에 맞춘다
 claude plugin install ohmypm@ohmypm-local --scope user -y
-claude plugin list                                                                # ohmypm 0.1.0 enabled
+claude plugin list                                                                # 설치된 버전과 enabled 확인
 ```
 
-다른 프로젝트 전부에 작업 구조를 깔거나 올리려면(발동어 "구조 전체 배포하자") 이 저장소에서 한 명령 — 입력은 로컬 전용 `docs/rollout-targets.md`, 결과는 `docs/rollouts/`(둘 다 gitignore):
+1.0 작업 구조는 우선 선택한 프로젝트에 설치한다. 기존 0.x에서 이전할 때는 진행 중 작업을 보존한 뒤 `--migrate-v1`을 붙인다:
 ```powershell
-sh plugin/skills/kickoff-workspaces/scripts/ws-rollout.sh     # 탐색(대시보드 API) → 설치/갱신 → 한국어 커밋(푸시 없음) → 결과 저장
+python plugin/skills/kickoff-workspaces/scripts/ws_upgrade.py <프로젝트경로> --migrate-v1 --dry-run
+python plugin/skills/kickoff-workspaces/scripts/ws_upgrade.py <프로젝트경로> --migrate-v1
+python .ohmypm/bin/workflow.py doctor
+```
+
+모델은 `docs/workflow.json`, 실행·복구는 [workflow-guide.md](workflow-guide.md)를 참고한다.
+기존 Orca 설정은 보존되므로 새 work의 `.venv`·`node_modules` 공유를 제거하고 작업 manifest로 의존성을 준비한다.
+스펙·승인·증거는 Git 공통 디렉터리의 `ohmypm-v1/`에 보존되며 다른 PC로 자동 동기화되지 않는다.
+
+비교 실측 후 사용자가 선택한 다른 프로젝트로 전체 배포할 때만 다음 명령을 사용한다.
+입력은 로컬 전용 `docs/rollout-targets.md`, 결과는 `docs/rollouts/`(둘 다 gitignore):
+```powershell
+sh plugin/skills/kickoff-workspaces/scripts/ws-rollout.sh --migrate-v1 --dry-run
+sh plugin/skills/kickoff-workspaces/scripts/ws-rollout.sh --migrate-v1
 ```
 
 스킬은 `ohmypm:kickoff-interview`처럼 이름공간이 붙는다. `plugin/`을 고쳤으면 plugin.json의 version을 올리고 `claude plugin update ohmypm@ohmypm-local` — 버전이 같으면 갱신하지 않는다.
-Codex(pl)는 플러그인을 못 읽으므로 프로젝트가 필요로 하는 것(protocol·roles·템플릿)은 kickoff-workspaces가 대상 프로젝트 `docs/`로 복사한다.
+프로젝트 지침·템플릿·실행 가이드는 대상 프로젝트 `docs/`, 실행 도구는 `.ohmypm/bin/`으로 복사하므로 역할마다 같은 계약을 사용한다.
 
 > screen-plan·grill 등 범용 글로벌 스킬과 Orca 동봉 스킬(orca-cli·orchestration·computer-use, `~/.agents/skills` + junction)은 플러그인 밖이다.
 > 구 kickoff_pack(`npx skills add merryiscat/kickoff_pack`)은 더 쓰지 않는다 — kickoff-harness는 폐기됐고 나머지는 여기로 옮겼다.
