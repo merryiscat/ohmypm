@@ -8,6 +8,9 @@ description: ohmyPM 1.0 프로젝트의 요청을 main 접수, 사용자와 pl�
 사용자는 main에서 시작한다. main은 접수·운영·통합을, pl은 설계·품질을, work는 구현을 책임진다.
 현 프로젝트의 `docs/protocol.md`와 `docs/roles.md`를 먼저 읽는다.
 기존 작업은 기존 절차로 마무리하거나 보존하고 새 작업에 1.0을 적용한다.
+프로젝트 protocol이 0.x이거나 `.ohmypm/bin/workflow.py`가 없으면 기존 절차를 유지한다.
+전역 플러그인 갱신만으로 프로젝트를 이전하지 않는다. 사용자가 그 프로젝트의 1.0 이전을 요청하면
+`kickoff-workspaces`의 명시적 이전 절차를 적용한 뒤 아래 명령을 사용한다.
 
 ## 요청과 설계
 
