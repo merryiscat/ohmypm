@@ -1,7 +1,2 @@
-# 새 워크트리마다 복사되는 gitignore 파일 (Orca .worktreeinclude). DB·로그처럼 한 곳에만 있어야 하는 것은 넣지 않는다.
-.env
-.claude/settings.local.json
-docs/status.md
-docs/log.md
-docs/pending.md
-docs/mistakes.md
+# ohmyPM 1.0: copy only files explicitly needed by this project.
+# Secrets, databases and logs are not copied by default; task harnesses declare their inputs.

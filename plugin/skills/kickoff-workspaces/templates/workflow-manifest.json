@@ -1,0 +1,37 @@
+{
+  "criteria": [
+    {
+      "id": "C1",
+      "description": "example.txt contains the agreed greeting",
+      "command": [
+        "python",
+        "-c",
+        "from pathlib import Path; assert Path('example.txt').read_text().strip() == 'hello'"
+      ]
+    }
+  ],
+  "works": [
+    {
+      "id": "greeting",
+      "paths": [
+        "example.txt"
+      ],
+      "criteria": [
+        "C1"
+      ],
+      "depends_on": [],
+      "parallel_safe": false,
+      "resources": [],
+      "harness": {
+        "tools": [
+          "git",
+          "python"
+        ],
+        "setup": [],
+        "files": [],
+        "inherit_env": [],
+        "ports": []
+      }
+    }
+  ]
+}

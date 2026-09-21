@@ -19,10 +19,16 @@ case "$MODE" in fable-out|fable-in|status) ;; *) echo "unknown mode: $MODE" >&2;
 for P in "$@"; do
   if [ ! -f "$P/docs/roles.md" ]; then echo "skip (no docs/roles.md): $P"; continue; fi
   WS_MODE="$MODE" python - "$P" <<'EOF'
-import io, os, sys, datetime
+import io, os, sys, datetime, json
 P = sys.argv[1]
 MODE = os.environ['WS_MODE']
 name = os.path.basename(os.path.normpath(P))
+config = os.path.join(P, 'docs', 'workflow.json')
+if os.path.exists(config):
+    if MODE == 'status':
+        print(json.dumps(json.load(io.open(config, encoding='utf-8')), ensure_ascii=False, indent=2))
+        raise SystemExit
+    raise SystemExit('1.0 uses explicit roles in docs/workflow.json. Update the agreed role there; legacy pl2 modes do not apply.')
 f = os.path.join(P, 'docs', 'roles.md')
 s = io.open(f, encoding='utf-8').read()
 

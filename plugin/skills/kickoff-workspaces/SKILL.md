@@ -1,120 +1,48 @@
 ---
 name: kickoff-workspaces
-description: 킥오프 2부(마지막) — 프로젝트에 작업 구조를 깐다. main(구현·통합)과 pl 워크트리(스펙 Codex + 검토 Claude)로 나누고, 역할표·작업 스펙·검토서·벤치마크 템플릿·브랜치 가드를 설치한 뒤 pl 워크트리를 연다. 발동 — 1부(plan.md) 직후, "작업 구조 세팅하자"·"pl 구조 붙이자"·"워크스페이스 나누자", 기존 프로젝트에 소급 적용할 때, 그리고 "구조 업데이트하자"(플러그인 버전을 프로젝트 복사본에 반영), "구조 전체 배포하자"(ohmyPM 저장소에서 로컬 허용 목록의 프로젝트 전부에 한 명령으로 설치·갱신·커밋).
+description: Orca 프로젝트에 ohmyPM 1.0의 main·pl·work 역할, 실행 도구, 스펙·검증 계약과 특화 작업 환경 준비 절차를 설치하거나 갱신한다. "작업 구조 세팅하자", "구조 업데이트하자", 기존 프로젝트에 1.0을 적용할 때 사용한다. 프로젝트 전체 배포는 별도 요청일 때만 수행한다.
 ---
 
-# 킥오프 2부 — 작업 구조
+# 작업 구조 — ohmyPM 1.0
 
-**생각하는 자리와 손대는 자리를 나눈다.** 기획·설계·검토는 서로 다른 벤더의 프론티어 모델 둘이 한 워크트리에서
-하고, 구현은 작업 스펙의 난이도 등급에 맞는 모델이 별도 워크트리에서 한다. main은 합치기만 한다.
-둘 사이의 계약은 **작업 스펙(검증 가능한 완료 기준)** 하나다 — 스펙 없이 구현 워커를 띄우지 않는다.
+main은 접수·환경 준비·알림·머지, pl은 사용자와의 설계·품질 판단, work는 구현을 맡는다.
+상시 pl2·pl3는 없다. 작은 작업에는 main 직접 처리를 유지한다.
 
-> **산출물 계약**: 대상 프로젝트에 역할표(`docs/roles.md`)·스펙/검토 폴더·`orca.yaml`·`.worktreeinclude`·
-> `AGENTS.md`/`CLAUDE.md` 역할 블록·브랜치 가드가 설치되고, pl 워크트리가 두 터미널(작성자·검토자)로 열려
-> 첫 작업 스펙(T-001)이 pl에 지시된 상태.
-> **이 절차는 접근법이지 정답 경로가 아니다** — 프로젝트가 작으면 구조를 깔지 않는 것이 정답이다.
-> 절차 상세와 근거는 [PROTOCOL.md](PROTOCOL.md)(설치 시 대상 프로젝트 `docs/protocol.md`로 복사 — Codex는 플러그인을 못 읽는다),
-> 파일 원형은 `templates/`, 하네스 참고는 `references/`. 이 스킬은 ohmypm 플러그인(`${CLAUDE_PLUGIN_ROOT}/skills/kickoff-workspaces`)에 산다.
+## 설치와 이전
 
-구 3부(kickoff-harness, 2026-09-17 폐기)가 하던 "프로필로 스킬·MCP 사전 설치"는 하지 않는다.
-**작업 스펙 전 설치 금지** — 도구는 스펙의 '필요 도구' 항목으로 워커가 그때 설치한다.
-스택 확정은 설계 결정이므로 pl의 첫 작업(T-001 `docs/design.md`)이 한다.
+Python 3.11+, Git, Orca와 역할별 모델 CLI가 필요하다. `orca-cli` 스킬로 실제 설치본을 확인한다.
 
-## 0. 전제와 규모 판단
-
-`docs/plan.md`(1부 요약)만 있으면 된다. `docs/usecases.md`·`references.md`는 있으면 pl의 T-001 재료가 되고, 없으면 pl이 필요할 때 스펙으로 요구한다.
-
-먼저 묻는다 — **이 구조가 밥값을 하나?** 기준: 케이스가 다섯을 넘거나, 운영 환경(실서비스·자동 실행)이
-있거나, 되돌리기 어려운 변경이 예상되면 깐다. 아니면 단일 워크트리로 두고 여기서 끝낸다
-(ohmyPM plan.md: "작고 미완인 프로젝트에선 관리 비용이 이득을 넘본다"). 결정과 이유를 `docs/plan.md`에 한 줄 남긴다.
-
-## 1. 역할·모델 확인
-
-기본값은 아래. 바꾸면 `docs/roles.md`에만 적는다(다른 문서에 모델명을 복붙하지 않는다 — 썩는다).
-
-| 역할 | 자리 | 에이전트 | 모델 | 쓰는 경로 |
-|---|---|---|---|---|
-| main | 원본 체크아웃 | claude | 기본 | 머지·커밋·푸시만 |
-| pl 작성자 | 워크트리 `pl` 터미널 1 | codex | `gpt-6-astra` xhigh | `docs/tasks/`, 설계 문서 |
-| pl2 검토 | 워크트리 `pl` 터미널 2 | claude | `claude-fable-5-1` | `docs/reviews/`, 스펙 "검증" 절 — 스펙 1회·산출물 1회 |
-
-**구현은 main이 한다.** 2026-09-18에 코디네이터 자리와 워커 워크트리를 걷어냈다(PROTOCOL 0절 — 근거가 없었다).
-페이블 한도가 소진된 주에는 `scripts/ws-model.sh fable-out <프로젝트>`로 페이블 자리를 오퍼스로 내린다. 쿼터 소진은 Claude Code가 자동으로 내려 주지 않는다.
-
-작성자·검토자를 서로 다른 벤더로 두는 이유와 검토자에게 재작성을 금지하는 이유는 PROTOCOL "근거". 코디네이터를 검토자와 분리해 하위 모델에 두는 이유는 PROTOCOL "토큰 규율"(최상위 모델 세션이 오케스트레이션 JSON을 끌어안고 커지지 않게).
-전제 확인: `codex --version`·`claude --version`이 돌고, Codex 전역 설정(`~/.codex/config.toml`)에
-`model`·`model_reasoning_effort`가 있어야 한다 — Orca의 `--agent codex`는 모델 플래그를 못 받는다.
-
-## 2. 파일 세트 설치 (대상 프로젝트)
-
-설치는 스크립트 하나로 한다 — 관리 파일에 버전 도장을 찍고, 프로젝트 소유 파일은 없을 때만 만든다:
+```text
+python <plugin>/skills/kickoff-workspaces/scripts/ws_upgrade.py <project> --dry-run
+python <plugin>/skills/kickoff-workspaces/scripts/ws_upgrade.py <project>
 ```
-"${CLAUDE_PLUGIN_ROOT}"/skills/kickoff-workspaces/scripts/ws-upgrade.sh <프로젝트경로> --install "<공유 폴더들>" "<setup 명령>"
-```
-스크립트가 하는 일(손으로 할 때의 기준이기도 하다):
 
-0. `PROTOCOL.md` → `docs/protocol.md` (프로젝트가 자급자족해야 pl(Codex)과 다른 PC가 읽는다)
+0.x 작업 구조가 있으면 진행 중 작업을 완료하거나 보존한 후 합의된 범위에서 `--migrate-v1`을 사용한다.
+프로젝트 소유 모델 설정·Orca 설정·기존 작업 파일은 유지하고 바뀌는 관리 파일과 역할표는 Git 공통
+디렉터리에 백업한다. 프로젝트 밖을 일괄 갱신하지 않는다.
 
-1. `orca.yaml` — `worktree.sharedDirectories`(`.venv`·`node_modules` 등 무거운 gitignore 폴더)와
-   `scripts.setup`(의존성 설치 한 줄). 프로젝트 스택에 맞춰 고친다
-2. `.worktreeinclude` — 워크트리마다 **복사**할 gitignore 파일: `.env`, 개인 설정, 로컬 전용 위키 파일.
-   DB·로그처럼 한 곳에만 있어야 하는 것은 넣지 않는다
-3. `AGENTS.md`(Codex가 읽는다)와 `CLAUDE.md`에 역할 블록 — 각 **10줄 이하**(llmwiki 블록과 같은 예산)
-4. `docs/roles.md` — 1의 표 + 등급표 + 이름 규칙. 프로젝트별 값은 여기만
-5. `docs/tasks/`·`docs/reviews/` — 각각 템플릿 사본(`_template.md`)과 함께 생성. `docs/benchmark.md`(바퀴마다 한 줄, 3바퀴 누적 판정)
-6. `.githooks/pre-commit` + `git config core.hooksPath .githooks` — 브랜치 이름이 `pl`(또는 `*/pl`, `pl-*`)이면
-   `docs/` 밖 변경 커밋을 거부한다. 지시문이 아니라 훅으로 막는다(HARNESS "강제할 것은 훅으로")
-7. 운영 환경이 있으면 `templates/RUNBOOK.md`·`SECURITY.md`를 `docs/`로 복사해 T-00x 스펙으로 채우게 한다
+설치 결과:
+- `docs/protocol.md`, `docs/roles.md`, `docs/workflow.json`, 스펙·검토 템플릿, 실행 가이드
+- `.ohmypm/bin/workflow.py`와 표준 라이브러리 실행 모듈
+- AGENTS/CLAUDE 작업 구조 블록. 블록 밖 내용과 사용자 훅은 보존한다.
 
-설치 후 `index.md`에 protocol·roles·tasks·reviews를 등재하고 커밋한다(main에서).
+`docs/workflow.json`이 역할별 모델의 단일 출처다. pl에는 사용자가 선택한 최고 성능 모델을 둔다.
+기존 역할표에 사용자 모델 선택이 있으면 이 파일로 옮기고 확인한다.
 
-## 3. pl 워크트리 개설
+## Orca 설정과 자리
 
-```
-orca repo list --json                                   # <repoId> 확인
-orca worktree create --repo id:<repoId> --name pl --agent codex --no-parent --comment "기획·설계·검토" --json
-orca terminal create --worktree name:pl --title pl2 --command "claude --model claude-fable-5-1 --dangerously-skip-permissions" --json
-orca terminal wait --terminal <pl2 handle> --for tui-idle --timeout-ms 60000 --json
-```
-`wait.satisfied`가 true일 때만 send 한다. 두 터미널에 각각 `templates/prompt-pl.md`·`prompt-pl2.md`의
-역할 지시를 첫 메시지로 보낸다(`orca terminal send --text ... --enter`). 새 폴더 신뢰창이 뜨면 프롬프트가 먹힌다 — wait 뒤 화면을 한 번 본다.
-브랜치는 Orca가 워크트리 이름에서 만든다(`<git-username>/pl` 꼴) — 가드는 마지막 세그먼트로 판정한다.
+새 설치는 `worktree.sharedDirectories: []`이고 공용 setup을 자동 실행하지 않는다.
+기존 `orca.yaml`은 설치기가 덮지 않는다. work 준비 전에 `.venv`·`node_modules` 공유를 제거하는
+프로젝트 설정 변경을 검토한다. 기존 폴더·심볼릭 링크 자체를 지우지 않는다.
+`.worktreeinclude`는 프로젝트가 정한 파일만 유지하며 비밀·DB·로그를 일괄 복사하지 않는다.
 
-## 4. 첫 스펙 지시
+기존 pl이 있으면 재사용한다. 새 pl이 필요하면 `orca-cli`로 워크트리·터미널을 준비하고
+`templates/prompt-pl.md`의 역할을 전달한다. 모델·effort 지정은 설치된 Orca의 지원 경로를 사용한다.
+기존 pl2 터미널을 임의 종료하지 않는다. 처음 요청은 `dispatch`로 이어진다.
+절차는 [PROTOCOL.md](PROTOCOL.md), 하네스 예시는 `templates/workflow-manifest.json`을 사용한다.
 
-pl에 **T-001**을 지시한다: plan(있으면 usecases)의 필요 기술·공통 전제를 집계해 스택을 확정하고 `docs/design.md`
-(구성 한 장 — 산출물 대장의 설계 산출물)를 쓰는 작업. 화면이 있으면 T-002로 screen-plan(와이어프레임)을 잇는다.
-이후 흐름은 PROTOCOL: 스펙 v1 → pl2 검토 → v2 → 사용자 게이트 → **main 구현** → pl2 산출물 검토 → 커밋.
+## 전체 배포
 
-## 5. 기록
-
-`docs/plan.md`에 "작업 구조" 절(규모 판단·역할 요약·roles.md 링크), `log.md`에 매듭 한 줄.
-설치한 것과 건너뛴 것(이유)을 남긴다.
-
-## 업데이트 — "구조 업데이트하자"
-
-플러그인이 바뀌면 프로젝트 복사본은 낡는다. 버전은 프로젝트 `docs/protocol.md` 첫 줄, 플러그인은 `plugin.json`. 차이가 나면:
-```
-"${CLAUDE_PLUGIN_ROOT}"/skills/kickoff-workspaces/scripts/ws-upgrade.sh <프로젝트경로>
-```
-관리 파일(protocol·템플릿 2·pre-commit·AGENTS/CLAUDE 블록)만 갈아 끼우고 diff를 보여 준다. 그 diff를 보고 main이 커밋 → pl 워크트리 ff → **pl·pl2 `/clear`**(규칙 파일이 바뀌었다). 스크립트가 `WARN`을 찍으면 프로젝트 소유 파일에 손댈 게 있다는 뜻 — CHANGELOG 항목대로 손으로. 무엇이 바뀌었는지는 플러그인 `CHANGELOG.md`.
-프로젝트 소유 파일(roles·orca.yaml·.worktreeinclude·.gitignore)은 건드리지 않으므로, 템플릿 쪽 변화가 거기 필요하면 CHANGELOG가 그 항목을 따로 부른다.
-
-## 전체 배포 — "구조 전체 배포하자"
-
-ohmyPM 저장소(main 체크아웃, cwd)에서 한 명령으로 여러 프로젝트에 설치·갱신·커밋까지 한다. 플러그인 훅 없이 이 명령이 진입점이고, 재실행해도 같은 버전은 건드리지 않는다:
-```
-"${CLAUDE_PLUGIN_ROOT}"/skills/kickoff-workspaces/scripts/ws-rollout.sh            # 입력 docs/rollout-targets.md, 결과 docs/rollouts/rollout-<일시>.md
-"${CLAUDE_PLUGIN_ROOT}"/skills/kickoff-workspaces/scripts/ws-rollout.sh --dry-run  # 탐색·사전 검사·스택 판별까지만(파일·Git 무변경) — 먼저 이걸로 대상 표를 본다
-```
-- 입력은 **로컬 전용** `docs/rollout-targets.md`(main이 쓴다 — 줄마다 허용 프로젝트 이름/경로, `루트:`·`탐색: api|folder`·`제외: <이름> — <사유>`·`기준:`; 형식은 스크립트 머리 주석). 입력 파일과 `docs/rollouts/`는 `.gitignore`·`.worktreeinclude`에 있어야 하고 Git 미추적·`index.md` 미등재여야 한다 — 아니면 배포 전에 실패한다(공개 저장소에 PC 경로·프로젝트 이름이 새는 것을 막는다)
-- 탐색은 대시보드 `http://127.0.0.1:8123/api/projects`(클라이언트가 `has_wiki=1`만 남긴다) 또는 `탐색: folder`(PROJECTS_ROOT 직하위). API 실패는 실패로 끝내고 범위를 넓히지 않는다. 저장소 루트로 정규화해 중복을 없앤 뒤 허용 목록과 교집합 — 미발견 항목도 사유와 함께 결과에 남는다
-- 쓰기 전 검사: Git 저장소 루트·dirty(untracked 포함)·설치 버전·`core.hooksPath`. Git 없음·dirty·훅 경로가 `.githooks`가 아니면 사유와 함께 건너뛴다. 같은 버전이면 아무것도 바꾸지 않는다
-- 공유 폴더·setup은 스택 선언·잠금 파일로 정한다(Python `.venv`, Node `node_modules`, 혼합은 합집합; `uv.lock`→`uv sync --inexact`, `poetry.lock`→`poetry install`, `package-lock.json`→`npm install` 등 — 공유 환경을 지우는 정확 동기화는 쓰지 않는다). 선언이 없으면 공유 폴더·setup 없음(`sharedDirectories: []`), 선언은 있는데 규칙이 없으면(Cargo.toml만 등) 사유를 남기고 건너뛴다. setup은 `orca.yaml`에 적을 뿐 실행하지 않는다
-- 미설치는 `ws-upgrade.sh --install`, 다른 버전은 `ws-upgrade.sh`(관리 파일·블록만 교체, 프로젝트 소유 파일과 블록 밖 원문 보존). 배포 파일만 명시적으로 stage해 `작업 구조 설치/갱신: kickoff-workspaces v<버전>` 커밋 한 번. 훅은 정상 실행(`--no-verify` 금지), 푸시하지 않는다
-- 한 프로젝트가 실패해도 나머지를 계속하고, 결과 표(프로젝트·경로·설치/갱신/건너뜀/실패·사유·버전·공유폴더·setup·커밋 SHA·변경 잔존)를 저장한 뒤 실패가 있으면 종료 코드 1. 대상 `.env`·비밀 파일은 읽지 않고, dirty 정리·setup 실행·pl 워크트리 개설은 하지 않는다(설치 뒤 3절은 각 프로젝트 main에서)
-
-## 기존 프로젝트에 소급 적용
-
-0의 규모 판단을 똑같이 하고, 2의 파일 세트만 깐다. 이미 진행 중인 작업이 있으면 그것을 T-001 스펙으로
-역기입해 pl2 검토를 한 번 받는다 — 구조를 깔았는데 첫 태스크가 없으면 아무도 안 쓴다.
+1.0은 ohmypm부터 시험한다. `ws-rollout.sh`는 명시적인 전체 배포 요청에만 사용한다.
+0.x 전환 대상에는 별도의 `--migrate-v1`이 필요하다. dry-run·로컬 허용 목록·dirty 상태·훅 검사·
+프로젝트별 결과 보고를 유지한다. 푸시는 하지 않는다.
