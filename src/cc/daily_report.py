@@ -1,4 +1,4 @@
-"""매일 새벽 일간보고 오케스트레이션 (비전 2·3단계).
+"""주간보고 오케스트레이션 (비전 2·3단계) — 매주 토요일 새벽(2026-09-23 주간 전환).
 
 흐름(grill 확정): 01:00 시작 → 전 프로젝트를 **병렬**로, 각 프로젝트는 PM↔담당 **1:1** 대화
 (하이브리드: 결정론 팩트를 PM 프롬프트에 주입, 대화·판단은 headless PM). PM이 {ask,done,summary}
@@ -70,7 +70,7 @@ def _cancelled(title: str) -> bool:
 
 
 # 조용한 프로젝트(변화 없음)의 고정 요약 — LLM 없이 코드가 만든다.
-QUIET_SUMMARY = "작업 내용 없음(어제 이후 새 커밋·새 이슈 없음) — 점검 생략"
+QUIET_SUMMARY = "작업 내용 없음(지난 배치 이후 새 커밋·새 이슈 없음) — 점검 생략"
 
 
 # 활동 신호에서 제외할 커밋 — 제목에 이 말이 들어간 커밋은 도구가 만든 것으로 본다(대소문자 무시).
@@ -97,24 +97,29 @@ def _tool_commit(subject: str) -> bool:
 
 
 def _issue_activity(path: str, now: datetime) -> bool:
-    """최근 24시간에 생긴 '사람이 문서를 고쳐서 생긴 이슈'가 있는지.
+    """판정 창 안에 생긴 '사람이 문서를 고쳐서 생긴 이슈'가 있는지.
 
-    ★ 2026-09-18 T-004. 그전엔 "최근 24시간에 생긴 이슈가 하나라도 있으면 활동"이었는데,
+    창의 길이는 settings.activity_window_hours — 매일 돌던 시절의 24시간이 아니라,
+    2026-09-23 주간 전환 뒤로는 168시간(7일)이다. 배치 주기보다 창이 좁으면
+    그 사이에 한 작업이 '변화 없음'으로 걸러져 담당을 아예 안 부른다.
+
+    ★ 2026-09-18 T-004. 그전엔 "창 안에 생긴 이슈가 하나라도 있으면 활동"이었는데,
       이슈가 생기는 길이 사람의 문서 수정만은 아니어서 두 가지로 오탐했다:
         ① 09-17 파서 변경 — 제목·fingerprint가 바뀌자 옛 안건이 '새 이슈'로 다시 등재돼
            09-18에 13개 프로젝트를 점검했다. 문서는 아무도 안 고쳤다.
         ② 일간보고 자신이 만드는 당일 완결 카드(source='daily_report') — 어제 점검이
            오늘 점검을 부르는 자기 되먹임이 된다.
       그래서 **원본 문서를 확인할 수 있는 스캔 이슈만** 활동으로 인정하고, 그 원본 파일의
-      mtime까지 같은 24시간 창 안에 있을 때만 통과시킨다. 파서만 바뀐 재등재는 문서 mtime을
+      mtime까지 같은 창 안에 있을 때만 통과시킨다. 파서만 바뀐 재등재는 문서 mtime을
       건드리지 않으므로 여기서 걸러진다 — 스키마나 스캔 회차 기록을 늘리지 않고 되는 방법.
 
     판정 시각(now)은 호출부에서 한 번 받아 창의 양끝을 같은 기준으로 잡는다.
-    창은 [now-24시간, now] 닫힌 구간 — mtime이 미래인 파일(시계 뒤틀림)은 인정하지 않는다.
+    창은 [now-activity_window_hours, now] 닫힌 구간 — mtime이 미래인 파일(시계 뒤틀림)은
+    인정하지 않는다.
     """
     from pathlib import Path as _P
 
-    lo = now - timedelta(hours=24)
+    lo = now - timedelta(hours=settings.activity_window_hours)
     # issues.created_at은 로컬시각 문자열(2026-09-10 UTC→로컬 통일) → 로컬 문자열로 비교.
     # 예전엔 저장이 UTC라 여기서만 UTC로 맞췄는데, 그 보정을 잊은 자리가 생기면 9시간 어긋난다.
     cutoff = lo.strftime("%Y-%m-%d %H:%M:%S")
@@ -136,13 +141,17 @@ def _issue_activity(path: str, now: datetime) -> bool:
 
 
 def _has_activity(path: str) -> bool:
-    """어제 이후 '사람의 작업'이 있었는지 — 없으면 LLM을 아예 안 부른다(토큰 절약의 핵심).
+    """지난 배치 이후 '사람의 작업'이 있었는지 — 없으면 LLM을 아예 안 부른다(토큰 절약의 핵심).
 
-    변화 없는 프로젝트도 매일 PM↔담당 인터뷰를 돌면, 어제와 똑같은 보고를 어제와 같은
+    변화 없는 프로젝트도 매번 PM↔담당 인터뷰를 돌면, 지난번과 똑같은 보고를 같은
     토큰을 들여 재생산한다(2026-09-02 사용자 지적). 신호 두 가지로 변화를 판정한다:
-      ① 최근 24시간 git 커밋 — 단, 도구가 만든 커밋(TOOL_COMMIT_MARKS)은 제외.
-      ② 최근 24시간 새 이슈 중 원본 문서도 그 창 안에 고쳐진 것(_issue_activity).
+      ① 판정 창 안의 git 커밋 — 단, 도구가 만든 커밋(TOOL_COMMIT_MARKS)은 제외.
+      ② 판정 창 안의 새 이슈 중 원본 문서도 그 창 안에 고쳐진 것(_issue_activity).
     git 확인이 실패하면 True(모르면 점검하는 쪽 — 놓침0 원칙).
+
+    ★ 창의 길이는 settings.activity_window_hours이고 **배치 주기와 묶여 있다**.
+      2026-09-23에 배치를 매주 토요일로 바꾸면서 24시간 → 168시간(7일)으로 넓혔다.
+      여기를 24로 두면 일요일~목요일에 한 작업이 전부 '변화 없음'이 된다.
     """
     from pathlib import Path as _P
 
@@ -150,7 +159,8 @@ def _has_activity(path: str) -> bool:
     if (_P(path) / ".git").exists():
         try:
             r = subprocess.run(
-                ["git", "-C", path, "log", "--since=24 hours ago", "--format=%s"],
+                ["git", "-C", path, "log",
+                 f"--since={settings.activity_window_hours} hours ago", "--format=%s"],
                 capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=15,
                 creationflags=NO_WINDOW,
             )

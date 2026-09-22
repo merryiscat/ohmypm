@@ -1,4 +1,4 @@
-"""APScheduler — 정시 cron(스캔·일간보고·텔레그램·전문가수집). odin 싱글톤·중복가드 패턴.
+"""APScheduler — 정시 cron(스캔·주간보고·텔레그램·전문가수집). odin 싱글톤·중복가드 패턴.
 
 5분 주기 heartbeat는 2026-09-09 제거 — 자리만 잡아둔 빈 껍데기(pass)라 하는 일 없이
 로그만 어지럽혔다. 주기 작업이 다시 필요해지면 그때 목적에 맞는 주기로 새로 단다.
@@ -23,6 +23,17 @@ from src.config.settings import settings
 
 scheduler = AsyncIOScheduler()
 _running: set[str] = set()  # 중복 실행 가드 (odin _generating 패턴)
+
+# 정시보다 늦게 깨어났을 때 그래도 실행해 주는 유예(초).
+# ★ 2026-09-23 신설 — 지정하지 않으면 APScheduler 기본값이 **1초**라, 정각에 이벤트 루프가
+#   잠깐 바빴다는 이유만으로 그날 잡이 통째로 사라진다. 실제로 2026-09-23 03:00 주간보고가
+#   "missed by 0:00:01.796"로 건너뛰어졌고, 09-18~09-20엔 07시 텔레그램이 3초 차이로 같은 일을
+#   당했다. 로그에는 콘솔 한 줄만 남아 아무도 몰랐다. 주 1회 배치에서는 1초 지각이 한 주 결손이다.
+#   30분으로 둔 이유: 보고 소프트마감이 05:00이라 그보다 더 늦게 시작하면 어차피 쫓긴다.
+MISFIRE_GRACE = 1800
+
+# 로그를 사람이 읽을 수 있게 — 0=월요일 … 6=일요일(파이썬 weekday 규약)
+_WEEKDAY_NAMES = ["월", "화", "수", "목", "금", "토", "일"]
 
 
 async def _run_scan_job() -> None:
@@ -58,7 +69,7 @@ async def _run_scan_job() -> None:
 
 
 async def _run_nightly_job() -> None:
-    """매일 01:00 — 멀티에이전트 일간보고(→03시) + 담당 자유대화(→04시).
+    """매주 토요일 03:00 — 멀티에이전트 주간보고 + 담당 자유대화·게시판(2026-09-23 주간 전환).
 
     headless가 몇 분~시간 걸리므로 to_thread로 돌려 이벤트 루프를 막지 않는다.
     """
@@ -78,7 +89,11 @@ async def _run_nightly_job() -> None:
 
 
 async def _run_telegram_job() -> None:
-    """매일 07:00 — 새벽에 생성해 저장해 둔 일간보고 요약을 텔레그램으로 발송."""
+    """매일 07:00 — 새벽에 생성해 저장해 둔 보고 요약을 텔레그램으로 발송.
+
+    주간 전환(2026-09-23) 뒤에는 실제로 보낼 것이 있는 날이 토요일뿐이다. 나머지 날은
+    "발송할 일간보고 요약 없음" 한 줄만 남기고 끝난다(no-op).
+    """
     try:
         import asyncio
 
@@ -113,30 +128,44 @@ def start_scheduler() -> None:
         CronTrigger(hour=settings.scan_hour, minute=0),
         id="daily_scan",
         replace_existing=True,
+        misfire_grace_time=MISFIRE_GRACE,
     )
+    # ★ 2026-09-23 사용자 확정 — 매일에서 **매주 토요일**로. 요일은 settings.daily_report_weekday.
+    #   놓쳤을 때 따라잡기는 넣지 않는다(사용자 확정) — 서버가 늦게 떠도 지난 토요일 분은 안 돈다.
     scheduler.add_job(
         _run_nightly_job,
-        CronTrigger(hour=settings.daily_report_hour, minute=0),
+        CronTrigger(
+            day_of_week=settings.daily_report_weekday,
+            hour=settings.daily_report_hour,
+            minute=0,
+        ),
         id="daily_report",
         replace_existing=True,
+        misfire_grace_time=MISFIRE_GRACE,
     )
+    # 발송은 매일 걸어 둔다 — 그날 저장된 요약이 없으면 한 줄 로그만 남기고 끝나므로(no-op)
+    # 해로울 게 없고, 토요일 배치가 07시를 넘겨 끝나는 경우의 안전망이 된다.
     scheduler.add_job(
         _run_telegram_job,
         CronTrigger(hour=settings.telegram_hour, minute=0),
         id="daily_telegram",
         replace_existing=True,
+        misfire_grace_time=MISFIRE_GRACE,
     )
     scheduler.add_job(
         _run_expert_collect_job,
         CronTrigger(day_of_week=settings.expert_collect_weekday, hour=settings.expert_collect_hour, minute=0),
         id="expert_collect",
         replace_existing=True,
+        misfire_grace_time=MISFIRE_GRACE,
     )
     scheduler.start()
     logger.info(
-        f"[스케줄러] 시작 — 스캔 {settings.scan_hour}:00, 일간보고 {settings.daily_report_hour}:00, "
-        f"텔레그램 {settings.telegram_hour}:00, 전문가수집 매주 {settings.expert_collect_weekday}요일 "
-        f"{settings.expert_collect_hour}:00"
+        f"[스케줄러] 시작 — 스캔 매일 {settings.scan_hour}:00, "
+        f"주간보고 매주 {_WEEKDAY_NAMES[settings.daily_report_weekday]}요일 {settings.daily_report_hour}:00, "
+        f"텔레그램 매일 {settings.telegram_hour}:00, "
+        f"전문가수집 매주 {_WEEKDAY_NAMES[settings.expert_collect_weekday]}요일 "
+        f"{settings.expert_collect_hour}:00 · 지각 유예 {MISFIRE_GRACE // 60}분"
     )
 
 
