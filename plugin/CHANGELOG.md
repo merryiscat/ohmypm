@@ -1,3 +1,11 @@
+# 2.0.2 — shim fix follow-up
+
+- Fix a local-variable collision introduced in 2.0.1: the shim directory shadowed the
+  lifecycle record fields, so the wrapper raised TypeError right after starting the model.
+  The child was already running while nothing was recorded, which looked like
+  "connected but the model never accepts".
+- Cover the Windows `.cmd` branch with a test; 57 tests had never entered it.
+
 # 2.0.1 — Windows launcher shim
 
 - Resolve a Windows `.CMD` launcher for Claude to the native `claude.exe` it wraps.

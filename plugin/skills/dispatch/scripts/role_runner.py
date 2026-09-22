@@ -78,9 +78,13 @@ def main():
             #   (odin_3.0 실측: 터미널은 떴고 생명주기 기록만 exited로 남았다).
             #   claude.CMD가 부르는 대상은 node 스크립트가 아니라 **네이티브 claude.exe**라
             #   그 실행 파일을 직접 쓴다 — 배치 셸을 거치지 않는다는 원래 의도 그대로다.
-            base = Path(executable).parent
-            native = base / "node_modules/@anthropic-ai/claude-code/bin/claude.exe"
-            entry = base / "node_modules/@openai/codex/bin/codex.js"
+            # 이름은 shim_dir — `base`는 이 함수에서 생명주기 기록의 공통 필드(dict)로 이미
+            # 쓰이고 있다. 2026-09-23에 여기를 `base`로 뒀다가 그 dict를 덮어써서
+            # `{**base, "status": "running"}`이 TypeError로 죽었다(자식은 이미 떠 있는데
+            # 기록만 안 남아 '떴는지 안 떴는지 모르는' 상태가 됐다).
+            shim_dir = Path(executable).parent
+            native = shim_dir / "node_modules/@anthropic-ai/claude-code/bin/claude.exe"
+            entry = shim_dir / "node_modules/@openai/codex/bin/codex.js"
             node = shutil.which("node")
             if record["argv"][0] == "claude" and native.is_file():
                 argv = [str(native), *record["argv"][1:]]

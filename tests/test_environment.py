@@ -2,6 +2,7 @@
 
 import copy
 import json
+import os
 import subprocess
 import sys
 import unittest
@@ -462,6 +463,60 @@ class EnvironmentTest(unittest.TestCase):
         self.assertEqual(result.returncode, 7)
         self.assertEqual(read_json(lifecycle)["status"], "exited")
         self.assertEqual(read_json(lifecycle)["exit_code"], 7)
+
+    @unittest.skipUnless(os.name == "nt", "Windows .cmd shim resolution")
+    def test_role_runner_resolves_windows_claude_shim(self):
+        """npm이 깔아 주는 `.CMD` 셈을 네이티브 실행 파일로 풀어내는지.
+
+        2026-09-23 odin_3.0 실측으로 드러난 두 결함을 한 번에 막는다.
+          ① 이 분기에 codex 예외만 있어 main(agent=claude)이 "Unsupported batch launcher"로
+             매번 즉사했다 — 57개 테스트 어디도 `.cmd` 경로를 밟지 않아 못 잡았다.
+          ② 고치면서 지역 변수 이름을 `base`로 둬 생명주기 기록의 공통 필드(dict)를 덮어썼다.
+             자식 프로세스는 이미 떠 있는데 기록만 TypeError로 못 남겨, 겉보기로는
+             '연결은 됐는데 모델이 수락을 안 하는' 모습이 됐다.
+        여기서 exit_code가 기록되면 둘 다 통과한 것이다.
+        """
+        import shutil as _shutil
+
+        shim_dir = self.root / "npmbin"
+        native_dir = shim_dir / "node_modules/@anthropic-ai/claude-code/bin"
+        native_dir.mkdir(parents=True)
+        (shim_dir / "claude.cmd").write_text("@echo off" + chr(10), encoding="utf-8")
+        # 셈이 실제로 부르는 네이티브 실행 파일 자리를 파이썬으로 대신 채운다.
+        _shutil.copy2(sys.executable, native_dir / "claude.exe")
+
+        request = self.root / "shim-launch.json"
+        lifecycle = self.root / "shim-life.json"
+        write_json(
+            request,
+            {
+                "project": str(self.main),
+                "token": "shim-token",
+                "lifecycle": str(lifecycle),
+                "argv": ["claude", "--version"],
+            },
+        )
+        env = dict(os.environ, PATH=str(shim_dir), PATHEXT=".CMD;.EXE")
+        result = subprocess.run(
+            [
+                sys.executable,
+                "-B",
+                str(ROOT / "plugin/skills/dispatch/scripts/role_runner.py"),
+                "--record",
+                str(request),
+            ],
+            capture_output=True,
+            env=env,
+        )
+        # 자식이 몇으로 끝나든 상관없다 — 여기서 확인하는 것은 두 가지뿐이다.
+        #   ① 셈이 네이티브 실행 파일로 풀렸다(안 풀리면 "Unsupported batch launcher"로 죽고
+        #      기록에 exit_code 자체가 없다)
+        #   ② 자식을 띄운 뒤 생명주기 기록을 실제로 남겼다(변수 충돌 때는 여기서 TypeError였다)
+        record = read_json(lifecycle)
+        self.assertNotIn("error", record, record.get("error", ""))
+        self.assertEqual(record["status"], "exited")
+        self.assertIn("exit_code", record)
+        self.assertEqual(record["exit_code"], result.returncode)
 
     def test_pl_reconcile_rejects_receipt_for_another_session(self):
         self.roles_backend.lose_start = True
