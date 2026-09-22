@@ -1,7 +1,7 @@
 {
   "name": "ohmypm",
   "displayName": "ohmyPM harness",
-  "version": "1.0.0",
+  "version": "2.0.0",
   "description": "Orca 작업 하네스 — main 접수·운영, pl 설계·품질, 작업별 특화 work 환경과 검증된 로컬 통합",
   "author": { "name": "merryiscat" },
   "repository": "https://github.com/merryiscat/ohmypm",

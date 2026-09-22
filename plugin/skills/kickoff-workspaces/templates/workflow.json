@@ -1,5 +1,5 @@
 {
-  "version": "1.0.0",
+  "version": "2.0.0",
   "roles": {
     "main": {
       "agent": "claude"
@@ -7,7 +7,8 @@
     "pl": {
       "agent": "codex",
       "model": "gpt-6-astra",
-      "effort": "high"
+      "effort": "high",
+      "approval": "bypass"
     },
     "work": {
       "agent": "claude",

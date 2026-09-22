@@ -1,0 +1,17 @@
+{
+  "version": "1.0.0",
+  "files": {
+    "docs/protocol.md": "ff408c29c6fd9fb750692bea9674f7863487694ad1e4a80303e32f8446045b59",
+    "docs/roles.md": "c715479740f7675e5b41ce4ac241381be9f5c45567342f60da9ccdbd39087bad",
+    "docs/workflow-guide.md": "33c84ed58ae06ea08f0421f46c593e936bda776c75ecbece7a22a8eb345543ad",
+    "docs/tasks/_template.md": "1cc27b30b5a3909e04f9b78539811498154f5473a9d2354a7c6804bf521dbe9b",
+    "docs/reviews/_template.md": "6e96e28fbf851281046aed2f6fdbef4b7b3d6a30103ff92f5214e065db463b89",
+    ".ohmypm/bin/workflow.py": "3dd40ce719d4e7b4bd6a2a79d0d47ca12b3f368fd155db915d02725e695c02f7",
+    ".ohmypm/bin/workflow_core.py": "7ac42a3cfd2265a4f39794b7e9a9b0026173a780c979eb4c9a4455146e4dab9a",
+    ".githooks/pre-commit": "ed7ee5c79c843f8c18fb7f1787a5350e5ac92daa5fdcca9c3ce94e615ca83240"
+  },
+  "blocks": {
+    "AGENTS.md": "## 작업 구조 (kickoff-workspaces v1.0.0)\n- 역할은 `docs/roles.md`, 모델은 `docs/workflow.json`, 절차는 `docs/protocol.md`, 명령은 `docs/workflow-guide.md`.\n- main은 접수·알림·환경 준비·로컬 머지, pl은 설계·품질 책임, work는 승인된 범위의 구현을 맡는다.\n- pl은 사용자와 필요한 만큼 논의하고 기준·검증 방법을 함께 정한다. 질문은 main에 알려 사용자와 직접 대화한다.\n- pl은 코드 열람·work 환경 검증이 가능하지만 구현 수정은 work에 돌린다. 최고 성능 모델을 pl에 둔다.\n- 특정 설계 버전의 사용자 구현 요청 후에만 work를 시작한다. 기준 변경은 재합의하고 재검증한다.\n- 독립성이 확인된 work만 최대 두 개 병렬. 단순하고 가역적인 요청은 main이 직접 처리한다.\n- pl 판정은 스펙·결과·통합 기준에 연결한다. main은 검증된 결과만 로컬 머지하며 푸시·배포는 별도다.\n- 상태·증거는 Git 공통 디렉터리에 보존한다. 중복 실행·타임아웃에 의한 무단 종료·미반영 변경 삭제를 금지한다.",
+    "CLAUDE.md": "## 작업 구조 (kickoff-workspaces v1.0.0)\n- 역할은 `docs/roles.md`, 모델은 `docs/workflow.json`, 절차는 `docs/protocol.md`, 명령은 `docs/workflow-guide.md`.\n- main은 요청 접수·단순 작업·pl 연결·사용자 알림·환경 준비·로컬 머지를 맡고 복잡한 요청은 `ohmypm:dispatch`로 진행한다.\n- pl이 사용자와 설계·품질 기준·검증 방법을 충분히 합의하고 최종 판정한다. main은 pl 질문을 사용자에게 안내한다.\n- work는 승인된 manifest의 범위만 구현·검증하고 근거를 제출한다. 기준은 수정하지 않는다.\n- 독립성이 확인된 work만 최대 두 개 병렬. main의 통합은 순차이며 판정 후 변경되면 재검증한다.\n- 상태·증거는 Git 공통 디렉터리에 남기고 Orca가 실행·터미널 생명주기를 소유한다. main이 유일한 코디네이터다.\n- 상시 pl2·pl3는 없다. 기존 터미널·진행 중 작업은 보존한다. 푸시·배포·전체 전환은 별도 요청이다."
+  }
+}

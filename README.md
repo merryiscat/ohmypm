@@ -33,26 +33,26 @@ flowchart TD
 Python 실행 도구에는 외부 패키지가 필요하지 않습니다. 설치된 모델 CLI의 로그인은 기존 설정을 사용합니다.
 
 저장소의 `plugin/`은 Claude Code 플러그인입니다. 플러그인 설치와 기존 대시보드 실행은
-[설정 가이드](docs/setup.md)를 참고하세요. 프로젝트에 작업 구조를 설치하려면:
+[설정 가이드](docs/setup.md)를 참고하세요. 프로젝트에 작업 환경을 등록하려면(2.0, 프로젝트 파일 무변경):
 
 ```powershell
 python plugin/skills/kickoff-workspaces/scripts/ws_upgrade.py <프로젝트경로> --dry-run
 python plugin/skills/kickoff-workspaces/scripts/ws_upgrade.py <프로젝트경로>
 ```
 
-0.x에서 이전할 때는 기존 작업을 완료하거나 보존하고 `--migrate-v1`을 붙입니다.
-기존 스펙·모델 설정·터미널은 유지하며, 교체한 관리 파일은 Git 공통 디렉터리에 백업합니다.
-기존 `orca.yaml`의 의존성 공유 설정은 새 work를 만들기 전에 정리합니다. 기존 의존성 폴더를 삭제하지 않습니다.
+실행기·절차·템플릿은 외부의 내용 해시 패키지에, 프로필·원문·승인·증거는 프로젝트의 `.git/ohmypm/`에 남습니다.
+추적 파일·index·HEAD·훅·AGENTS.md·CLAUDE.md는 바뀌지 않으며 커밋할 것이 없습니다.
+기존 1.0 설치본은 `migration-plan`으로 검토한 뒤 `migration-apply`로 정리합니다(별도 커밋, 자동 push 없음).
 
-설치 후 프로젝트에서:
+등록 후:
 
 ```powershell
-python .ohmypm/bin/workflow.py doctor
-python .ohmypm/bin/workflow.py --help
+python <runtime.path>\scripts\environment_cli.py --project <프로젝트경로> doctor
+python <runtime.path>\scripts\environment_cli.py --project <프로젝트경로> role-connect --role main
 ```
 
-[실행 가이드](docs/workflow-guide.md)에 작업 등록, 승인, 준비, 실행, 검증, 머지, 복구 명령이 있습니다.
-모델 선택은 [docs/workflow.json](docs/workflow.json), 역할은 [docs/roles.md](docs/roles.md)가 설명합니다.
+명령·복구는 [runtime.md](plugin/skills/dispatch/references/runtime.md), 절차는 [PROTOCOL.md](plugin/skills/kickoff-workspaces/PROTOCOL.md)에 있습니다.
+역할별 모델은 등록 시 `--profiles` JSON으로 정하고 진행 중 작업은 고정 runtime을 계속 씁니다.
 작업 컨테이너는 개발 환경의 묶음이며 Docker나 OS 보안 격리를 요구하지 않습니다.
 
 ## 사용

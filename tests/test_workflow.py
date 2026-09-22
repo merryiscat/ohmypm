@@ -556,6 +556,36 @@ class WorkflowTest(unittest.TestCase):
                 self.flow.prepare("T-TEST", "w1")
         self.assertTrue(target.exists())
 
+    def test_shared_data_directories_are_skipped_not_rejected(self):
+        # Orca sharedDirectories (예: log_moniteoling의 01_log) 는 main 을 가리키는 디렉터리 링크다.
+        # 그 안의 무시 파일은 work 소유가 아니므로 준비를 막지 않고 회수 대상에도 넣지 않는다.
+        with (self.main / ".gitignore").open("a") as stream:
+            stream.write("shared_logs/\n")
+        self.commit(self.main)
+        self.create()
+        target = self.root / "shared-logs-data"
+        (target / "day").mkdir(parents=True)
+        (target / "day" / "a.log").write_text("log")
+        create = self.backend.create
+
+        def shared(*args):
+            row = create(*args)
+            link = Path(row["path"]) / "shared_logs"
+            if os.name == "nt":
+                result = subprocess.run(
+                    ["cmd", "/c", "mklink", "/J", str(link), str(target)], capture_output=True
+                )
+                self.assertEqual(result.returncode, 0)
+            else:
+                link.symlink_to(target, target_is_directory=True)
+            return row
+
+        with patch.object(self.backend, "create", side_effect=shared):
+            item = self.flow.prepare("T-TEST", "w1")
+        self.assertEqual(item["status"], "ready")
+        self.assertFalse(any(name.startswith("shared_logs") for name in item["copied_files"]))
+        self.assertTrue((target / "day" / "a.log").exists())
+
     def test_merge_interrupted_before_mutation_rechecks_and_retries(self):
         self.create()
         self.implement()
@@ -574,41 +604,27 @@ class WorkflowTest(unittest.TestCase):
         with self.assertRaises(WorkflowError):
             self.create()
 
-    def test_installer_preserves_local_configuration_and_is_idempotent(self):
+    def test_installer_preserves_checkout_and_is_idempotent(self):
         source = ROOT / "plugin/skills/kickoff-workspaces/scripts/ws_upgrade.py"
         spec = importlib.util.spec_from_file_location("ws_upgrade", source)
         module = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(module)
         (self.main / "AGENTS.md").write_text("# Local rules\nPreserve this.\n")
-        (self.main / "orca.yaml").write_text("# project-specific configuration\n")
-        result = module.install(self.main)
-        self.assertIn(".ohmypm/bin/workflow.py", result["changed"])
-        self.assertIn("Preserve this.", (self.main / "AGENTS.md").read_text(encoding="utf-8"))
-        self.assertEqual(
-            (self.main / "orca.yaml").read_text(), "# project-specific configuration\n"
-        )
-        self.assertEqual(module.install(self.main)["changed"], [])
-        installed_cli = self.main / ".ohmypm/bin/workflow.py"
-        result = subprocess.run(
-            [sys.executable, str(installed_cli), "--project", str(self.main), "list"],
-            capture_output=True,
-            text=True,
-        )
-        self.assertEqual(result.returncode, 0, result.stderr)
+        before = git(self.main, "status", "--porcelain")
+        result = module.install(self.main, home=self.root / "home")
+        self.assertTrue(result["changed"])
+        self.assertEqual(result["checkout_changes"], [])
+        self.assertFalse((self.main / ".ohmypm").exists())
+        self.assertEqual(before, git(self.main, "status", "--porcelain"))
+        self.assertFalse(module.install(self.main, home=self.root / "home")["changed"])
 
-    def test_installer_requires_explicit_migration_and_preserves_old_tasks(self):
+    def test_installer_rejects_implicit_migration(self):
         source = ROOT / "plugin/skills/kickoff-workspaces/scripts/ws_upgrade.py"
         spec = importlib.util.spec_from_file_location("ws_upgrade", source)
         module = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(module)
-        (self.main / "docs/tasks").mkdir(parents=True)
-        (self.main / "docs/protocol.md").write_text("old protocol")
-        (self.main / "docs/tasks/T-OLD.md").write_text("in-progress task")
-        with self.assertRaises(ValueError):
-            module.install(self.main)
-        result = module.install(self.main, migrate=True)
-        self.assertEqual((self.main / "docs/tasks/T-OLD.md").read_text(), "in-progress task")
-        self.assertEqual((Path(result["backup"]) / "docs/protocol.md").read_text(), "old protocol")
+        with self.assertRaisesRegex(ValueError, "migration-plan"):
+            module.install(self.main, migrate=True)
 
 
 if __name__ == "__main__":

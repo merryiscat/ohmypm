@@ -8,8 +8,10 @@ import json
 import subprocess
 import sys
 from contextlib import nullcontext
+from pathlib import Path
 
-from workflow_core import Workflow, WorkflowError
+sys.dont_write_bytecode = True
+from workflow_core import Workflow, WorkflowError  # noqa: E402
 
 
 def main():
@@ -29,6 +31,9 @@ def main():
     create.add_argument("--main", required=True, help="main checkout path")
     create.add_argument("--main-address", default="", help="Orca run:<id> or main terminal handle")
     create.add_argument("--pl-address", default="", help="planning conversation location")
+    create.add_argument(
+        "--request-id", help="Recorded pl route ID (required for external environment)"
+    )
     for name in (
         "show",
         "events",
@@ -85,6 +90,19 @@ def main():
             p.add_argument("--event", required=True)
     args = vars(parser.parse_args())
     try:
+        from environment import Environment, task_runtime, verify_package
+
+        env = Environment(args["project"])
+        if args["command"] == "create":
+            cfg = env.config()
+            verify_package(cfg["runtime"])
+            entry = Path(cfg["runtime"]["path"]) / "scripts/workflow.py"
+        elif args.get("task"):
+            entry = task_runtime(args["project"], args["task"])
+        else:
+            entry = Path(__file__).resolve()
+        if entry.resolve() != Path(__file__).resolve():
+            return subprocess.call([sys.executable, "-B", str(entry), *sys.argv[1:]])
         workflow = Workflow(args.pop("project"), orca_command=args.pop("orca"))
         command = args.pop("command")
         # Atomic state reads and isolated exec logs need no project-wide writer lock.
