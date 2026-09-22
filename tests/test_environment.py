@@ -264,6 +264,22 @@ class EnvironmentTest(unittest.TestCase):
         self.roles.connect("pl")
         self.assertEqual(self.roles_backend.starts, 1)
 
+    def test_failed_creation_settles_only_with_absence_inventory(self):
+        self.roles_backend.lose_start = True
+        with self.assertRaises(WorkflowError):
+            self.roles.connect("pl")
+        token = self.roles.load("pl")["token"]
+        present = {"ok": True, "result": {"terminals": [{"title": "ohmyPM-pl-" + token}]}}
+        with self.assertRaisesRegex(WorkflowError, "Terminal exists"):
+            self.roles.absent("pl", present)
+        with self.assertRaisesRegex(WorkflowError, "inventory"):
+            self.roles.absent("pl", {"ok": False, "error": "orca down"})
+        self.roles.absent("pl", {"ok": True, "result": {"terminals": [{"title": "other"}]}})
+        self.assertEqual(self.roles.load("pl")["status"], "exited")
+        self.roles_backend.lose_start = False
+        record = self.roles.connect("pl")
+        self.assertEqual((record["generation"], self.roles_backend.starts), (2, 2))
+
     def test_lost_mail_does_not_resend_or_claim_acceptance(self):
         record = self.roles.connect("pl")
         self.roles.accept("pl", 1, record["context_digest"])

@@ -54,26 +54,28 @@ claude plugin install ohmypm@ohmypm-local --scope user -y
 claude plugin list                                                                # 설치된 버전과 enabled 확인
 ```
 
-1.0 작업 구조는 우선 선택한 프로젝트에 설치한다. 기존 0.x에서 이전할 때는 진행 중 작업을 보존한 뒤 `--migrate-v1`을 붙인다:
+2.0 작업 환경(T-006)은 **프로젝트 파일을 바꾸지 않고** 외부에 등록한다. 실행기·절차·템플릿은
+`%LOCALAPPDATA%\ohmypmuntimes\<내용 해시>`(`--home`·`OHMYPM_HOME`으로 변경)에 불변 설치되고,
+프로필·원문·route·승인·질문·증거는 그 프로젝트의 `.git/ohmypm/`에 남는다. 커밋할 것이 없다:
 ```powershell
-python plugin/skills/kickoff-workspaces/scripts/ws_upgrade.py <프로젝트경로> --migrate-v1 --dry-run
-python plugin/skills/kickoff-workspaces/scripts/ws_upgrade.py <프로젝트경로> --migrate-v1
-python .ohmypm/bin/workflow.py doctor
+python plugin/skills/kickoff-workspaces/scripts/ws_upgrade.py <프로젝트경로> --dry-run
+python plugin/skills/kickoff-workspaces/scripts/ws_upgrade.py <프로젝트경로> [--profiles <roles.json>]
+python <runtime.path>\scripts\environment_cli.py --project <프로젝트경로> doctor
+python <runtime.path>\scripts\environment_cli.py --project <프로젝트경로> role-connect --role main
 ```
 
-모델은 `docs/workflow.json`, 실행·복구는 [workflow-guide.md](workflow-guide.md)를 참고한다.
-기존 Orca 설정은 보존되므로 새 work의 `.venv`·`node_modules` 공유를 제거하고 작업 manifest로 의존성을 준비한다.
-스펙·승인·증거는 Git 공통 디렉터리의 `ohmypm-v1/`에 보존되며 다른 PC로 자동 동기화되지 않는다.
+`runtime.path`는 등록 결과 JSON의 `config.runtime.path`다. 역할·모델·approval은 `--profiles`의 JSON
+(`{"roles":{"main":…,"pl":…,"work":…}}`)으로 정하며 생략하면 플러그인 템플릿 기본값이다.
+명령·복구는 `plugin/skills/dispatch/references/runtime.md`, 절차는 `plugin/skills/kickoff-workspaces/PROTOCOL.md`.
+`.git/ohmypm/`은 clone으로 복구되지 않으므로 `environment_cli.py export`로 따로 백업한다.
 
-비교 실측 후 사용자가 선택한 다른 프로젝트로 전체 배포할 때만 다음 명령을 사용한다.
-입력은 로컬 전용 `docs/rollout-targets.md`, 결과는 `docs/rollouts/`(둘 다 gitignore):
-```powershell
-sh plugin/skills/kickoff-workspaces/scripts/ws-rollout.sh --migrate-v1 --dry-run
-sh plugin/skills/kickoff-workspaces/scripts/ws-rollout.sh --migrate-v1
-```
+기존 1.0 설치본(`docs/protocol.md`·`.ohmypm/bin/` 등)이 있는 프로젝트는 등록 뒤 `migration-plan`으로
+파일별 remove/edit/keep/conflict 표를 받아 검토하고, 그 digest로 `migration-apply`한다. 적용 결과는 작업 트리 변경으로만
+남으며 stage·commit·push하지 않는다 — 정리 커밋은 사용자가 별도로 검토한다. 활성 1.0 작업이 있으면 적용되지 않는다.
+2026-09-22 기준 ohmypm 자체만 전환했다. odin-3.0·log_moniteoling 전환은 별도 요청이다(pending 참조).
 
 스킬은 `ohmypm:kickoff-interview`처럼 이름공간이 붙는다. `plugin/`을 고쳤으면 plugin.json의 version을 올리고 `claude plugin update ohmypm@ohmypm-local` — 버전이 같으면 갱신하지 않는다.
-프로젝트 지침·템플릿·실행 가이드는 대상 프로젝트 `docs/`, 실행 도구는 `.ohmypm/bin/`으로 복사하므로 역할마다 같은 계약을 사용한다.
+플러그인 갱신 뒤 프로젝트에서 `ws_upgrade.py`를 다시 실행하면 새 runtime이 설치되고 **다음 작업부터** 쓰인다. 진행 중 작업은 고정 runtime을 계속 쓴다.
 
 > screen-plan·grill 등 범용 글로벌 스킬과 Orca 동봉 스킬(orca-cli·orchestration·computer-use, `~/.agents/skills` + junction)은 플러그인 밖이다.
 > 구 kickoff_pack(`npx skills add merryiscat/kickoff_pack`)은 더 쓰지 않는다 — kickoff-harness는 폐기됐고 나머지는 여기로 옮겼다.

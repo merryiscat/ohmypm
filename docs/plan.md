@@ -46,9 +46,10 @@ derived_from: 대화 2026-09-21. 기존 요청→설계→구현→검증 흐름
 - 작업 환경은 스킬·MCP·의존성·설정·포트·데이터를 필요한 만큼 조합한다. Docker 필수나 OS 보안 경계를 뜻하지 않는다.
 - 기존 PM 점검·보고 기능은 보존한다. ohmypm에 먼저 적용하고 단일 모델과 반복 비교한 뒤 사용자가 확대를 결정한다.
 
-역할은 [roles.md](roles.md), 모델은 [workflow.json](workflow.json), 절차는 [protocol.md](protocol.md),
-실행·복구는 [workflow-guide.md](workflow-guide.md), 완료 기준은 [T-005](tasks/T-005-v1-workflow.md)가 소유한다.
-상시 pl2·pl3, pl의 문서 전용·두 번 호출 제한, main만 구현하던 0.x 규칙을 대체한다.
+절차는 [PROTOCOL.md](../plugin/skills/kickoff-workspaces/PROTOCOL.md), 실행·복구는 [runtime.md](../plugin/skills/dispatch/references/runtime.md),
+역할·모델은 각 프로젝트의 `.git/ohmypm/project.json`, 완료 기준은 [T-005](tasks/T-005-v1-workflow.md)(1.0)와
+[T-006](tasks/T-006-environment-separation.md)(2.0: 프로젝트·작업 환경 분리)이 소유한다.
+2.0부터 프로젝트에 실행기·절차·지침 블록을 복사하지 않는다. 상시 pl2·pl3, pl의 문서 전용·두 번 호출 제한, main만 구현하던 0.x 규칙을 대체한다.
 
 ## 미확정 질문
 

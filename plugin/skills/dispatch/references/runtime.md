@@ -86,7 +86,8 @@ python <RUNTIME>/scripts/environment_cli.py --project <project> context --role <
 
 `role-connect`는 살아 있는 세션이 있으면 재사용하고, 미등록이거나 종료가 확인된 경우에만 새 세션을 만든다. `unverifiable`이면 중복 생성하지 않는다.
 순서는 durable intent 기록 → 터미널 생성 → context 전달 → pl의 `role-accept`다. 전달 성공과 수락은 구분된다.
-생성 응답이 끊겼으면 `role-reconcile`에 실제 생성 receipt를 넣는다. 확인 전에는 다시 만들지 않는다.
+생성 응답이 끊겼으면 `role-reconcile --receipt`에 실제 생성 receipt를 넣는다. 확인 전에는 다시 만들지 않는다.
+생성 자체가 실패했으면 `orca terminal list --json` 전체 목록을 `role-reconcile --absent <list.json>`에 넣는다. 토큰 제목의 터미널이 없을 때만 미생성으로 정산되고 다음 `role-connect`가 새로 만든다.
 종료는 `role-exit`에 실제 종료 receipt(exit wait 만족, terminal status exited, ptyKilled)를 넣어야 인정된다.
 셸 잔존·tui-idle·타임아웃·응답 지연만으로는 생존도 종료도 판정하지 않는다. 실행 래퍼가 남긴 프로세스 생성 식별자와 종료 코드를 대조한다.
 새 generation의 context에는 runtime 해시·상태 위치·절차·복구 지시가 들어간다. 이전 generation 기록은 `generation-<n>.json`으로 남는다.

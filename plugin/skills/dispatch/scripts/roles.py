@@ -186,6 +186,24 @@ class Roles:
         receipt = self.adapter.start(self.env.project, role, token, snap["roles"][role])
         return self.reconcile(role, receipt)
 
+    def absent(self, role, inventory):
+        """Settle an unknown creation only with a full Orca terminal inventory proving absence."""
+        record = self.load(role)
+        require(record and record["status"] == "starting", "No unknown role creation to reconcile")
+        result = inventory.get("result", inventory)
+        require(
+            inventory.get("ok", True) is True and isinstance(result.get("terminals"), list),
+            "Absence needs a successful Orca terminal inventory receipt",
+        )
+        title = f"ohmyPM-{role}-{record['token']}"
+        require(
+            not any(t.get("title") == title for t in result["terminals"]),
+            "Terminal exists; reconcile its creation receipt instead",
+        )
+        record.update(status="exited", creation_absent=inventory)
+        self.save(role, record)
+        return record
+
     def reconcile(self, role, receipt):
         record = self.load(role)
         require(record and record["status"] == "starting", "No unknown role creation to reconcile")

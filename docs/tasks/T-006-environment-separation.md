@@ -1,8 +1,8 @@
 # T-006 프로젝트와 작업 환경 분리
 
-- 상태: 구현 승인 · 사용자 추가 요구 반영
+- 상태: 구현·검증 완료(2026-09-22, main 인계 후 통합). 미검증 항목은 §10
 - 설계 버전: 3 (v2 + pl 세션 종료·재연결)
-- 릴리스: 구현 후 호환성 검토로 결정. 1.1.0을 미리 확정하지 않는다.
+- 릴리스: 2.0.0 (상태 레이아웃 `.git/ohmypm/`·schema 2가 1.0과 비호환). 커밋 2cd08c0
 - 작성: pl, 2026-09-22
 - derived_from: 대화 2026-09-22
 - 요청 원문: “근본적인 수정안 작성해서 진행하자”
@@ -159,7 +159,33 @@ main은 사용자 v1 구현 요청과 v2·v3 추가 요청을 함께 기록하�
 - 이번 문서의 구체안: 외부 불변 런타임 + Git 공통 디렉터리 로컬 상태 + 세션 전달 + 일회성 전환 plan.
 - 사용자 구현 요청: “구현해”. 이후 “위 내용 추가해야해”로 요청 분류 누락 방지를 구현 범위에 추가했다. 추가 범위 내 진행을 다시 허락받지 않는다. 근본 구조나 완료 기준을 별도로 바꾸어야 하면 변경 내용을 제시한다.
 - v3 사용자 추가 요청: “pl 에이전트가 세션 종료되어 있는 상황도 가정해”. pl 복구·재연결과 중복/질문 손실 방지를 포함한다.
-- 구현·자동 테스트·실제 연동 검증: 미실행. 이 문서는 구현 완료 보고가 아니다.
+- 구현: pl 세션(사용자 예외 승인) → Luna → main 인계로 통합. main의 기존 미커밋 변경(sharedDirectories 링크 스킵)을 포함해 2cd08c0. 인계 문서는 `.git/ohmypm-v1/designs/T-006/HANDOFF-*.md`.
+- 자동 테스트(2026-09-22 최종 상태): `test_*workflow*` 32, `test_environment` 24 통과. ruff format/check 통과. 인코딩 손상(runtime.md)은 CLI parser 기준으로 재작성, BOM 4건 제거.
+
+### 검증 결과 (실제 확인한 것만)
+
+| ID | 결과 | 근거 |
+|---|---|---|
+| C1 | 통과 | 대역: dirty 체크아웃 등록·비활성화 전후 status/index/HEAD/바이트 동일. 실제: ohmypm 등록 전후 `git status` 0건, `.ohmypm/` 미생성 |
+| C2 | 부분 | 워크트리 상태 공유·프로젝트 지침 보존(대역). 분류 3건(아래). 실제 Orca: 종료된 main 역할 `role-connect` → 새 generation 터미널·claude 프로세스(pid·생성 식별자 기록), 재연결은 같은 핸들 재사용. 관찰은 live/ready=False("Workspace trust prompt")로 **전달≠수락**이 구분됨. 모델의 `role-accept` 실제 수락은 미확인. pl 실제 종료→재생성은 미재현(대역만) |
+| C3 | 통과 | 대역: 프로필 변경·select-runtime·disable 후 기존 계약 불변, 패키지 변조·누락 거부. 실제: 새 패키지 2개가 설치된 뒤에도 T-LIVE는 pin 5867dac8…로 merge·cleanup |
+| C4 | 통과(대역) | 추적 파일·기존 사용자 파일 target 거부, 강제 stage·사용자 수정 시 check 거부, exclude 블록 소유권·개인 내용 보존 |
+| C5 | 통과 | 대역: 동일/수정 설치본·혼합 지침·활성 1.0 작업 fixture. 실제: ohmypm 전환 — 알려진 7개 remove, 블록 2개 edit, `.githooks/pre-commit`은 hooksPath 출처 불명으로 conflict 보존, 프로필 이전. 카탈로그 해시는 odin-3.0·ohmypm과 전부 일치, log_moniteoling은 `workflow_core.py`가 사용자 수정이라 conflict 예정 |
+| C6 | 부분 | 대역: 중단 재개·stale plan·rollback 충돌·generation 펜싱·유실 receipt·중복 생성 금지. 실제: 남의 receipt로 `role-exit` 거부, Orca close receipt(ptyKilled)로 exit 정산. **한계**: PTY kill 시 래퍼도 죽어 lifecycle이 `running`으로 남는다 → observe는 unverifiable(안전 실패), 종료 증거는 Orca receipt로만 남는다. 생성 자체가 실패한 경우 `starting`에 갇히는 빈틈 발견 → `role-reconcile --absent <terminal list>` 추가(테스트 포함) |
+| C7 | 부분 | 대역: route 없는 create 거부, 승인 없는 prepare 거부. 실제 Orca(T-LIVE fixture): create→approve→prepare→submit→check→Codex pl verdict→merge(ff, hello.txt만)→cleanup(워크트리 회수). **실제 worker `launch`는 미실행**(구현을 이전 세션이 수동으로 넣음) |
+| C8 | 부분 | 실제: ohmypm 전환 뒤 2회차 `ws_upgrade` changed=False·체크아웃 변경 0. 대역: 새 clone은 다른 project id, export는 상태 복사. 새 clone 실등록·백업 복구 실연습은 미실행 |
+
+### 요청 분류 실험 (UTF-8 재수행, 2026-09-22)
+
+임시 fixture(단일 화면 index.html/app.js, 사이드바 "설졍" 오타)를 등록하고 `context --role main`을 헤드리스 Claude에 그대로 넣었다. 입력·route 기록 모두 UTF-8 정상.
+
+| 사례 | 요청 | 기록된 경로 | 분류 전 수정 | 비고 |
+|---|---|---|---|---|
+| A | 계좌 화면 만들자 / 사이드바로 내 계좌·보고서 | pl | 없음 | 초안 스펙·outbox까지 만들고 pl 생성에서 멈춤(fixture가 Orca 미등록) |
+| B | 사이드바 "설졍" 오타를 "설정"으로 | direct(small) | route 후 편집 | 편집은 에디터 도구로 했고 `direct-exec`는 쓰지 않음 — 프로그램이 막을 수 없는 영역, 계약대로 "보장한다고 주장하지 않는다" |
+| C | 대시보드 요약 카드가 안 뜨니 고쳐줘(계좌별 잔액) | pl | 없음 | 조사로 "미구현 기능"임을 확인하고 pl로 분류. 재분류(direct→pl) 경로는 관찰되지 않음 |
+
+미검증으로 남긴 것: 실제 worker launch, pl 실제 종료·재생성, 모델의 role-accept, 다른 프로젝트(odin-3.0·log_moniteoling) 전환, 새 clone 등록·복구 실연습.
 
 ## 이번 프로젝트의 실행 예외 승인
 

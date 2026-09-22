@@ -55,8 +55,14 @@ def main():
             choices=["main", "pl"] if name != "context" else ["main", "pl", "work"],
             required=True,
         )
-        if name in ("role-reconcile", "role-exit"):
+        if name == "role-exit":
             p.add_argument("--receipt", required=True)
+        if name == "role-reconcile":
+            group = p.add_mutually_exclusive_group(required=True)
+            group.add_argument("--receipt", help="actual Orca terminal create receipt")
+            group.add_argument(
+                "--absent", help="full Orca terminal list receipt proving no terminal was created"
+            )
         if name == "role-accept":
             p.add_argument("--generation", type=int, required=True)
             p.add_argument("--digest", required=True)
@@ -126,7 +132,11 @@ def main():
         elif cmd == "role-show":
             result = roles.load(args.role)
         elif cmd == "role-reconcile":
-            result = roles.reconcile(args.role, read_json(args.receipt))
+            result = (
+                roles.absent(args.role, read_json(args.absent))
+                if args.absent
+                else roles.reconcile(args.role, read_json(args.receipt))
+            )
         elif cmd == "role-exit":
             result = roles.observe_exit(args.role, read_json(args.receipt))
         elif cmd == "role-accept":

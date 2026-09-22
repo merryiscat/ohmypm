@@ -9,4 +9,4 @@
 |---|---|---|
 
 미실행은 통과가 아니다. 실패는 work에 돌린다. 기준 변경은 사용자와 다시 합의한다.
-실행 도구의 verdict 입력은 workflow-guide.md의 JSON 형식을 사용한다.
+실행 도구의 verdict 입력은 runtime.md(플러그인 references)의 JSON 형식을 사용한다.
