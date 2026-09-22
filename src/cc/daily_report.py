@@ -1060,6 +1060,24 @@ def run_nightly() -> dict:
     else:
         tidied = {"committed": 0, "asks": [], "results": [], "skipped": "오늘은 게시판 요일이 아님"}
     run_scan()
+    # ★ 2026-09-23 사용자 확정 — 완결 검증·기한 판정을 여기로 옮겼다.
+    #   그전엔 매일 08시 스캔 잡에만 있었는데 그 잡을 끄면서(settings.scan_enabled=False)
+    #   자동 실행처가 화면의 '판정' 버튼뿐이 됐다. 안 돌리면 미판정 기한 후보가 쌓이고
+    #   "임박 기한" 표시가 다시 못 믿을 것이 된다(2026-08-27에 오탐으로 고친 그 자리).
+    #   순서는 08시 잡과 같다 — 스캔으로 이슈를 적재한 **뒤**에 검증·판정해야 새 이슈가 대상이 된다.
+    #   보고(②)보다 앞이라 총괄·담당이 판정을 거친 이슈를 본다. 둘 다 headless라 느리다.
+    from src.cc.issue_verify import run_issue_verification
+    from src.cc.judge import run_judgment
+
+    try:
+        verified = run_issue_verification()
+        judged = run_judgment()
+        logger.info(f"[주간] 완결검증 {verified['checked']}건 대조·{verified['resolved']}건 완료 처리 · "
+                    f"판정 후보 {judged['candidates']}건 중 {judged['applied']}건 반영")
+    except Exception as e:
+        # 여기서 죽으면 뒤의 보고가 통째로 날아간다 — 검증·판정은 보고의 전제가 아니라 품질 보정이다.
+        logger.error(f"[주간] 완결검증·판정 실패(보고는 계속한다): {e}")
+
     guidance = manager.plan_day(projects)                        # ① 아침 계획
     report = run_daily_report(deadline_ts=_at(settings.daily_soft_deadline_hour),
                               notify=False, guidance_by_path=guidance)   # ②
