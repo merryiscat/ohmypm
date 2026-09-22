@@ -471,5 +471,20 @@ class EnvironmentTest(unittest.TestCase):
             self.roles.reconcile("pl", {"terminal": {"handle": "wrong", "title": "somebody else"}})
 
 
+class VersionTest(unittest.TestCase):
+    """런타임이 보고하는 버전과 플러그인 버전이 어긋나지 않게 묶어 둔다.
+
+    2026-09-23 실측: plugin.json을 2.0.1로 올렸는데 environment.VERSION이 2.0.0에 남아
+    doctor·런타임 manifest가 2.0.0을 보고했다. 런타임의 진짜 신원은 내용 해시지만,
+    사람이 읽는 값이 거짓말을 하면 어느 빌드가 도는지 확인할 방법이 없어진다.
+    """
+
+    def test_version_matches_plugin_manifest(self):
+        import environment
+
+        manifest = read_json(ROOT / "plugin/.claude-plugin/plugin.json")
+        self.assertEqual(environment.VERSION, manifest["version"])
+
+
 if __name__ == "__main__":
     unittest.main()

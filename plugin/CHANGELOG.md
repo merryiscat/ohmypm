@@ -5,6 +5,8 @@
   failed immediately with "Unsupported batch launcher" (verified in odin_3.0: the Orca
   terminal opened, the lifecycle record showed `exited` with that error, nothing ran).
 - No behavior change for Codex or for native installs.
+- Sync the runtime manifest version with plugin.json; a test now fails if they drift.
+  doctor reported 2.0.0 while 2.0.1 code was installed, hiding which build was running.
 
 # 2.0.0 — external environment
 
