@@ -55,7 +55,7 @@ claude plugin list                                                              
 ```
 
 2.0 작업 환경(T-006)은 **프로젝트 파일을 바꾸지 않고** 외부에 등록한다. 실행기·절차·템플릿은
-`%LOCALAPPDATA%\ohmypmuntimes\<내용 해시>`(`--home`·`OHMYPM_HOME`으로 변경)에 불변 설치되고,
+`%LOCALAPPDATA%\ohmypm\runtimes\<내용 해시>`(`--home`·`OHMYPM_HOME`으로 변경)에 불변 설치되고,
 프로필·원문·route·승인·질문·증거는 그 프로젝트의 `.git/ohmypm/`에 남는다. 커밋할 것이 없다:
 ```powershell
 python plugin/skills/kickoff-workspaces/scripts/ws_upgrade.py <프로젝트경로> --dry-run
