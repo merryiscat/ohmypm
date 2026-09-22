@@ -123,13 +123,18 @@ async def _run_expert_collect_job() -> None:
 
 def start_scheduler() -> None:
     """서버 startup(lifespan)에서 호출."""
-    scheduler.add_job(
-        _run_scan_job,
-        CronTrigger(hour=settings.scan_hour, minute=0),
-        id="daily_scan",
-        replace_existing=True,
-        misfire_grace_time=MISFIRE_GRACE,
-    )
+    # 매일 스캔은 2026-09-23 사용자 확정으로 기본 꺼짐 — settings.scan_enabled 참조.
+    # 주간 배치가 자기 안에서 스캔을 돌므로 토요일 보고의 재료에는 영향이 없다.
+    # ★ 주의: 이 잡에는 스캔 말고 **완결 검증·기한 판정**(headless 모델 호출)도 함께 들어 있다.
+    #   꺼두면 그 둘도 자동으로는 안 돈다 — 화면의 '판정' 버튼(/api/judge)이 유일한 실행처가 된다.
+    if settings.scan_enabled:
+        scheduler.add_job(
+            _run_scan_job,
+            CronTrigger(hour=settings.scan_hour, minute=0),
+            id="daily_scan",
+            replace_existing=True,
+            misfire_grace_time=MISFIRE_GRACE,
+        )
     # ★ 2026-09-23 사용자 확정 — 매일에서 **매주 토요일**로. 요일은 settings.daily_report_weekday.
     #   놓쳤을 때 따라잡기는 넣지 않는다(사용자 확정) — 서버가 늦게 떠도 지난 토요일 분은 안 돈다.
     scheduler.add_job(
@@ -161,7 +166,7 @@ def start_scheduler() -> None:
     )
     scheduler.start()
     logger.info(
-        f"[스케줄러] 시작 — 스캔 매일 {settings.scan_hour}:00, "
+        f"[스케줄러] 시작 — 스캔 {'매일 ' + str(settings.scan_hour) + ':00' if settings.scan_enabled else '꺼짐'}, "
         f"주간보고 매주 {_WEEKDAY_NAMES[settings.daily_report_weekday]}요일 {settings.daily_report_hour}:00, "
         f"텔레그램 매일 {settings.telegram_hour}:00, "
         f"전문가수집 매주 {_WEEKDAY_NAMES[settings.expert_collect_weekday]}요일 "
