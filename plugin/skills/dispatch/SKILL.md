@@ -1,50 +1,28 @@
 ---
 name: dispatch
-description: ohmyPM 1.0 프로젝트의 요청을 main 접수, 사용자와 pl의 설계 합의, 특화 work 환경의 구현, pl 품질 판정, main 로컬 머지로 진행한다. 작업 구조가 설치된 프로젝트의 업무 요청에 사용한다. 단순하고 가역적인 수정·질문 답변은 main이 직접 처리한다.
+description: ohmyPM 요청을 수정 전 direct/pl로 분류하고 설계 승인, work 구현, pl 검증, 로컬 통합으로 진행한다. 새 화면·사용자 기능·흐름은 pl로 연결하며 종료된 pl은 영속 기록에서 복구한다.
 ---
 
-# dispatch — 요청에서 검증된 결과까지
+# 요청에서 검증된 결과까지
 
-사용자는 main에서 시작한다. main은 접수·운영·통합을, pl은 설계·품질을, work는 구현을 책임진다.
-현 프로젝트의 `docs/protocol.md`와 `docs/roles.md`를 먼저 읽는다.
-기존 작업은 기존 절차로 마무리하거나 보존하고 새 작업에 1.0을 적용한다.
-프로젝트 protocol이 0.x이거나 `.ohmypm/bin/workflow.py`가 없으면 기존 절차를 유지한다.
-전역 플러그인 갱신만으로 프로젝트를 이전하지 않는다. 사용자가 그 프로젝트의 1.0 이전을 요청하면
-`kickoff-workspaces`의 명시적 이전 절차를 적용한 뒤 아래 명령을 사용한다.
+외부 환경이 등록되어 있으면 runtime.path의 PROTOCOL.md와 references/entry.md를 읽는다.
+미등록이면 kickoff-workspaces로 등록한다. 기존 1.0 작업은 원래 실행기와 상태를 유지한다.
+프로젝트 지침을 새 하네스 지침으로 덮어쓰지 않는다.
 
-## 요청과 설계
+main은 읽기 조사는 할 수 있지만 수정 전에 경로·근거·범위를 표시하고 route에 기록한다.
+새 화면·사용자 기능/흐름·데이터/권한 계약·연동·비가역 변경은 pl이다. 명확하고 작고 가역적인 수정만 direct다.
+“계좌 화면과 내 계좌/보고서 사이드바”는 pl에 연결한다. 파일 수 임계치를 쓰지 않는다.
 
-- 요청 자체가 완료 기준이고 작고 가역적인 수정이면 main이 직접 처리한다. 커지면 pl로 넘긴다.
-- 그 외에는 요청 원문과 프로젝트 근거를 pl에 전달한다. 전달은 원문·파일 위치 중심으로 하고 요청을 재작성하지 않는다.
-- pl은 사용자와 필요한 만큼 논의하고 관찰 가능한 기준·검증 방법·작업 분해·하네스를 함께 설계한다.
-- pl에 사용자 질문이 생기면 main에 문서 위치와 pl 대화 위치를 알린다. main은 사용자에게 pl 확인을 안내하고 논의는 사용자↔pl로 진행한다.
-- 특정 설계 버전의 구현을 사용자가 요청했을 때만 승인으로 기록한다. 알림·침묵·에이전트의 자신감은 승인이 아니다.
+pl이 없으면 role-connect로 준비한다. 종료 확인과 불명 상태를 구분하고 불명 상태에서 중복 실행하지 않는다.
+새 pl은 기존 spec/승인/질문/증거를 읽고 generation과 context digest를 수락한다.
+질문은 enqueue/deliver/acknowledge로 보존·전달·수락·완료를 구분한다.
+main은 사용자가 직접 대화할 pl 위치를 안내한다. main이 설계 승인·품질 판정을 대신하지 않는다.
 
-## 구현과 통합
+1. pl이 사용자와 기준·검증·경로·하네스를 합의한다. main은 route ID로 create하고 실제 사용자 요청으로 approve한다.
+2. main이 schedule/prepare 후 Orca orchestration 스킬의 감독 흐름에서 launch한다. main만 coordinator다.
+3. work는 workflow exec로 도구 실행, 구현 커밋, submit을 하고 자기 live preamble로 완료를 보고한다.
+4. pl은 check 증거와 실제 동작으로 verdict한다. 실패·새 후보는 수정·재검증하며 기준을 낮추지 않는다.
+5. main은 검증된 결과를 로컬 merge하고 Orca 정산을 확인한 후 cleanup한다. 새 변경·무관한 세션을 보존한다.
 
-입력 계약·명령·복구는 [references/runtime.md](references/runtime.md)를 읽는다.
-설치된 진입점은 `python .ohmypm/bin/workflow.py`다. 상태·증거는 Git 공통 디렉터리의
-`ohmypm-v1/`에 보존되므로 pl·main·work가 같은 상태를 읽는다.
-
-1. main은 `create`로 원문·스펙·manifest를 등록하고 실제 사용자 결정으로 `approve`한다.
-2. `schedule`의 작업만 `prepare`한다. 준비 실패 시 환경을 보존하고 사유를 해결한다.
-3. 실행은 Orca `orchestration` 스킬의 감독 흐름을 사용한다. main이 유일한 코디네이터다.
-   Run을 준비하고 `launch`로 준비된 work에만 에이전트를 시작한다.
-   전달·시작이 불명확하면 재실행하지 말고 Orca receipt를 확인한다.
-4. work는 `workflow exec`로 도구를 실행하고 코드 변경을 커밋한 뒤 `submit`한다.
-   자신의 Orca preamble로 완료를 보고한다. main이 완료 메시지를 소비하고 worker-release를 처리한다.
-5. pl은 코드·실제 동작을 확인하고 `check` 결과와 기준별 근거로 `verdict`한다.
-   실패하면 main을 통해 같은 work의 수정 작업을 요청한다. 후속 수정은 이전 Dispatch 정산을 확인하고
-   Orca의 새 Task/Dispatch로 진행한다. `launch`를 중복 호출하지 않는다.
-6. main은 등록된 main 체크아웃에서 `merge`한다. 기준 브랜치가 바뀌면 work에 최신 main을 통합하고 검증·판정을 다시 받는다.
-7. 결과와 증거를 보고한다. 정산된 에이전트와 확인된 빈 셸만 닫고 `cleanup`한다. 무관한 터미널·새 변경은 유지한다.
-
-소통은 문서와 Orca 메시지로 한다. `question`은 영속 질문 이벤트를 만들며 `deliver`가 main에 전달한다.
-main은 자기 Orca inbox를 읽고 사용자에게 알린다. 사용자에게 보인 뒤 해당 수신 배치를 ack한다.
-주기적으로 pl을 깨워 진행 상황을 묻지 않는다. pl은 설계 논의와 품질 판단에 사용한다.
-
-## 병렬과 범위
-
-pl이 독립성을 설명한 작업만 최대 두 개 병렬이다. 수정 영역·자원·의존성이 겹치거나
-불명확하면 순차다. 통합은 순차다. 스펙을 바꾸면 사용자와 다시 합의한다.
-원격 푸시·배포·기존 프로젝트 전체 전환은 이 스킬에 묵시적으로 포함되지 않는다.
+[운영 명령과 복구](references/runtime.md)를 따른다. 업데이트는 미래 작업에만 적용한다.
+진행 작업은 고정 패키지로 라우팅한다. 푸시·배포·타 프로젝트 전환은 별도 범위다.

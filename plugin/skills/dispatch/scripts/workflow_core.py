@@ -226,6 +226,12 @@ class Workflow:
         self.common = (self.project / common).resolve()
         self.root = self.common / "ohmypm-v1"
         self.backend = backend or Orca(orca_command)
+        self.external = (self.common / "ohmypm/project.json").is_file()
+        if self.external:
+            from environment import Environment
+
+            self.env = Environment(self.project)
+            self.root = self.env.root
 
     @contextlib.contextmanager
     def lock(self):
@@ -261,7 +267,14 @@ class Workflow:
         return self.root / "tasks" / safe_id(task)
 
     def load(self, task):
-        return read_json(self.location(task) / "state.json")
+        state = read_json(self.location(task) / "state.json")
+        if self.external:
+            self.env.config(enabled=False)
+            require(state.get("schema") == 2, "Unsupported task schema")
+            from environment import verify_package
+
+            verify_package(state["contract"]["environment"]["runtime"])
+        return state
 
     def save(self, state):
         write_json(self.location(state["id"]) / "state.json", state)
@@ -281,7 +294,7 @@ class Workflow:
 
     def doctor(self):
         return {
-            "version": "1.0.0",
+            "version": "2.0.0" if self.external else "1.0.0",
             "project": str(self.project),
             "state": str(self.root),
             "orca": self.backend.doctor(),
@@ -318,7 +331,9 @@ class Workflow:
         covered = set()
         configuration = self.project / "docs/workflow.json"
         default_profile = (
-            read_json(configuration)["roles"]["work"]
+            self.env.snapshot()["roles"]["work"]
+            if self.external
+            else read_json(configuration)["roles"]["work"]
             if configuration.is_file()
             else {"agent": "claude"}
         )
@@ -363,7 +378,10 @@ class Workflow:
             for k in ready:
                 done.add(k)
                 del pending[k]
-        return {"spec": text, "manifest": data}
+        result = {"spec": text, "manifest": data}
+        if self.external:
+            result["environment"] = self.env.snapshot()
+        return result
 
     @staticmethod
     def argv(value):
@@ -373,6 +391,14 @@ class Workflow:
         )
 
     def snapshot(self, state, contract):
+        if self.external:
+            route = self.env.route_record(state["route"]["id"])
+            require(
+                route["path"] == "pl" and route["environment"] == contract["environment"],
+                "Reclassify against the selected runtime before revising",
+            )
+            state["route"] = route
+            contract["route"] = copy.deepcopy(route)
         revision = self.location(state["id"]) / f"r{state['revision']}"
         revision.mkdir(parents=True, exist_ok=True)
         (revision / "spec.md").write_text(contract["spec"], encoding="utf-8")
@@ -385,7 +411,17 @@ class Workflow:
         state["status"] = "designing"
         self.save(state)
 
-    def create(self, task, request_file, spec, manifest, main, main_address="", pl_address=""):
+    def create(
+        self,
+        task,
+        request_file,
+        spec,
+        manifest,
+        main,
+        main_address="",
+        pl_address="",
+        request_id=None,
+    ):
         safe_id(task)
         require(
             not (self.location(task) / "state.json").exists(),
@@ -411,6 +447,17 @@ class Workflow:
             "events": [],
             "history": [],
         }
+        if self.external:
+            require(request_id, "Route record is required before creating implementation work")
+            route = self.env.route_record(request_id)
+            require(
+                route["path"] == "pl" and route["request"].strip() == request.strip(),
+                "Task must match its original pl route",
+            )
+            require(
+                route["environment"] == self.env.snapshot(), "Route environment changed; reclassify"
+            )
+            state.update(schema=2, route=route)
         self.snapshot(state, self.contract(spec, manifest))
         self.event(state, "design_ready", state["spec_path"])
         return state
@@ -454,6 +501,12 @@ class Workflow:
         return state
 
     def approved(self, state):
+        if self.external:
+            from environment import verify_package
+
+            verify_package(state["contract"]["environment"]["runtime"])
+            require(state.get("route", {}).get("path") == "pl", "Missing pl route")
+            require(state["route"] == state["contract"]["route"], "Route snapshot changed")
         require(
             state.get("approval") and state["approval"]["digest"] == state["digest"],
             "User approval of this design revision is required",
@@ -536,7 +589,9 @@ class Workflow:
         definition = self.definition(state, work)
         item = state["works"][work]
         if item["status"] == "ready":
-            self.isolated(self.validate_worktree(state, item))
+            ready_path = self.validate_worktree(state, item)
+            self.isolated(ready_path)
+            self.clean(ready_path, item)
             return item
         require(
             item["status"] in ("pending", "creating", "preparing", "preparation_failed"),
@@ -588,19 +643,33 @@ class Workflow:
             raise
         item["status"] = "ready"
         item.pop("error", None)
-        self.event(state, "work_ready", path / ".ohmypm-work" / "context.md")
+        self.event(
+            state,
+            "work_ready",
+            (Path(item["private"]) if self.external else path / ".ohmypm-work") / "context.md",
+        )
         return item
 
     def prepare_harness(self, state, work, path, harness):
         item = state["works"][work]
         item["inherit_env"] = harness.get("inherit_env", [])
         self.isolated(path)
-        private = beneath(path, path / ".ohmypm-work")
+        private = (
+            self.location(state["id"]) / f"r{state['revision']}" / work / "environment"
+            if self.external
+            else beneath(path, path / ".ohmypm-work")
+        )
+        if self.external:
+            item["private"] = str(private)
+            require(
+                not (path / ".ohmypm-work").exists(), "Legacy private directory exists; preserve it"
+            )
+            private.mkdir(parents=True, exist_ok=True)
         private.mkdir(exist_ok=True)
         exclude = self.common / "info" / "exclude"
         exclude.parent.mkdir(exist_ok=True)
         existing = exclude.read_text(encoding="utf-8") if exclude.exists() else ""
-        if "/.ohmypm-work/" not in existing.splitlines():
+        if not self.external and "/.ohmypm-work/" not in existing.splitlines():
             exclude.write_text(existing.rstrip() + "\n/.ohmypm-work/\n", encoding="utf-8")
         for tool in harness.get("tools", []):
             require(shutil.which(tool), f"Required tool missing: {tool}")
@@ -631,8 +700,23 @@ class Workflow:
                 with socket.socket() as sock:
                     sock.bind(("127.0.0.1", item["ports"][key]))
         item.setdefault("overlays", {})
+        if self.external:
+            self.env.exclusions(
+                f"{state['id']}-r{state['revision']}-{work}",
+                [o["target"] for o in harness.get("files", [])],
+            )
         for overlay in harness.get("files", []):
             source, target = Path(overlay["source"]), beneath(path, path / overlay["target"])
+            if self.external:
+                from environment import no_links
+
+                no_links(path, path / overlay["target"])
+                require(
+                    not git(path, "ls-files", "--", overlay["target"]),
+                    "Tracked harness target must not be overwritten",
+                )
+                if overlay["target"] not in item["overlays"]:
+                    require(not target.exists(), "Existing user harness file must be preserved")
             require(
                 digest(source.read_bytes()) == overlay["sha256"],
                 "Harness source changed since approval",
@@ -688,6 +772,8 @@ class Workflow:
             "Commit implementation changes normally; never stage harness overlays. "
             "Submit evidence, then follow the Orca dispatch lifecycle preamble.\n"
         )
+        if self.external:
+            context = self.env.context("work", state["contract"]["environment"]) + "\n" + context
         (private / "context.md").write_text(context, encoding="utf-8")
         write_json(private / "harness.json", harness)
 
@@ -735,7 +821,7 @@ class Workflow:
         )
         path = Path(item["path"])
         self.isolated(path)
-        private = path / ".ohmypm-work"
+        private = Path(item["private"]) if "private" in item else path / ".ohmypm-work"
         for name in ("tmp", "data", "pycache"):
             (private / name).mkdir(parents=True, exist_ok=True)
         env.update(
@@ -813,16 +899,26 @@ class Workflow:
         self.clean(path, item)
         profile = definition.get("agent", {"agent": "claude"})
         spec = (
-            (path / ".ohmypm-work" / "context.md").read_text(encoding="utf-8")
+            (
+                (Path(item["private"]) if "private" in item else path / ".ohmypm-work")
+                / "context.md"
+            ).read_text(encoding="utf-8")
             + f"\nRuntime CLI: {Path(__file__).with_name('workflow.py').resolve()}\n"
             + "Use the task contract and workflow exec/submit. Report completion with your "
             "injected Orca lifecycle arguments; main coordinates, pl judges quality.\n"
         )
+        if self.external:
+            pin = state["contract"]["environment"]["runtime"]
+            spec += f"\nUse pinned runtime only: {Path(pin['path']) / 'scripts/workflow.py'}\n"
         item["status"] = "starting"
         self.save(state)
         item["launch_receipt"] = self.backend.launch(path, spec, profile)
         item["status"] = "running"
-        self.event(state, "work_started", path / ".ohmypm-work" / "context.md")
+        self.event(
+            state,
+            "work_started",
+            (Path(item["private"]) if self.external else path / ".ohmypm-work") / "context.md",
+        )
         return item
 
     def clean(self, path, item=None, restoring=False):
@@ -1123,10 +1219,23 @@ class Workflow:
                     shutil.copyfile(overlay["backup"], target_file)
                 else:
                     target_file.unlink(missing_ok=True)
+            if self.external:
+                self.env.exclusions(f"{state['id']}-r{state['revision']}-{work}")
             self.backend.remove(item["orca_id"])  # No --force; Orca rechecks dirty/unmerged state.
         item["status"] = "cleaned"
         self.event(state, "environment_reclaimed", item["report"])
         return item
+
+    @staticmethod
+    def under_directory_link(path, name):
+        """True when the entry or an ancestor of it is a directory symlink/junction."""
+        parts = name.rstrip("/").split("/")
+        for i in range(1, len(parts) + 1):
+            candidate = path.joinpath(*parts[:i])
+            is_junction = getattr(candidate, "is_junction", lambda: False)()
+            if (candidate.is_symlink() or is_junction) and (i < len(parts) or candidate.is_dir()):
+                return True
+        return False
 
     @staticmethod
     def ignored_files(path):
@@ -1134,6 +1243,10 @@ class Workflow:
         raw = git(path, "ls-files", "--others", "--ignored", "--exclude-standard", "-z")
         for name in filter(None, raw.split("\0")):
             if name.startswith((".ohmypm-work/", ".venv/", "node_modules/")):
+                continue
+            # Orca sharedDirectories are directory links into the main checkout. Their contents
+            # belong to main, not to this work, so they are neither checked nor reclaimed here.
+            if Workflow.under_directory_link(path, name):
                 continue
             target = beneath(path, path / name)
             require(

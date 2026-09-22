@@ -1,3 +1,11 @@
+# 2.0.0 — external environment
+
+- Register content-addressed runtimes and local project profiles without changing tracked files.
+- Pin task runtime, role profiles and request routing in the approved contract.
+- Recover main/pl connections using durable generations, context acceptance and outbox records.
+- Replace project-copy rollout with explicit registration and reviewed legacy migration plans.
+- Preserve 1.0 runtimes/state; the new layout is intentionally a major-version transition.
+
 # ohmypm 플러그인 변경 내역
 
 프로젝트 설치 버전은 `docs/protocol.md` 첫 줄, 플러그인 버전은 `.claude-plugin/plugin.json`에 있다.
