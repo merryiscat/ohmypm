@@ -69,14 +69,28 @@ def main():
         require(executable, "Model CLI not installed")
         argv = [executable, *record["argv"][1:]]
         if Path(executable).suffix.lower() in (".cmd", ".bat"):
-            # Never pass a natural-language prompt through a Windows batch shell.
-            entry = Path(executable).parent / "node_modules/@openai/codex/bin/codex.js"
+            # Never pass a natural-language prompt through a Windows batch shell — the context is
+            # multi-line and quoted, and a .CMD shim mangles it. Resolve the shim to whatever it
+            # actually launches instead.
+            # ★ 2026-09-23: 이 분기가 claude를 통째로 막고 있었다. Windows에 npm으로 깔면
+            #   claude·codex 둘 다 `.CMD` 셈이 되는데, 여기 예외는 codex 하나뿐이라
+            #   main(agent=claude) 연결이 "Unsupported batch launcher"로 매번 즉사했다
+            #   (odin_3.0 실측: 터미널은 떴고 생명주기 기록만 exited로 남았다).
+            #   claude.CMD가 부르는 대상은 node 스크립트가 아니라 **네이티브 claude.exe**라
+            #   그 실행 파일을 직접 쓴다 — 배치 셸을 거치지 않는다는 원래 의도 그대로다.
+            base = Path(executable).parent
+            native = base / "node_modules/@anthropic-ai/claude-code/bin/claude.exe"
+            entry = base / "node_modules/@openai/codex/bin/codex.js"
             node = shutil.which("node")
-            require(
-                record["argv"][0] == "codex" and entry.is_file() and node,
-                "Unsupported batch launcher; install a native executable or supported Codex shim",
-            )
-            argv = [node, str(entry), *record["argv"][1:]]
+            if record["argv"][0] == "claude" and native.is_file():
+                argv = [str(native), *record["argv"][1:]]
+            else:
+                require(
+                    record["argv"][0] == "codex" and entry.is_file() and node,
+                    "Unsupported batch launcher; install a native executable"
+                    " or supported Codex shim",
+                )
+                argv = [node, str(entry), *record["argv"][1:]]
         child = subprocess.Popen(argv, cwd=record["project"])
         write_json(
             target,

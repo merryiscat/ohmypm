@@ -1,3 +1,11 @@
+# 2.0.1 — Windows launcher shim
+
+- Resolve a Windows `.CMD` launcher for Claude to the native `claude.exe` it wraps.
+  Only Codex had an exception, so every `main` role connection on npm-installed Windows
+  failed immediately with "Unsupported batch launcher" (verified in odin_3.0: the Orca
+  terminal opened, the lifecycle record showed `exited` with that error, nothing ran).
+- No behavior change for Codex or for native installs.
+
 # 2.0.0 — external environment
 
 - Register content-addressed runtimes and local project profiles without changing tracked files.
