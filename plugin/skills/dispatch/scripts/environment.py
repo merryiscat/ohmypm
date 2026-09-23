@@ -20,7 +20,7 @@ SCHEMA = 2
 #   사람에게 보여주는 값이 이것이다. 2026-09-23에 어긋난 것을 실측: 플러그인은 2.0.1인데
 #   doctor가 2.0.0을 보고해 어느 빌드가 도는지 알 수 없었다. tests/test_environment.py의
 #   test_version_matches_plugin_manifest가 다시 어긋나면 잡는다.
-VERSION = "2.0.2"
+VERSION = "2.1.0"
 
 
 @contextlib.contextmanager
@@ -84,7 +84,7 @@ def package_sources(plugin):
         if path.is_file():
             sources["references/" + path.name] = path.read_bytes()
     sources["PROTOCOL.md"] = (plugin / "skills/kickoff-workspaces/PROTOCOL.md").read_bytes()
-    for name in ("workflow.json", "task.md", "review.md"):
+    for name in ("workflow.json", "task.md", "review.md", "harness.json"):
         path = plugin / "skills/kickoff-workspaces/templates" / name
         sources["templates/" + name] = path.read_bytes()
     return sources
@@ -131,6 +131,31 @@ def install_package(plugin, home=None):
             staging.rename(target)
         verify_package(pin)
     return pin
+
+
+def validate_harness(harness):
+    """역할 세션에 얹는 가드 설정 — deny(Bash 차단 패턴)·disallowed_tools(뺄 도구).
+
+    프로필과 달리 값에 공백이 들어간다("rm -rf", "Bash(git push --force:*)"). 대신 한 줄이어야
+    한다 — 여러 줄이면 --disallowedTools 인자와 hook 명령이 깨진다.
+    """
+    require(
+        isinstance(harness, dict) and set(harness) <= {"deny", "disallowed_tools"},
+        "Unknown harness field",
+    )
+    out = {
+        "deny": list(harness.get("deny") or []),
+        "disallowed_tools": list(harness.get("disallowed_tools") or []),
+    }
+    for key, items in out.items():
+        require(
+            all(
+                isinstance(v, str) and v.strip() and chr(10) not in v and chr(13) not in v
+                for v in items
+            ),
+            f"Harness {key} entries must be single-line strings",
+        )
+    return out
 
 
 def validate_profiles(roles):
@@ -180,7 +205,7 @@ class Environment:
         require(not enabled or cfg["enabled"], "Environment disabled; enable explicitly")
         return cfg
 
-    def register(self, pin, roles=None):
+    def register(self, pin, roles=None, harness=None):
         self.check_store(Path(pin["path"]))
         verify_package(pin)
         current = self.config(enabled=False) if self.config_path.exists() else None
@@ -189,6 +214,13 @@ class Environment:
             or (current or {}).get("roles")
             or read_json(Path(pin["path"]) / "templates/workflow.json")["roles"]
         )
+        # 처음 등록 때 사용자와 정한 답(스킬이 묻는다)은 여기 남아 재등록 때 그대로 이어진다.
+        # 바꾸려면 --profiles/--harness를 다시 넘긴다. 프로젝트 파일에는 아무것도 쓰지 않는다.
+        harness = validate_harness(
+            harness
+            or (current or {}).get("harness")
+            or read_json(Path(pin["path"]) / "templates/harness.json")
+        )
         cfg = {
             "schema": SCHEMA,
             "id": (current or {}).get("id", uuid.uuid4().hex),
@@ -196,6 +228,7 @@ class Environment:
             "enabled": True,
             "runtime": pin,
             "roles": roles,
+            "harness": harness,
         }
         if current != cfg:
             if current:

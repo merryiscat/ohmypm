@@ -518,6 +518,58 @@ class EnvironmentTest(unittest.TestCase):
         self.assertIn("exit_code", record)
         self.assertEqual(record["exit_code"], result.returncode)
 
+    def test_claude_roles_bypass_and_carry_runtime_guard(self):
+        """claude 역할도 bypass로 뜨고, 가드는 프로젝트가 아니라 상태 디렉터리에서 얹힌다."""
+        from roles import launcher_argv, write_harness
+
+        cfg = self.env.config()
+        main = cfg["roles"]["main"]
+        self.assertEqual(main.get("approval"), "bypass")
+        self.assertIn("--dangerously-skip-permissions", launcher_argv(main))
+        self.assertNotIn("--dangerously-skip-permissions", launcher_argv({**main, "approval": "default"}))
+        self.assertTrue(cfg["harness"]["deny"])
+
+        folder = self.root / "roles-main"
+        folder.mkdir()
+        settings = write_harness(folder, "tok", cfg["runtime"]["path"], cfg["harness"])
+        hook = read_json(settings)["hooks"]["PreToolUse"][0]["hooks"][0]["command"]
+        self.assertIn("guard.py", hook)
+        self.assertIn("tok.deny.json", hook)
+        self.assertEqual(read_json(folder / "tok.deny.json")["deny"], cfg["harness"]["deny"])
+        argv = launcher_argv(main, settings, ["WebFetch"])
+        self.assertIn("--settings", argv)
+        self.assertEqual(argv[argv.index("--disallowedTools") + 1], "WebFetch")
+        # 상태 디렉터리 밖(프로젝트 트리)에는 아무것도 생기지 않는다
+        self.assertEqual(git(self.main, "status", "--porcelain"), "")
+
+    def test_guard_blocks_irreversible_bash_and_passes_the_rest(self):
+        guard = Path(self.pin["path"]) / "scripts/guard.py"
+        deny = self.root / "deny.json"
+        write_json(deny, {"deny": ["rm -rf", "git push --force"]})
+
+        def run(payload):
+            return subprocess.run(
+                [sys.executable, "-B", str(guard), "--deny", str(deny)],
+                input=json.dumps(payload).encode("utf-8"),
+                capture_output=True,
+            ).returncode
+
+        self.assertEqual(run({"tool_name": "Bash", "tool_input": {"command": "git status"}}), 0)
+        self.assertEqual(run({"tool_name": "Bash", "tool_input": {"command": "RM -RF build"}}), 2)
+        self.assertEqual(
+            run({"tool_name": "Bash", "tool_input": {"command": "git push --force origin x"}}), 2
+        )
+        self.assertEqual(run({"tool_name": "Write", "tool_input": {"file_path": "rm -rf"}}), 0)
+
+    def test_register_keeps_harness_and_rejects_multiline_entries(self):
+        custom = {"deny": ["rm -rf"], "disallowed_tools": ["WebFetch"]}
+        self.env.register(self.pin, None, custom)
+        self.assertEqual(self.env.config()["harness"], custom)
+        self.env.register(self.pin)   # 재등록은 기존 답을 잇는다
+        self.assertEqual(self.env.config()["harness"], custom)
+        with self.assertRaisesRegex(WorkflowError, "single-line"):
+            self.env.register(self.pin, None, {"deny": ["rm -rf" + chr(10) + "x"]})
+
     def test_pl_reconcile_rejects_receipt_for_another_session(self):
         self.roles_backend.lose_start = True
         with self.assertRaises(WorkflowError):

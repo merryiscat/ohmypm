@@ -17,6 +17,8 @@ python <RUNTIME>/scripts/environment_cli.py --project <project> role-connect --r
 데이터 디렉터리는 모든 프로젝트 체크아웃 밖이어야 한다. 패키지는 `<home>/runtimes/<내용 해시>`에 불변으로 설치된다.
 `roles.json`은 `{"roles":{"main":{"agent":"claude"},"pl":{"agent":"codex","model":"gpt-6-astra","effort":"high","approval":"bypass"},"work":{"agent":"claude","model":"sonnet"}}}` 형태다.
 필드는 agent·model·effort·approval만 허용하며 값에 공백·특수문자를 넣지 않는다. 생략하면 패키지의 `templates/workflow.json`이 기본값이다.
+`harness.json`은 `{"deny": ["rm -rf", ...], "disallowed_tools": ["WebFetch", ...]}` 형태다. 값은 한 줄 문자열이며
+공백은 허용한다. 생략하면 `templates/harness.json`이 기본값이고, 재등록 때는 기존 값을 잇는다. `--harness`로 넘긴다.
 
 같은 명령을 다시 실행하면 이미 있는 패키지를 검증만 하고 프로필 변경만 기록한다. 변경은 다음 작업의 기본값이며 진행 중 작업의 계약은 바뀌지 않는다.
 `select-runtime --pin <saved-pin.json>`으로 저장된 pin을 다음 작업의 기본값으로 되돌릴 수 있다. 참조 중인 패키지는 삭제하지 않는다.
@@ -125,9 +127,13 @@ python <RUNTIME>/scripts/environment_cli.py --project <project> disable
 저장소가 이동했으면 `reconnect`로 공통 디렉터리 경로를 갱신한다. 원본이 남아 있는 복사본은 새 등록으로 처리하고 작업이 있으면 경로를 먼저 정리한다.
 `disable`은 새 작업만 막고 진행 중 work·증거·패키지를 보존한다. 활성 work의 회수는 각 작업의 cleanup 절차를 따른다.
 
-## Codex pl 실행 정책
+## 실행 정책과 가드
 
-사용자 지정에 따라 Codex pl의 기본 approval은 `bypass`다. 실행 argv는
-`codex --dangerously-bypass-approvals-and-sandbox --model <합의 모델> -c model_reasoning_effort="<합의 effort>"`이며 마지막 인자로 초기 context를 넘긴다.
+모든 역할의 기본 approval은 `bypass`다(2026-09-23 사용자 결정). 실행 argv는
+Codex: `codex --dangerously-bypass-approvals-and-sandbox --model <모델> -c model_reasoning_effort="<effort>"`,
+Claude: `claude --dangerously-skip-permissions --settings <state>/roles/<role>/<token>.settings.json [--disallowedTools "<목록>"] [--model <모델>]`이며
+마지막 인자로 초기 context를 넘긴다. settings 파일은 PreToolUse에서 런타임의 `scripts/guard.py --deny <token>.deny.json`을 부른다 —
+Bash 명령이 deny 목록의 패턴(대소문자 무시)을 포함하면 exit 2로 막는다. 모델 판단은 끼지 않는다.
+프로젝트의 `.claude/settings*`·`.githooks`·`core.hooksPath`는 읽지도 쓰지도 않는다.
 프로필에 `approval=default`를 명시하면 기본 CLI 정책을 쓴다. 정책은 프로필과 작업 계약 snapshot에 기록된다.
 실행 래퍼(`role_runner.py`)가 실제 모델 프로세스의 pid·생성 식별자·종료 코드를 lifecycle 파일에 남긴다. tui-idle만으로 생존을 판단하지 않는다.

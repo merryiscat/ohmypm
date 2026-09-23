@@ -24,6 +24,7 @@ def main():
     p.add_argument("--plugin", required=True)
     p.add_argument("--home")
     p.add_argument("--profiles", help="JSON file containing roles; values, not secrets")
+    p.add_argument("--harness", help='JSON {"deny": [...], "disallowed_tools": [...]}')
     p = subs.add_parser("select-runtime")
     p.add_argument("--pin", required=True, help="Saved pin JSON; affects future tasks only")
     subs.add_parser("disable")
@@ -95,7 +96,8 @@ def main():
             env.check_store(data_home(args.home))
             pin = install_package(args.plugin, args.home)
             profiles = read_json(args.profiles)["roles"] if args.profiles else None
-            result = env.register(pin, profiles)
+            harness = read_json(args.harness) if args.harness else None
+            result = env.register(pin, profiles, harness)
         elif cmd == "select-runtime":
             result = env.register(read_json(args.pin))
         elif cmd == "doctor":

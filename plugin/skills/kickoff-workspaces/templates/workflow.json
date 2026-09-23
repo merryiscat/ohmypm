@@ -1,8 +1,9 @@
 {
-  "version": "2.0.0",
+  "version": "2.1.0",
   "roles": {
     "main": {
-      "agent": "claude"
+      "agent": "claude",
+      "approval": "bypass"
     },
     "pl": {
       "agent": "codex",
@@ -12,7 +13,8 @@
     },
     "work": {
       "agent": "claude",
-      "model": "sonnet"
+      "model": "sonnet",
+      "approval": "bypass"
     }
   }
 }

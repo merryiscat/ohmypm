@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import sys
 import uuid
 from pathlib import Path
 
@@ -9,12 +10,27 @@ from environment import Environment, validate_profiles
 from workflow_core import Orca, WorkflowError, digest, read_json, require, safe_id, write_json
 
 
-def launcher_argv(profile):
+def launcher_argv(profile, settings=None, disallowed_tools=None):
+    """역할 세션의 실행 인자.
+
+    approval=bypass면 승인 프롬프트 없이 뜬다 — Codex·Claude 모두. 2026-09-23 사용자 결정:
+    프롬프트는 안전장치가 아니라 사람이 온종일 읽고 누르는 일이 된다. 안전은 런타임 가드
+    (settings의 PreToolUse 훅)와 disallowed_tools가 맡는다. 둘 다 프로젝트 파일이 아니라
+    `.git/ohmypm/`에 있고 기동 인자로만 전달된다.
+    """
     validate_profiles({r: profile for r in ("main", "pl", "work")})
     argv = [profile["agent"]]
     if profile.get("approval") == "bypass":
-        require(profile["agent"] == "codex", "Bypass profile is only supported for Codex")
-        argv.append("--dangerously-bypass-approvals-and-sandbox")
+        argv.append(
+            "--dangerously-bypass-approvals-and-sandbox"
+            if profile["agent"] == "codex"
+            else "--dangerously-skip-permissions"
+        )
+    if profile["agent"] == "claude":
+        if settings:
+            argv += ["--settings", str(settings)]
+        if disallowed_tools:
+            argv += ["--disallowedTools", " ".join(disallowed_tools)]
     if profile.get("model"):
         argv += ["--model", profile["model"]]
     if profile.get("effort"):
@@ -23,6 +39,37 @@ def launcher_argv(profile):
         else:
             argv += ["--effort", profile["effort"]]
     return argv
+
+
+def write_harness(folder, token, runtime, harness):
+    """이 세션에 얹을 가드 파일 둘을 `.git/ohmypm/roles/<role>/`에 쓴다.
+
+    <token>.deny.json     — 가드가 막을 Bash 패턴(프로젝트 등록 때 정한 것)
+    <token>.settings.json — claude --settings로 넘길 훅 설정. PreToolUse에서 런타임의
+                            guard.py를 부른다. 프로젝트의 .claude/settings나 git 훅은 건드리지
+                            않는다 — 훅 본체는 런타임에, 켤지 말지는 여기에(T-006 소유권 표).
+    """
+    deny_path = folder / (token + ".deny.json")
+    write_json(deny_path, {"deny": list(harness.get("deny") or [])})
+    guard = Path(runtime) / "scripts/guard.py"
+    command = " ".join(
+        '"' + str(part) + '"' for part in (sys.executable, "-B", guard, "--deny", deny_path)
+    )
+    settings_path = folder / (token + ".settings.json")
+    write_json(
+        settings_path,
+        {
+            "hooks": {
+                "PreToolUse": [
+                    {
+                        "matcher": "Bash",
+                        "hooks": [{"type": "command", "command": command, "timeout": 10}],
+                    }
+                ]
+            }
+        },
+    )
+    return settings_path
 
 
 class RoleAdapter:
@@ -39,7 +86,12 @@ class RoleAdapter:
         folder = env.root / "roles" / role
         record_path = folder / (token + ".launch.json")
         lifecycle = folder / (token + ".lifecycle.json")
-        argv = launcher_argv(profile)
+        cfg = env.config()
+        harness = cfg.get("harness") or {}
+        settings_path = None
+        if profile.get("agent") == "claude":
+            settings_path = write_harness(folder, token, cfg["runtime"]["path"], harness)
+        argv = launcher_argv(profile, settings_path, harness.get("disallowed_tools"))
         state = read_json(folder / "state.json")
         initial_context = state["context"] + "\nContext digest: " + state["context_digest"]
         argv.append(initial_context)
@@ -47,7 +99,7 @@ class RoleAdapter:
             record_path,
             {"project": str(project), "token": token, "lifecycle": str(lifecycle), "argv": argv},
         )
-        runner = Path(env.config()["runtime"]["path"]) / "scripts/role_runner.py"
+        runner = Path(cfg["runtime"]["path"]) / "scripts/role_runner.py"
         launch = [sys.executable, "-B", str(runner), "--record", str(record_path)]
         args = [
             "terminal",

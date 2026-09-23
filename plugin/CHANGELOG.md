@@ -1,3 +1,17 @@
+# 2.1.0 — bypass for every role, guard rides with the runtime
+
+- All roles default to `approval: bypass`; Claude roles start with
+  `--dangerously-skip-permissions`. Approval prompts are not a safety net when a person
+  has to read and click them all day (user decision, 2026-09-23).
+- Safety moves to a deterministic PreToolUse guard (`scripts/guard.py`, deny-list of
+  irreversible/external Bash patterns) that ships inside the runtime and is attached
+  per session through `--settings` from `.git/ohmypm/roles/<role>/`. Nothing is written
+  into the project tree; project `.claude` settings and git hooks are untouched.
+- New per-project `harness` (`deny`, `disallowed_tools`) recorded at first registration
+  via `--harness`; re-registration keeps prior answers. Skill asks the questions.
+- SKILL.md/PROTOCOL.md now state *why* hooks are not installed into projects and where
+  they live instead.
+
 # 2.0.2 — shim fix follow-up
 
 - Fix a local-variable collision introduced in 2.0.1: the shim directory shadowed the

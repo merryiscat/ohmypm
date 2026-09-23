@@ -13,7 +13,7 @@ from environment import Environment, data_home, install_package  # noqa: E402
 from workflow_core import WorkflowError, read_json  # noqa: E402
 
 
-def install(project, migrate=False, dry_run=False, home=None, profiles=None):
+def install(project, migrate=False, dry_run=False, home=None, profiles=None, harness=None):
     if migrate:
         raise ValueError(
             "Use migration-plan/apply with a reviewed digest; implicit migration was removed"
@@ -24,7 +24,7 @@ def install(project, migrate=False, dry_run=False, home=None, profiles=None):
         return {"changed": [], "state": str(env.root), "checkout_changes": [], "dry_run": True}
     with env.lock():
         pin = install_package(PLUGIN, home)
-        result = env.register(pin, profiles)
+        result = env.register(pin, profiles, harness)
         result["checkout_changes"] = []
         return result
 
@@ -36,6 +36,7 @@ if __name__ == "__main__":
     parser.add_argument("--migrate-v1", action="store_true")
     parser.add_argument("--home")
     parser.add_argument("--profiles")
+    parser.add_argument("--harness")
     args = parser.parse_args()
     try:
         result = install(
@@ -44,6 +45,7 @@ if __name__ == "__main__":
             args.dry_run,
             args.home,
             read_json(args.profiles)["roles"] if args.profiles else None,
+            read_json(args.harness) if args.harness else None,
         )
         print(json.dumps(result, ensure_ascii=False, indent=2))
     except (WorkflowError, OSError, ValueError, KeyError) as exc:

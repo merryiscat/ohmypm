@@ -28,8 +28,12 @@ pl 종료 확인 또는 최초 미등록이면 main이 새 세션을 준비하�
 질문은 outbox에 보존하고 전송·수락·완료를 구분한다. 과거 generation/revision 답변은 적용하지 않는다.
 종료만으로 기존 승인·유효 판정을 무효화하지 않는다. work는 승인 범위를 계속 수행할 수 있으나
 필요한 pl 판정 전에는 머지하지 않는다. 새 pl 위치와 이어받은 revision을 사용자에게 안내한다.
-Codex pl은 사용자 지정에 따라 --dangerously-bypass-approvals-and-sandbox로 시작한다.
-실행 정책도 프로필과 작업 계약에 기록하며 approval=default를 명시하면 기본 CLI 정책을 사용한다.
+역할 세션은 프로필의 approval대로 시작한다. bypass(기본)면 Codex는 --dangerously-bypass-approvals-and-sandbox,
+Claude는 --dangerously-skip-permissions다 — 승인 프롬프트는 안전장치가 아니라 사람이 온종일 읽고
+누르는 일이 되기 때문이다(2026-09-23 사용자 결정). 안전은 런타임이 싣고 가는 가드(scripts/guard.py,
+되돌리기 불가·외부 발신 Bash를 목록 대조로만 차단)와 disallowed_tools가 맡고, 무엇을 켤지는 프로젝트의
+.git/ohmypm/project.json harness에 기록해 --settings로 세션에 얹는다. 프로젝트에는 훅을 설치하지 않는다 —
+프로젝트 gitignore·버전 배포·훅 소유권과 얽히기 때문이다(T-006). approval=default면 기본 CLI 정책을 쓴다.
 
 ## 업데이트와 전환
 업데이트는 미래 작업에만 적용한다. 진행 작업은 정확한 패키지 해시를 계속 사용한다.
