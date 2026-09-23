@@ -1,2 +1,0 @@
-# ohmyPM 1.0: copy only files explicitly needed by this project.
-# Secrets, databases and logs are not copied by default; task harnesses declare their inputs.

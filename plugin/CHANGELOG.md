@@ -1,3 +1,25 @@
+# 2.2.0 — rules carry their reasons
+
+- PROTOCOL.md is now the single rule registry: every rule is `[P-nn]` with a reason, an
+  alternative (required for prohibitions) and an inline source (date or T-xxx; no links —
+  the runtime is copied into projects that have no docs/). Retired rules stay as tombstones;
+  IDs are never reused. Five duplicated rule groups collapsed into one entry each.
+- entry.md, dispatch/SKILL.md, runtime.md, kickoff-workspaces/SKILL.md and the templates cite
+  `[P-nn]` instead of restating rules. entry.md gains a reading antibody: read the reason
+  before applying a rule; a rule with no source is a candidate, not a constraint [P-20].
+- templates/task.md gets "상시 규칙으로 남는 결정" (rule promotion table); review.md gets a
+  promotion criterion the pl verdict checks. Rules without a reason are not promoted.
+- New tests/test_docs.py lint: registry grammar, prohibitions need an alternative, inline
+  sources, contiguous IDs, tombstones only in their section, citations resolve, uncited
+  prohibitions in derived docs fail, skip budget 8, entry.md at most 40 lines.
+- Retired with tombstones (user decision; no recorded rationale): max 8 criteria (the code
+  cap in workflow_core relaxed to "at least one"), max 2 parallel works, stdlib-only,
+  no file-count/time thresholds.
+- Removed 12 dead 1.0 templates that no script has read since 2.0.0.
+- Why: on 2026-09-23 a main session read "hooks are not modified" as "hooks cannot be used"
+  and designed around it; the reason and alternative lived only in T-006. A survey found
+  entry.md — injected into every session — carried 0 reasons for ~30 rules.
+
 # 2.1.0 — bypass for every role, guard rides with the runtime
 
 - All roles default to `approval: bypass`; Claude roles start with

@@ -44,6 +44,9 @@
 
 ## 훅 레시피 (프로젝트 로컬 `.claude/settings.json`)
 
+이 레시피의 훅은 프로젝트가 자기 필요로 만드는 **프로젝트 자산**이다 — ohmyPM 운영 하네스가 프로젝트 트리에
+아무것도 설치하지 않는다는 규칙(PROTOCOL [P-16])의 범위 밖. 역할 세션의 가드는 런타임이 따로 싣고 간다 [P-15].
+
 자주 쓰는 패턴 — 형식 상세는 [공식 훅 문서](https://code.claude.com/docs/en/hooks):
 
 1. **.env 읽기 차단** (PreToolUse): Read/Bash가 `.env` 경로를 건드리면 deny 반환

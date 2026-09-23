@@ -20,7 +20,7 @@ SCHEMA = 2
 #   사람에게 보여주는 값이 이것이다. 2026-09-23에 어긋난 것을 실측: 플러그인은 2.0.1인데
 #   doctor가 2.0.0을 보고해 어느 빌드가 도는지 알 수 없었다. tests/test_environment.py의
 #   test_version_matches_plugin_manifest가 다시 어긋나면 잡는다.
-VERSION = "2.1.0"
+VERSION = "2.2.0"
 
 
 @contextlib.contextmanager

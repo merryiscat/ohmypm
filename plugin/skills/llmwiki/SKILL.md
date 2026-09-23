@@ -44,7 +44,7 @@ docs/
 
 1. `docs/raw/` 생성, `index.md`·`log.md`·`status.md`·`mistakes.md`·`pending.md`를 빈 뼈대로 생성 (기존 문서가 대신하는 것은 건너뛴다). [conventions-wiki-template.md](conventions-wiki-template.md)를 `docs/conventions-wiki.md`로 복사한다
 2. [schema-template.md](schema-template.md)의 블록을 프로젝트 CLAUDE.md에 추가한다 — 10줄 예산을 지킨다. 이 블록이 상시 기록·보류 규칙의 본체고, 상세는 conventions-wiki.md가 소유한다
-3. **OS에 맞는** 훅 스크립트를 프로젝트 `.claude/hooks/`에 복사하고 `.claude/settings.json`에 등록한다 — Windows는 [sessionstart-hook.ps1](sessionstart-hook.ps1)을 `llmwiki-sessionstart.ps1`로, macOS/Linux는 [sessionstart-hook.sh](sessionstart-hook.sh)를 `llmwiki-sessionstart.sh`로 (두 스크립트는 동일 동작):
+3. **OS에 맞는** 훅 스크립트를 프로젝트 `.claude/hooks/`에 복사하고 `.claude/settings.json`에 등록한다 (이 훅은 위키의 하네스로 프로젝트가 소유한다 — ohmyPM 운영 하네스 무설치 [P-16]의 범위 밖) — Windows는 [sessionstart-hook.ps1](sessionstart-hook.ps1)을 `llmwiki-sessionstart.ps1`로, macOS/Linux는 [sessionstart-hook.sh](sessionstart-hook.sh)를 `llmwiki-sessionstart.sh`로 (두 스크립트는 동일 동작):
 
 ```json
 {

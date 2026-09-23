@@ -314,7 +314,9 @@ class Workflow:
         require(text.strip(), "Spec is empty")
         data = read_json(manifest)
         criteria = data.get("criteria", [])
-        require(0 < len(criteria) <= 8, "A contract requires 1–8 observable criteria")
+        # 상한(8개)은 2026-09-23 사용자 결정으로 폐기 — 근거 없는 숫자였다(PROTOCOL [P-21] 묘비).
+        # 개수는 pl이 기준마다 관찰 가능한 검증 방법을 붙이며 스스로 제한한다 [P-03]. 하한만 남긴다.
+        require(0 < len(criteria), "A contract requires at least one observable criterion")
         ids = [safe_id(c["id"]) for c in criteria]
         require(len(set(ids)) == len(ids), "Duplicate criterion ID")
         for c in criteria:

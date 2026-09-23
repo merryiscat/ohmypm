@@ -13,7 +13,7 @@ from workflow_core import Orca, WorkflowError, digest, read_json, require, safe_
 def launcher_argv(profile, settings=None, disallowed_tools=None):
     """역할 세션의 실행 인자.
 
-    approval=bypass면 승인 프롬프트 없이 뜬다 — Codex·Claude 모두. 2026-09-23 사용자 결정:
+    approval=bypass면 승인 프롬프트 없이 뜬다 — Codex·Claude 모두 (PROTOCOL [P-15]). 2026-09-23 사용자 결정:
     프롬프트는 안전장치가 아니라 사람이 온종일 읽고 누르는 일이 된다. 안전은 런타임 가드
     (settings의 PreToolUse 훅)와 disallowed_tools가 맡는다. 둘 다 프로젝트 파일이 아니라
     `.git/ohmypm/`에 있고 기동 인자로만 전달된다.
