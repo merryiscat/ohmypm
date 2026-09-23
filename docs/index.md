@@ -7,8 +7,9 @@
 - [plan.md](plan.md) — 목적·형태·MVP·**스택·하네스 확정(2·3부)**·미확정 질문
 - [references.md](references.md) — 레퍼런스: 기능별 keep 표 23 + 드랍 18(사유) + 미검증 83 (재검수 종결)
 - [usecases.md](usecases.md) — 킥오프 2부: 18케이스(해피/배드/필요기술) + 공통전제 + 선결 과제
-- [design.md](design.md) — 설계 한 장(T-001): 스택표(케이스·가중합·채택/보류)·주 흐름·결정론/LLM 역할·자율 경계·보류와 사용자 질문
-- [deliverables.md](deliverables.md) — 산출물 대장: 단계(기획·설계·구축·검증·운영)별 산출물 기준표, PM이 단계 판단·요구에 쓴다
+- [design.md](design.md) — **아키텍처 그림 한 장 v2**(2026-09-23, 구현 단계): 전체 구성·주간 배치·작업 구조(main/pl/work)·데이터 지도·경계, mermaid. v1(설계 단계 텍스트)은 git 이력
+- [interfaces.md](interfaces.md) — **인터페이스 명세 v1**: 내놓는 API 38개(용도·입력·동작 방식) + 쓰는 외부 서비스·키·한도. `/openapi.json`으로 기계 대조
+- [deliverables.md](deliverables.md) — 산출물 대장: 단계별 산출물 기준표 + **요구는 주간보고에서**(2026-09-23 확정: 프로젝트당 하나, 설계 끝나면 그림, 버전업 연동)
 - [tasks/T-006-environment-separation.md](tasks/T-006-environment-separation.md) — **2.0.0 프로젝트·작업 환경 분리**: 외부 runtime + `.git/ohmypm/` 상태, 요청 분류 검문, pl 복구, 1.0 전환 plan. 검증 결과 §10
 - 절차·명령은 플러그인 원본: [PROTOCOL.md](../plugin/skills/kickoff-workspaces/PROTOCOL.md), [runtime.md](../plugin/skills/dispatch/references/runtime.md), [entry.md](../plugin/skills/dispatch/references/entry.md). 역할·모델은 `.git/ohmypm/project.json`(로컬)
 - [research-multiagent.md](research-multiagent.md) — 멀티 에이전트 구조 외부 실측·실무 후기(2026-09-18). 구조 결정이 끝나면 지운다

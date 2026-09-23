@@ -1,86 +1,144 @@
-# ohmyPM 설계 한 장 — 스택·주 흐름·경계·보류
+# ohmyPM 아키텍처 — 그림 한 장 (v2)
 
-- 기준일: 2026-09-17 · 작성: T-001 워커 · 스펙: `docs/tasks/T-001-design.md` v2
-- 출처(3개만): [plan.md](plan.md) · [usecases.md](usecases.md) · [setup.md](setup.md) — pl 브랜치 `f04ba52` 시점 내용
-- 표기: **`asserted`** = 출처에 적힌 사실(뒤에 출처 절) · **`inferred`** = 이 문서의 설계 추론(뒤에 근거)
-- 이 문서는 결정을 바꾸지 않는다. 기존 결정을 한곳에 모으고, 아직 안 정한 것을 따로 떼어 둔다.
+- **산출물 버전**: v2 (2026-09-23) · v1은 2026-09-17 설계 단계의 텍스트 한 장(git 이력 `a31ab99` 이전)
+- **기준**: 서버 앱 `ohmypm 0.1.0` · 플러그인 `2.2.0` · 커밋 `a31ab99` · 단계 **구현**
+- **버전 규칙**: 프로젝트가 버전업되면 이 문서도 같이 올린다(머리의 기준 세 값을 갱신하고 아래 이력에 한 줄). 구성이 안 바뀐 버전업이면 "변경 없음"으로 적는다
+- 그림은 mermaid — GitHub·Obsidian에서 그대로 그림으로 보인다. 근거는 코드(`src/`, `plugin/`)와 실서버 `/openapi.json`이며, 추론이 섞인 곳은 `(inferred)`로 표시했다
 
-## 1. 스택표 — 기존 스택 전 항목과 케이스 근거
+## 1. 전체 구성 — 무엇이 무엇을 부르나
 
-항목은 plan "스택·하네스"의 한 줄을 그대로 쪼갠 것이다(`asserted`: plan §스택·하네스). 스케줄 한 칸은 코드 상태가 달라 cron과 heartbeat 두 줄로 나눴다(`inferred`: usecases 합산규칙 3이 둘을 따로 역추적함).
+```mermaid
+flowchart LR
+    subgraph P["관리 대상 프로젝트 (PROJECTS_ROOT 아래 27개)"]
+        W["docs 위키<br/>index · status · pending.md"]
+        G["git · 코드 · CLAUDE.md"]
+    end
 
-셈법(`asserted`: usecases 합산규칙 1·2): 가중치 핵심 3 · 보통 2 · 부차 1 · 와일드카드 1, 같은 케이스는 한 번만 센다. **토대** = 핵심 케이스 2개 이상 **또는** 가중합 6 이상. 케이스 우선순위는 usecases 표의 '우선순위' 칸(1~6 핵심, 7 부차, 8~15 보통, 16~18 와일드카드).
-케이스 칸은 usecases 합산규칙 3의 역추적 기록을 쓴다(`asserted`). 기록이 기준에 못 미치면 예외 근거를 적는다.
+    subgraph S["ohmyPM 서버 · FastAPI 127.0.0.1:8123 (pythonw, 로그인 시 자동 실행)"]
+        UI["대시보드 SPA<br/>pages.py · 한 HTML, #/dashboard · #/chat · #/room"]
+        API["JSON API · api.py<br/>/api/* 38개"]
+        SCH["스케줄러 · APScheduler<br/>토 03:00 주간 배치 · 매일 07:00 텔레그램 · 월 05:00 전문가"]
+    end
 
-| 항목 | 역할 | 케이스 | 핵심 수 | 가중합 | 토대 | 상태 |
-|---|---|---|---|---|---|---|
-| Claude Code 코어 + Python(uv) | 판단·문서 작업(LLM)과 결정론적 스크립트 실행 | 3·4·5 | 3 | 3+3+3=**9** | ✓ | 채택 |
-| 웹 대시보드(FastAPI+HTML) | 전 프로젝트 현황·자율 내역 화면 | 2·15 | 1 | 3+2=**5** | 예외 ✓ | 채택 |
-| SQLite(로컬) | 프로젝트·이슈 상태 저장 | 2 | 1 | **3** | 예외 | 채택 |
-| 텔레그램 봇 | 소견·재부상·브리핑 알림과 대화 채널 | 4·7·8·13 | 1 | 3+1+2+2=**8** | ✓ | 채택 |
-| git | 자율 행동 커밋·diff·롤백 | 3·5·15·16 | 2 | 3+3+2+1=**9** | ✓ | 채택 |
-| cron 정시 실행 | 매일·주간 스캔과 보고 기동 | 2·7·10 | 1 | 3+1+2=**6** | ✓ | 채택 |
-| heartbeat | 케이스 4의 상시·이벤트 감지 | 4 | 1 | **3** | ✗ | 보류 |
-| lychee | 문서 죽은 링크 점검 | 9 | 0 | **2** | ✗ | 보류 |
+    subgraph A["에이전트 계층 · src/cc (전부 claude -p headless)"]
+        MGR["총괄 PM · manager"]
+        ROOM["담당 · room_agent"]
+        JUD["판정 · judge<br/>완결검증 · issue_verify"]
+        BAT["배치 오케스트레이션 · daily_report<br/>tidy · reprocess · rewards · harness_audit · onboarding"]
+        EXP["전문가 · expert"]
+        CLI["client.py<br/>stdin 프롬프트 · allowedTools 화이트리스트 · PreToolUse 가드"]
+    end
 
-예외 근거:
-- **웹 대시보드** — 역추적 기록(2·15)만으로는 합 5다. 그런데 usecases '필요 기술' 칸을 다시 보면 9("대시보드 연동")·11("대시보드/pending 연동")에도 걸린다. 2·9·11·15로 다시 세면 3+2+2+2=9라 토대 선을 넘는다(`inferred`: usecases 케이스 9·11 필요 기술 칸).
-- **SQLite** — 합 3으로 토대가 아니다. 하지만 상태 저장소를 SQLite로 고른 건 사용자 결정이다(`asserted`: plan §스택 "상태 저장 = SQLite(사용자 결정)"). 저장 수요는 4(이슈 상태 관리)·12(관리 목록 저장)·15(자율 행동 로그)에도 있다(`inferred`: 해당 케이스 필요 기술 칸). 그래서 채택을 유지한다.
-- **cron** — 필요 기술 칸에 "정시 스케줄"이라고 적힌 곳은 7·10뿐이다. 케이스 2는 해피 패스의 "매일 정시"로 셌다(`inferred`: usecases 케이스 2 해피 패스). 역추적 기록을 따른다.
-- **heartbeat·lychee** — 합산규칙 2에 따라 버리지 않고 보류한다. heartbeat는 핵심 케이스 4가 요구하지만 지금 코드에 없다. lychee는 케이스 9 하나에만 걸리고 코드가 0줄이다(`asserted`: plan §스택 "역추적 결과 주의", usecases 합산규칙 3). 재개 조건은 §5에 있다.
+    subgraph D["저장 (전부 로컬, PC마다 독립)"]
+        DB[("SQLite · data/ohmypm.db<br/>9 테이블")]
+        PR["prompts/*.md · 지시문 42개"]
+        DOC["docs/manager 저널 · docs/experts 위키 · logs/"]
+    end
 
-## 2. 주 흐름
+    subgraph X["외부"]
+        CC["Claude Code CLI<br/>claude.exe"]
+        TG["Telegram Bot API"]
+    end
 
+    W -->|"스캔 · llmwiki 파서"| DB
+    G -->|"git log · 활동 판정"| BAT
+    UI <-->|fetch| API
+    API --> DB
+    API -->|"수동 트리거"| BAT
+    SCH -->|cron| BAT
+    SCH -->|"07:00 요약"| TG
+    BAT --> MGR & ROOM & JUD & EXP
+    MGR & ROOM & JUD & BAT & EXP --> CLI --> CC
+    CLI -->|"--add-dir 읽기 · autowrite 켠 프로젝트만 docs 커밋"| P
+    MGR --> DOC
+    EXP --> DOC
+    CLI --> PR
+    A --> DB
 ```
- 로컬 프로젝트들 (docs 위키 · git · 코드)
-        │
-        ▼
- 수집 ── 폴더 스캔 · llmwiki 파싱(status/pending/mistakes) · git log · TODO
-        │
-        ▼
- 저장·분석 ── SQLite 적재 → LLM 소견 · 반복 원인 분석 · 요약
-        │
-        ▼
- 대시보드(웹) / 알림(텔레그램)
+
+읽는 법: 왼쪽 프로젝트들은 **읽기 대상**이고, 쓰기는 `autowrite`를 켠 프로젝트의 `docs/`에만 간다(기본 전부 꺼짐). 서버는 화면·API·스케줄러 세 역할을 한 프로세스에서 하고, 판단은 전부 headless Claude가 한다 — 서버 코드는 판단하지 않는다(결정론 계층: 스캔·파싱·화이트리스트 대조·스케줄).
+
+## 2. 주간 배치 — 매주 토요일 03:00 (`daily_report.run_nightly`)
+
+```mermaid
+flowchart TD
+    A0["⓪ 신규 편입 검토 · 온보딩<br/>onboarding (처음 등록된 프로젝트만)"] --> A1
+    A1["⓪b 골격 자동 생성<br/>harness_audit (계약 파일 없으면)"] --> A2
+    A2{"게시판 요일?<br/>board_weekdays=5 (토)"} -->|예| T["⓪c 기록 정리 · tidy<br/>담당이 자기 docs를 실제 작업과 맞춤"]
+    A2 -->|아니오| SC
+    T --> SC["스캔 · run_scan<br/>27개 프로젝트 docs → issues"]
+    SC --> V["완결 검증 · issue_verify<br/>끝난 일 완료 처리"] --> J["기한 판정 · judge<br/>날짜 오탐 가리기"]
+    J --> P1["① 아침 계획 · manager.plan_day"]
+    P1 --> R["② 보고 · run_daily_report<br/>활동 있는 프로젝트만 PM↔담당 인터뷰<br/>한도(429)면 리셋까지 기다렸다 재개"]
+    R --> B1["③ 게시판 글쓰기 · 둘러보기"] --> B2["④ 대댓글 · 대대댓글"] --> RP["⑤ 재가공 · reprocess<br/>조언을 docs에 반영 (autowrite 프로젝트만 커밋)"] --> RW["⑥ 보상 · rewards"]
+    RW --> C["⑦ 저녁 종합 · manager.close_day<br/>docs/manager 저널"]
+    C --> TGS["요약 저장 · alerts daily_summary:날짜"]
+    TGS -.->|"07:00 cron"| TG["텔레그램 발송"]
+    R -.->|"07시 넘겨 끝나면 즉시"| TG
 ```
 
-수집·분석·출력 요소는 usecases 케이스 2·4·5·7·10·11의 필요 기술 칸에서, 저장소 SQLite는 plan §스택에서 가져왔다(`asserted`). 이것을 네 단계 한 줄로 묶은 것은 이 문서의 요약이다(`inferred`: 케이스 2 해피 패스 "스캔 → 추출 → 대시보드"와 케이스 10 "수집=스크립트, 요약만 LLM" 패턴). 권한과 보류 설명은 그림에 넣지 않고 §4·§5에 둔다.
+- 활동 판정 창은 **168시간**(`activity_window_hours`) — 배치 주기와 묶여 있다. 좁으면 놓침이 생긴다
+- 배치 어느 단계가 죽어도 뒤 단계로 예외가 번지지 않게 감쌌고, 중단은 텔레그램으로 알린다("배치 중단")
+- 매일 08:00 스캔 잡은 2026-09-23에 껐다(`scan_enabled=False`) — 주간 배치가 자기 스캔을 돌므로 중복이었다. 화면의 '스캔'·'판정' 버튼은 남아 있다
+- 지각 유예 30분(`MISFIRE_GRACE`) — 기본값 1초라 정각에 바쁘면 그 주 배치가 통째로 사라졌던 실측(09-23)
 
-## 3. 역할 구분 — 결정론 계층과 LLM 계층
+## 3. 작업 구조 — 요청에서 검증된 결과까지 (플러그인 2.2.0, main·pl·work)
 
-| 계층 | 맡는 일 | 근거 |
+```mermaid
+flowchart LR
+    U["사용자"] -->|"요청 원문"| M["main · claude<br/>분류: 처리 경로 / 근거 / 범위 → route"]
+    M -->|"작고 명확·가역만"| DX["direct-exec"]
+    M -->|"새 화면·기능·데이터·연동·비가역"| PL["pl · codex gpt-6-astra<br/>사용자와 설계·완료 기준 합의 → spec/manifest"]
+    PL <-->|"질문은 outbox로"| U
+    U -->|"실제 결정 파일로 approve"| M
+    M -->|"schedule · prepare · launch"| WK["work · claude sonnet<br/>Orca worktree, exec/submit"]
+    WK -->|"submit · check 증거"| PL
+    PL -->|"verdict (commit·base·revision·digest에 묶임)"| M
+    M -->|"로컬 fast-forward 머지"| MAIN["프로젝트 main"]
+    MAIN -.->|"푸시·배포는 사용자 별도 요청"| U
+
+    subgraph ST[".git/ohmypm/ — 프로젝트 안, git 밖"]
+        PJ["project.json<br/>runtime pin · roles · harness"]
+        TS["tasks/ · requests/ · roles/ · outbox"]
+    end
+    subgraph RT["%LOCALAPPDATA%/ohmypm/runtimes/&lt;내용해시&gt; — 불변 패키지"]
+        PROTO["PROTOCOL.md · 규칙 등록부 [P-01~24]"]
+        RUN["environment_cli.py · workflow.py · role_runner.py · guard.py"]
+    end
+    M & PL & WK --> ST
+    M & PL & WK -.->|"규칙·명령"| RT
+```
+
+- **프로젝트 트리에는 아무것도 설치하지 않는다** — 훅 본체는 런타임, 켤 목록은 `.git/ohmypm/`, 기동 때 `--settings`로 얹는다 (PROTOCOL [P-16])
+- 모든 역할은 승인 프롬프트 없이(bypass) 뜨고, 안전은 `guard.py`(되돌리기 불가·외부 발신 Bash 차단, 목록 대조만)가 맡는다 [P-15]
+- 역할 세션은 Orca 터미널에서 돌고 생명주기(pid·종료 코드)를 `role_runner`가 기록한다 — 셸 생존이나 시간 경과로 판단하지 않는다 [P-12]
+
+## 4. 데이터 지도 — 무엇이 어디에 사나
+
+| 무엇 | 어디 | 비고 |
 |---|---|---|
-| 결정론(스크립트) | 폴더 스캔 · llmwiki 파싱(status/pending/mistakes) · git log 수집 · TODO 추출 · pending 날짜 판정 · **화이트리스트 포함 여부 확인** | `asserted`: usecases 케이스 2·8·10·11 필요 기술("git log 수집(결정론적)" 등), plan §자율 경계 "'목록에 있나'만 확인(결정론적)" |
-| LLM | 이슈 소견 생성(4) · 반복 실수의 **뿌리 인식과 원인 분석**(5) · 구조 패턴 매칭(16) · 요약 생성(7·10·18) | `asserted`: usecases 필요 기술 "이슈→소견 생성(LLM 분석)", "반복 뿌리 인식(LLM — 표면 텍스트 매칭 아님)" |
-| **미정** | **doc-drift(코드↔문서 대조, 케이스 6)** — 스크립트로 할지 LLM으로 할지 출처가 정하지 않았다 | `asserted`: usecases 케이스 6 필요 기술이 방식 없이 "doc-drift"만 적음 |
+| 관리 대상·이슈·대화·게시판·담당 프로필·포트·자율 로그·설정 | `data/ohmypm.db` 9 테이블: `projects` `issues` `messages` `posts` `comments` `agent_profiles` `ports` `autolog` `alerts`(key/value) | 스키마는 `src/db/client.py`, 열 추가는 멱등 ALTER |
+| 에이전트 지시문 | `prompts/*.md` (42개) | 코드가 아니라 문서 — `cc/prompts.py`가 읽는다 |
+| 총괄 PM 저널 · 전문가 위키 | `docs/manager/` · `docs/experts/` | 로컬 전용(gitignore) |
+| 로그 | `logs/ohmypm_YYYY-MM-DD.log` · `logs/server_console.log` | 하루 한 파일 |
+| 작업 구조 상태 (프로젝트별) | `<프로젝트>/.git/ohmypm/` | git이 못 보는 자리 — gitignore 불필요 |
+| 실행기 패키지 | `%LOCALAPPDATA%\ohmypm\runtimes\<해시>` | 내용 해시로 불변, 진행 중 작업은 자기 pin 유지 |
+| 벤치마크·보류·보드·로그 위키 | `docs/benchmark.md` `pending.md` `status.md` `log.md` `mistakes.md` | 로컬 전용(gitignore) |
 
-LLM이 화이트리스트 판정을 맡지 않는다는 점이 두 계층 경계의 핵심이다. 판정을 LLM에게 맡기면 confused-deputy가 된다(`asserted`: plan §자율 경계, usecases 공통 전제 '자율 행동 안전장치').
+## 5. 경계 — 바뀌지 않는 것
 
-## 4. 실행 형태와 경계
+- **자율 = 화이트리스트**. 에이전트는 "안전한가"를 판단하지 않고 "목록에 있나"만 확인한다(결정론). 삭제·외부 발신·DB 마이그레이션·force push는 목록을 아무리 넓혀도 원천 제외
+- **LLM은 판정 권한이 없다**. 판정(action)과 확정(authority)을 한 에이전트가 동시에 공급하지 않는다(confused-deputy 항체, 2026-08-23)
+- **로컬 단독**. 인증·RBAC 없음, 루프백 바인딩. PC마다 독립 인스턴스 — 코드·규약은 git으로, DB·로그·위키 운영 파일은 공유하지 않는다
+- **프로젝트 트리 무설치**(플러그인) · **규칙에는 이유가 따라다닌다**(PROTOCOL [P-nn], `tests/test_docs.py`가 지킨다)
 
-**실행 형태**
-- 로컬에서만 실행한다. 로컬 프로젝트 파일에 접근해야 해서 클라우드 Routines는 쓰지 않는다(`asserted`: plan §스택 "실행 = 로컬 확정").
-- PC마다 독립 인스턴스다. 각 PC의 ohmyPM은 그 PC의 프로젝트만 돌본다. 코드·기획·규약은 git으로 공유하지만 DB·로그·위키 운영 파일 같은 기억은 공유하지 않는다(`asserted`: setup §전제).
-- 실행 방식은 PC마다 고른다. **정시 실행**은 cron으로 스캔·일간보고 등을 돌린다. **수동 실행**은 정시 배치를 끄고 대시보드·API나 1회 실행 스크립트로 필요할 때 돌린다(`asserted`: setup §6 "정시 배치를 안 쓰는 PC"). 어느 PC가 어느 쪽인지는 설계 사항이 아니라 이 문서에 적지 않는다.
+## 6. 인터페이스
 
-**자율 경계**
-- **화이트리스트**: 자율로 할 수 있는 행동은 사용자가 명시 등록한 목록에 있는 것뿐이다. 에이전트는 "안전한가"를 스스로 판단하지 않고 "목록에 있나"만 확인한다. 목록에 추가하려면 사용자 승인이 필요하다(`asserted`: plan §자율 경계).
-- **미등록 행동은 사용자가 판단한다**: 목록에 없는 행동은 소견을 먼저 내고 사용자와 상담한다. 예를 들어 코드 로직 변경은 상담 대상이다(`asserted`: plan §자율 경계·§코드리뷰 범위, usecases 케이스 4·5).
-- **목록에 절대 넣을 수 없는 행동**: 삭제 · 외부 발신 · DB 마이그레이션 · force push. 되돌릴 수 없어서, 목록을 아무리 넓혀도 원천 제외다(`asserted`: plan §자율 경계 안전장치 ②).
-- **행동마다 남기는 것**: 자율 행동은 행동 하나당 git 커밋 하나이고 사유를 필수로 남긴다. 대시보드에 내역 목록으로 보이고, 사용자가 검토한 뒤 git으로 되돌릴 수 있다. 다른 변경과 얽히지 않게 git 단위로 격리한다(`asserted`: plan §자율 경계 안전장치 ①, usecases 케이스 15 해피 패스·배드 케이스).
+API 38개와 외부 서비스·키는 [interfaces.md](interfaces.md)에. 실서버와의 기계 대조는 `curl 127.0.0.1:8123/openapi.json`.
 
-## 5. 보류 목록과 사용자 결정 질문
+## 이력
 
-| 보류 | 현황 | 재개 조건 |
-|---|---|---|
-| 케이스 1 모델 성능 벤치마크 | 과제셋·평가지표를 별도 프로젝트로 분리했다. 그 결과물에 의존하므로 착수할 수 없다. **나머지 케이스는 이것과 무관하게 진행한다**(`asserted`: usecases §선결 과제) | 별도 프로젝트의 과제셋·평가지표가 완료돼 전달될 때 |
-| 케이스 4 heartbeat 재부착 | 빈 5분 잡을 2026-09-09에 제거해 코드에 없다(`asserted`: plan §스택 역추적 주의, usecases 합산규칙 3) | 케이스 4(상시·이벤트 감지) 착수 시. 주기는 그때 목적에 맞춰 정한다(`asserted`: plan §미확정 "heartbeat 주기는 구현 시 결정") |
-| 케이스 9 lychee 범위 결정 | 케이스 9 하나에만 걸리고 코드는 0줄이다. 안 만든 것이 아니라 범위 결정을 기다리는 상태다. 링크 수정을 자율로 할지 알림만 할지도 정하지 않았다(`asserted`: usecases 합산규칙 3·케이스 9) | 사용자가 케이스 9를 범위에 넣을지 정할 때(넣으면 수정 자율/알림도 함께 정한다) |
-
-**사용자 결정 질문 — git이 없는 관리 대상은 어떻게 처리하나?**
-- 배경: 자율 행동의 안전장치는 git 커밋·롤백을 전제로 한다(`asserted`: plan §자율 경계). 위키가 없는 프로젝트는 대시보드에 "위키 없음"으로 표시하거나 제외하고 알린다(케이스 2 배드 ①). 위키 없는 프로젝트를 등록하면 온보딩으로 넘긴다(케이스 12·14)(`asserted`: usecases). git이 없는 대상을 어떻게 할지는 어디에도 정해져 있지 않다(`inferred`: 세 출처 어디에도 git 없는 대상의 처리 규칙이 없음).
-- 선택지:
-  - ① 관리 대상에서 **제외**
-  - ② 온보딩 때 **git init**
-  - ③ 등록은 하되 자율 행동 없이 **알림만**
-- 이 문서는 셋 중 하나를 고르지 않는다.
+| 버전 | 날짜 | 기준 | 변경 |
+|---|---|---|---|
+| v1 | 2026-09-17 | 설계 단계, pl 브랜치 f04ba52 | 스택표(케이스·가중합)·주 흐름·결정론/LLM 경계·자율 경계·보류 3건 — 텍스트 |
+| v2 | 2026-09-23 | 앱 0.1.0 · 플러그인 2.2.0 · a31ab99 · 구현 단계 | 구현된 그대로를 그림 4장으로. 주간 배치(09-23 주간 전환)·작업 구조 2.2.0·데이터 지도 추가. v1의 보류 3건(케이스 1 벤치마크·4 heartbeat·9 lychee)은 그대로 열려 있다 |
