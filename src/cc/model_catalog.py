@@ -586,6 +586,8 @@ def _refresh_profiles(state: dict, models: set[str]) -> dict:
         )
         prof = _parse_profile(raw)
         if prof is None:
+            _atomic_write(vendor_dir(vendor) / f"profile-failed-{_hash(model)[:8]}.txt",
+                          f"{model}\n\n{raw or '(빈 응답)'}")
             result["failed"].append(model)
             logger.warning(f"[모델동향:{vendor}] '{model}' 프로필 생성 실패 — 이전 프로필 유지")
             continue
@@ -773,6 +775,8 @@ def collect_source(key: str, fetch_only: bool = False, profiles: bool = True) ->
             )
             parsed = _parse_llm_changes(raw)
             if parsed is None:
+                # 실패 원문을 남겨 다음에 원인을 볼 수 있게(형식 위반인지, 빈 응답인지)
+                _atomic_write(vendor_dir(vendor) / f"{key}.llm-failed.txt", raw or "(빈 응답)")
                 srec["last_status"], srec["last_error"] = "llm_failed", "LLM 응답 검증 실패"
                 _save_state(state)
                 _write_wiki_from_state(state)
