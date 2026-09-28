@@ -56,8 +56,8 @@ def _llm_calls(monkeypatch, responses, profile=PROFILE_OK):
     def fake_run_headless_ex(prompt, cwd, allowed_tools, disallowed_tools, timeout=300, *,
                              task, **kw):
         assert task in ("model_catalog_extract", "model_catalog_profile")
-        if "상세 프로필" in prompt:
-            assert task == "model_catalog_profile"
+        if task == "model_catalog_profile":
+            assert "프로필" in prompt
             calls.append(("profile", prompt))
             return {"result": profile, "model": "fake-heavy", "cost_usd": 0.02, "output_tokens": 1}
         assert task == "model_catalog_extract"
@@ -261,7 +261,7 @@ class TestRetry:
 
         state = mc._load_state("claude")
         assert {c["name"] for c in state["changes"]} == {"변경 A", "변경 B"}
-        assert mc._models_in(state) == ["Claude Sonnet 5", "Claude Opus 5.5"]  # 최근 삽입 순
+        assert mc._models_in(state) == ["Claude Opus 5.5", "Claude Sonnet 5"]  # 추적 목록 순
 
         # 같은 본문 재실행 → 배치 id로 중복 삽입 없음
         r_again = mc.collect_source("claude-releases")
@@ -273,7 +273,8 @@ class TestRetry:
             f"## 절 {i}\n" + ("x" * 9000) for i in range(6)
         )  # 6절 × 9KB → 24,000자 청크 3개
         monkeypatch.setattr(mc, "_fetch", lambda url: _fake_fetch(body="# 본문\n\n" + big_sections))
-        responses = [json.dumps(_valid_change(f"청크 변경 {i}", model=f"모델 {i}"))
+        tracked = ["Claude Opus 5.5", "Claude Sonnet 5", "Claude Haiku 4.5"]
+        responses = [json.dumps(_valid_change(f"청크 변경 {i}", model=tracked[i]))
                      for i in range(3)]
         calls = _llm_calls(monkeypatch, responses)
         r = mc.collect_source("claude-models")
@@ -367,6 +368,45 @@ class TestFailure:
             mc.collect_source("claude-releases")
         assert wiki.read_text(encoding="utf-8") == before
         assert not list(mc_env["wiki_dir"].glob(".tmp-*"))
+
+
+# ── tracked: 추적 목록 밖 모델은 버리고, 프로필의 (제안)은 별도 절로 ────────────────────────
+class TestTracked:
+    def test_untracked_models_are_dropped_not_stored(self, mc_env, monkeypatch):
+        monkeypatch.setattr(mc, "_fetch", lambda url: _fake_fetch(body=RELEASE_BODY_V1))
+        items = (_valid_change("Opus 5.5 변경")
+                 + _valid_change("옛 모델", model="Claude Opus 4.1")
+                 + _valid_change("공통 정책", model=mc.COMMON_MODEL))
+        calls = _llm_calls(monkeypatch, [json.dumps(items)])
+        r = mc.collect_source("claude-releases")
+        assert r["ok"] and r["changes"] == 2 and r["dropped"] == 1
+        assert r["models"] == ["Claude Opus 5.5", mc.COMMON_MODEL]
+        assert _n(calls, "profile") == 2
+        state = mc._load_state("claude")
+        assert {c["model"] for c in state["changes"]} == {"Claude Opus 5.5", mc.COMMON_MODEL}
+        wiki = (mc_env["wiki_dir"] / "models-claude.md").read_text(encoding="utf-8")
+        assert "Opus 4.1" not in wiki
+        assert wiki.index("## Claude Opus 5.5") < wiki.index(f"## {mc.COMMON_MODEL}")
+
+    def test_tracked_list_comes_from_settings(self, monkeypatch):
+        from src.config.settings import settings
+
+        monkeypatch.setattr(settings, "model_track_codex", "GPT-6 Sol, GPT-6 Luna")
+        assert mc.tracked_models("codex") == ["GPT-6 Sol", "GPT-6 Luna"]
+        assert mc._is_tracked("codex", "GPT-6 Sol") and mc._is_tracked("codex", mc.COMMON_MODEL)
+        assert not mc._is_tracked("codex", "GPT-5.4")
+
+    def test_profile_suggestions_render_in_their_own_section(self, mc_env, monkeypatch):
+        monkeypatch.setattr(mc, "_fetch", lambda url: _fake_fetch(body=RELEASE_BODY_V1))
+        prof = json.loads(PROFILE_OK)
+        prof["suggestions"] = ["(제안) 기본 effort가 medium이므로 high가 필요하면 명시"]
+        _llm_calls(monkeypatch, [json.dumps(_valid_change("변경"))], profile=json.dumps(prof))
+        assert mc.collect_source("claude-releases")["ok"]
+        wiki = (mc_env["wiki_dir"] / "models-claude.md").read_text(encoding="utf-8")
+        assert "### 우리 판단(제안)" in wiki and "high가 필요하면 명시" in wiki
+        heads = ("### 하네스 조정", "### 우리 판단(제안)", "### 주의")
+        i_h, i_s, i_g = (wiki.index(t) for t in heads)
+        assert i_h < i_s < i_g
 
 
 # ── vendor: 탭은 벤더별 둘, 각자 자기 출처만 수집하고 자기 위키를 갖는다 ──────────────────────

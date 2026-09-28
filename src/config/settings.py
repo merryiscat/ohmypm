@@ -39,6 +39,12 @@ class Settings(BaseSettings):
     model_heavy: str = "opus"       # 종합·설계 수준의 글쓰기
     # Fable·Mythos 같은 최상위 모델은 헤드리스에서 기본 금지 — 명시적으로 켜야만 쓴다
     allow_frontier_headless: bool = False
+    # 모델 동향 위키가 추적하는 모델(쉼표 구분, 공식 문서 표기 그대로). 2026-09-28 사용자 결정:
+    # "실제 사용할 모델만 — 옛날 모델 필요 없다". 목록 밖 모델의 변경은 추적 모델에 영향을 줄 때만
+    # (대체·마이그레이션) 그 추적 모델 항목으로 적고, 아니면 버린다.
+    model_track_claude: str = ("Claude Fable 5.1,Claude Opus 5.5,Claude Opus 5,Claude Sonnet 5,"
+                               "Claude Haiku 4.5")
+    model_track_codex: str = "GPT-6 Astra,GPT-6 Sol,GPT-6 Luna"
 
     # --- 스케줄 ---
     # False면 서버가 cron을 아예 걸지 않는다 — 스캔·일간보고·게시판은 대시보드/API로 수동 실행.

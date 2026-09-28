@@ -180,13 +180,14 @@ def expert_consult(topic: str, wiki: str, question: str) -> str:
 
 
 def model_catalog_update(vendor_name: str, source_key: str, source_url: str, window_note: str,
-                         diff_text: str) -> str:
-    """모델 동향 소스의 달라진 절 → 모델별 변경 JSON 생성 프롬프트(2026-09-28 T-007·R-010).
+                         diff_text: str, tracked_models: list[str]) -> str:
+    """모델 동향 소스의 달라진 절 → 추적 모델별 변경 JSON 생성 프롬프트(2026-09-28 T-007·R-010).
 
     LLM은 텍스트만 반환(도구 없음) — 코드가 JSON 구조·필수 필드·모델 이름·출처 링크를 검증한다.
     """
     return render("model_catalog_update", vendor_name=vendor_name, source_key=source_key,
-                  source_url=source_url, window_note=window_note, diff_text=diff_text) + GATE
+                  source_url=source_url, window_note=window_note, diff_text=diff_text,
+                  tracked_models="\n".join(f"- {m}" for m in tracked_models)) + GATE
 
 
 def model_profile(vendor_name: str, model: str, entries_text: str, overview_text: str) -> str:

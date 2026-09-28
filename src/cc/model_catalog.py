@@ -31,6 +31,7 @@ from loguru import logger
 from src.cc.client import run_headless_ex
 from src.cc.permissions import NEVER_ALLOW
 from src.cc.prompts import model_catalog_update, model_profile
+from src.config.settings import settings
 
 ROOT = Path(__file__).resolve().parents[2]
 DATA_DIR = ROOT / "data" / "model_updates"          # git 미추적(.gitignore의 data/) — 로컬 전용
@@ -92,6 +93,19 @@ SOURCES: dict[str, dict] = {
 }
 
 MODEL_DOMAINS: dict[str, str] = {v["domain"]: k for k, v in VENDORS.items()}   # domain → vendor
+
+
+def tracked_models(vendor: str) -> list[str]:
+    """이 벤더에서 위키에 담는 모델(.env MODEL_TRACK_<VENDOR>, 공식 표기 그대로). 2026-09-28 사용자:
+    "실제 사용할 모델만 — 옛날 모델 필요 없다". 목록 밖 모델의 변경은 추적 모델에 영향을 줄 때만
+    그 추적 모델 항목으로 들어온다(프롬프트 규칙) — 그 외는 코드가 버린다."""
+    raw = {"claude": settings.model_track_claude,
+           "codex": settings.model_track_codex}.get(vendor, "")
+    return [m.strip() for m in raw.split(",") if m.strip()]
+
+
+def _is_tracked(vendor: str, model: str) -> bool:
+    return model == COMMON_MODEL or model in tracked_models(vendor)
 
 _HEADER_RE = re.compile(r"^(#{1,6})\s+(.*)$", re.MULTILINE)
 _ISO_DATE_RE = re.compile(r"(\d{4})-(\d{2})-(\d{2})")
@@ -462,7 +476,7 @@ def _parse_profile(raw: str | None) -> dict | None:
         return None
     spec = {k: (str(spec_in[k]).strip() if spec_in.get(k) else None) for k in PROFILE_SPEC_KEYS}
     lists = {}
-    for key in ("usage_tips", "harness_changes", "gotchas", "sources"):
+    for key in ("usage_tips", "harness_changes", "suggestions", "gotchas", "sources"):
         val = _as_str_list(data.get(key))
         if val is None:
             return None
@@ -517,16 +531,11 @@ def _rollup(state: dict, keep: int = RECENT_PER_MODEL) -> None:
 
 
 def _models_in(state: dict) -> list[str]:
-    """위키 절 순서 — 변경 기록이 최근인 모델부터, '라인업 공통'은 맨 뒤."""
-    order: list[str] = []
-    for c in state["changes"]:
-        if c["model"] not in order:
-            order.append(c["model"])
-    for m in list(state["profiles"]) + list(state["history"]):
-        if m not in order:
-            order.append(m)
-    if COMMON_MODEL in order:
-        order.remove(COMMON_MODEL)
+    """위키 절 순서 — 추적 목록(.env) 순서대로, 기록·프로필이 있는 모델만. '라인업 공통'은 맨 뒤."""
+    present = ({c["model"] for c in state["changes"]} | set(state["profiles"])
+               | set(state["history"]))
+    order = [m for m in tracked_models(state["vendor"]) if m in present]
+    if COMMON_MODEL in present:
         order.append(COMMON_MODEL)
     return order
 
@@ -608,7 +617,8 @@ def _stale_profiles(state: dict) -> set[str]:
     for c in state["changes"]:
         counts[c["model"]] = counts.get(c["model"], 0) + 1
     return {m for m, n in counts.items()
-            if m not in state["profiles"] or state["profiles"][m].get("entry_count") != n}
+            if _is_tracked(state["vendor"], m)
+            and (m not in state["profiles"] or state["profiles"][m].get("entry_count") != n)}
 
 
 # ── 위키 렌더 — docs/experts/models-<vendor>.md 전체를 state에서 재생성해 원자적으로 교체 ──────
@@ -618,7 +628,9 @@ def _render_wiki(state: dict) -> str:
     lines = [f"# {meta['name']}", "",
              "공식 문서에서 코드가 수집하고 LLM이 정리한 모델별 동향 위키. "
              f"마지막 갱신 세대 {state.get('generation', 0)}.",
-             "각 모델 절: 개요 → 스펙 → 잘 쓰는 법 → 하네스 조정 → 주의 → 변화 이력. "
+             f"추적 모델: {', '.join(tracked_models(vendor))} (.env MODEL_TRACK_*). "
+             "각 모델 절: 개요 → 스펙 → 잘 쓰는 법 → 하네스 조정 → 우리 판단(제안) → 주의 → "
+             "변화 이력. "
              "[asserted]=공식 문서가 직접 말함, [inferred]/(제안)=우리 판단.", ""]
     models = _models_in(state)
     if not models:
@@ -636,6 +648,8 @@ def _render_wiki(state: dict) -> str:
                 lines += ["", "### 잘 쓰는 법"] + [f"- {t}" for t in prof["usage_tips"]]
             if prof["harness_changes"]:
                 lines += ["", "### 하네스 조정"] + [f"- {h}" for h in prof["harness_changes"]]
+            if prof.get("suggestions"):
+                lines += ["", "### 우리 판단(제안)"] + [f"- {g}" for g in prof["suggestions"]]
             if prof["gotchas"]:
                 lines += ["", "### 주의"] + [f"- {g}" for g in prof["gotchas"]]
             lines.append("")
@@ -778,6 +792,7 @@ def collect_source(key: str, fetch_only: bool = False, profiles: bool = True) ->
 
         chunks = _chunk_sections(sections) if sections else []
         all_changes: list[dict] = []
+        dropped = 0
         llm_calls = 0
         llm_cost = 0.0
         llm_model = None
@@ -785,7 +800,7 @@ def collect_source(key: str, fetch_only: bool = False, profiles: bool = True) ->
             llm_calls += 1
             meta = run_headless_ex(
                 prompt=model_catalog_update(VENDORS[vendor]["name"], key, srec["final_url"],
-                                             window_note, chunk),
+                                             window_note, chunk, tracked_models(vendor)),
                 cwd=_neutral_cwd(), allowed_tools=[], disallowed_tools=NEVER_ALLOW,
                 timeout=MODEL_CATALOG_TIMEOUT, task="model_catalog_extract",
             )
@@ -802,7 +817,9 @@ def collect_source(key: str, fetch_only: bool = False, profiles: bool = True) ->
                 _write_wiki_from_state(state)
                 logger.warning(f"[모델동향] {key} LLM 반영 실패 — 기존 위키 보존, 다음에 재시도")
                 return {"ok": False, "error": "llm_failed", "changed": True}
-            all_changes.extend(parsed)
+            kept = [c for c in parsed if _is_tracked(vendor, c["model"])]
+            dropped += len(parsed) - len(kept)   # 추적 목록 밖 모델(옛 모델 등)은 버린다
+            all_changes.extend(kept)
 
         touched = _apply_changes(state, key, all_changes, fetched_hash)
         srec["applied_hash"], srec["applied_at"] = fetched_hash, now
@@ -821,7 +838,7 @@ def collect_source(key: str, fetch_only: bool = False, profiles: bool = True) ->
                     f"모델 {len(touched)}개 프로필, LLM 호출 {llm_calls}회, "
                     f"추출={llm_model} 프로필={prof['model']} 비용=${total_cost:.4f}")
         return {"ok": True, "changed": True, "llm_called": llm_calls > 0,
-                "changes": len(all_changes), "models": sorted(touched),
+                "changes": len(all_changes), "dropped": dropped, "models": sorted(touched),
                 "profiles_failed": prof["failed"], "llm_model": llm_model,
                 "profile_model": prof["model"], "cost_usd": total_cost}
 
