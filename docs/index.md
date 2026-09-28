@@ -10,6 +10,7 @@
 - [design.md](design.md) — 설계 한 장(T-001): 스택표(케이스·가중합·채택/보류)·주 흐름·결정론/LLM 역할·자율 경계·보류와 사용자 질문
 - [deliverables.md](deliverables.md) — 산출물 대장: 단계(기획·설계·구축·검증·운영)별 산출물 기준표, PM이 단계 판단·요구에 쓴다
 - [tasks/T-006-environment-separation.md](tasks/T-006-environment-separation.md) — **2.0.0 프로젝트·작업 환경 분리**: 외부 runtime + `.git/ohmypm/` 상태, 요청 분류 검문, pl 복구, 1.0 전환 plan. 검증 결과 §10
+- [tasks/T-007-model-catalog.md](tasks/T-007-model-catalog.md) — **모델 동향 전문가**: Claude·Codex 공식 문서 4곳 수집 → 새 모델·하네스 변화 설명 위키(`docs/experts/models.md`). 구현·검증 기록, 실제 수집 증거
 - 절차·명령은 플러그인 원본: [PROTOCOL.md](../plugin/skills/kickoff-workspaces/PROTOCOL.md), [runtime.md](../plugin/skills/dispatch/references/runtime.md), [entry.md](../plugin/skills/dispatch/references/entry.md). 역할·모델은 `.git/ohmypm/project.json`(로컬)
 - [research-multiagent.md](research-multiagent.md) — 멀티 에이전트 구조 외부 실측·실무 후기(2026-09-18). 구조 결정이 끝나면 지운다
 - `tasks/` — 버전별 작업 스펙 · `reviews/` — pl 품질 검토 기록(기존 검토서는 보존)

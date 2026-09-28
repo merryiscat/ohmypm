@@ -68,8 +68,35 @@ CLI/API/collect_all 쓰기를 직렬화한다.
   `/api/experts/models/wiki` 실제 내용 확인, `/api/experts/models/ask`에 실제 질문
   "Claude Opus 5.5의 기본 effort는 뭐야?" → 위키 근거 기반 정답("medium", 출처 링크 포함) 확인.
 
-## 5. 남은 일
+## 5. 검증·머지 (2026-09-28, pl 대행 세션)
 
-- pl(대행 main 세션)의 실제 원문 대조(C5)와 브라우저 클릭 검수(C6), commit/base/revision/digest에
-  묶은 최종 verdict.
-- 그 외 구현·자동 검증·실제 4/4 수집은 이 문서 기준 완료.
+- verdict 통과(기준 8개 전부 pass, 증거 `.git/ohmypm/tasks/T-007/r2/implementation/pl-evidence/`),
+  main ff 머지(b7c7b9f), 워크트리 회수. 자동 check 1차는 Windows 경로 길이(하네스 TMP 깊이)로
+  실패 → `LongPathsEnabled=1` 후 2차 전부 통과. 상세는 log 09-28.
+
+## 6. 후속 R-010 — 벤더별 탭 분리·모델별 상세·플랫폼 제외·미수집 탭 제거 (2026-09-28)
+
+사용자 피드백(원문 `.git/ohmypm/requests/R-010/user-direct-exception.md`): "하나로 퉁 치지 말고
+각 모델별로", "모델별로 더 디테일하게 — 어떻게 쓰는지·하네스를 어떻게 바꿔야 하는지",
+"모델과 무관한 플랫폼·API는 왜 수집했나", "수집하지 않은 탭들은 버려". pl(Codex) 한도로
+이 세션이 직접 구현.
+
+**바뀐 것**
+- 탭(도메인)이 벤더별 둘: `models-claude`(Claude 모델 동향)·`models-codex`(Codex 모델 동향).
+  각 벤더는 자기 출처(2개씩)만 수집하고 상태 `data/model_updates/<vendor>/`·위키
+  `docs/experts/models-<vendor>.md`를 따로 갖는다. `VENDORS` 한 항목 추가로 새 벤더 확장.
+- 위키는 **모델별 절**: 개요 → 스펙(API ID·가격·컨텍스트·추론 설정·컷오프·제공 범위·은퇴) →
+  잘 쓰는 법 → 하네스 조정 → 주의 → 변화 이력(모델별 최근 12건, 초과분은 한 줄 요약).
+  라인업 전체 정책은 '라인업 공통' 절. 모델 프로필은 바뀐 모델마다 LLM 1회
+  (`prompts/model_profile.md`: 원문 발췌 + 누적 변경 기록 → 상세 JSON, 코드 검증).
+- 변경 항목 JSON에 `model`(정식 이름)·`usage_tips[]`·`harness_changes[]` 추가. 프롬프트가
+  **모델과 무관한 플랫폼·API·SDK·앱 기능은 담지 않도록** 지시하고, `model`이 빈 항목은
+  코드가 배치째 거부한다.
+- 첫 수집 90일 기준선이 영문 월 이름 날짜("September 24, 2026")를 못 읽어 릴리스 노트 전체
+  이력이 들어오던 결함 수정(`_parse_date`) — 날짜 없는 하위 절은 직전 날짜를 물려받는다.
+- 전문가 명부에서 한 번도 수집되지 않은 4개(하네스·LLM 앱·프로덕트·디자인) 제거. 명부는
+  `VENDORS`에서 자동 생성. 담당 전문가(전문가개업) 자문에는 벤더별 동향 요약을 주입.
+- 기존 단일 위키·상태는 `data/model_updates/_archive-20260928-r2/`에 보관하고 재수집.
+
+**검증**: `tests/test_model_catalog.py` 28개(snapshot/change/retry/profile/failure/vendor/inject/parse)
+통과, ruff 신규·수정 파일 0오류(기존 위반 제외). 실제 재수집 결과는 log 09-28.

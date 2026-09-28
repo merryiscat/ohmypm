@@ -179,16 +179,21 @@ def expert_consult(topic: str, wiki: str, question: str) -> str:
                   wiki=wiki or "(비어 있음 — 웹으로 조사해 답하라)", question=question)
 
 
-def model_catalog_update(vendor: str, source_key: str, source_url: str, window_note: str,
-                         related_index: str, diff_text: str) -> str:
-    """모델 동향 소스의 달라진 절 → 구조화 변경 JSON 생성 프롬프트(2026-09-28 T-007).
+def model_catalog_update(vendor_name: str, source_key: str, source_url: str, window_note: str,
+                         diff_text: str) -> str:
+    """모델 동향 소스의 달라진 절 → 모델별 변경 JSON 생성 프롬프트(2026-09-28 T-007·R-010).
 
-    LLM은 텍스트만 반환(도구 없음) — 코드가 JSON 구조·필수 필드·출처 링크를 검증한다.
+    LLM은 텍스트만 반환(도구 없음) — 코드가 JSON 구조·필수 필드·모델 이름·출처 링크를 검증한다.
     """
-    return render("model_catalog_update", vendor=vendor, source_key=source_key,
-                  source_url=source_url, window_note=window_note,
-                  related_index=related_index or "(연결할 기존 위키 항목 없음)",
-                  diff_text=diff_text) + GATE
+    return render("model_catalog_update", vendor_name=vendor_name, source_key=source_key,
+                  source_url=source_url, window_note=window_note, diff_text=diff_text) + GATE
+
+
+def model_profile(vendor_name: str, model: str, entries_text: str, overview_text: str) -> str:
+    """모델 하나의 상세 프로필(개요·스펙·잘 쓰는 법·하네스 조정·주의) JSON 생성 프롬프트(R-010)."""
+    return render("model_profile", vendor_name=vendor_name, model=model,
+                  entries_text=entries_text or "(기록 없음)",
+                  overview_text=overview_text or "(공식 문서 발췌 없음)") + GATE
 
 
 def summarize_unresolved(project_name: str, items: list[str]) -> str:
