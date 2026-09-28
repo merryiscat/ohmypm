@@ -1,8 +1,11 @@
 # T-007 모델 동향 전문가(r2) 구현
 
-- 상태: 구현 완료, 자동 검증 통과. 실 소스 4/4 수집·PL 판정은 진행 중(아래 §4)
+- 상태: 구현·자동 검증·실제 4/4 소스 수집 완료. 제출(submit) 완료, pl 판정 대기
 - 승인 spec: `.git/ohmypm/tasks/T-007/r2/spec.md` (digest 21f15cd0…9)
 - 작성: work, 2026-09-28
+- pl 역할 대행: pl(Codex)이 사용량 한도로 막혀, 사용자 지시로 main 세션(term_a8d11c0f…)이
+  코드 검토·기준별 검증·verdict를 대행한다(`.git/ohmypm/tasks/T-007/r2/user-pl-exception-decision.md`).
+  이 work는 그 세션의 검증을 기다리지 않고 submit까지 마친다.
 
 ## 1. 구현 요약
 
@@ -34,8 +37,8 @@ CLI/API/collect_all 쓰기를 직렬화한다.
 | C2 | 통과(대역+실제) | `TestChange` + 실제: claude-models 실제 수집·실제 LLM 1회로 5건 생성, 출처·asserted 태그 포함(§4) |
 | C3 | 통과 | `TestRetry` — fetch-only→실행, LLM 실패→재시도, 동일자 복수 변경, 24,000자 분할 2회 호출 모두 누락/중복 없음 |
 | C4 | 통과 | `TestFailure` — 네트워크/추출/빈 본문 오류, 동시 실행(스레드 4개) state.json 무결성, 위키 쓰기 중단 시뮬레이션에서 원본 보존 |
-| C5 | 부분(실제 진행 중) | 실제 4소스 중 3개 반영 완료(§4), claude-releases는 첫 호출 LLM 검증 실패로 미반영(재시도 대상) — PL 원문 대조 필요 |
-| C6 | 미완(PL) | 독립 포트(64103)에서 서버 기동, `/api/experts`에 models 노출, 실제 질문 1건 실답 확인(§4) — 브라우저 검수는 PL 몫 |
+| C5 | 통과(실제) | 실제 4/4 소스 모두 반영 완료(§4) — 최근 변화 20건, 전부 출처 링크·asserted/inferred/none 태그 포함. 원문 대조는 pl 몫 |
+| C6 | 통과(실제, 브라우저 제외) | 독립 포트(64103)에서 서버 기동, `/api/experts`에 models 노출, 실제 질문 1건 실답 확인(§4) — 실제 브라우저 클릭 검수만 pl 몫 |
 | C7 | 통과 | `TestInject` — 상태 없으면 프롬프트 불변, 있으면 harness/llm-apps 수집·자문 입력에 확인시각+변경요약 주입, models 자신은 미주입 |
 | C8 | 통과 | `uv run --no-sync pytest -q` 78 passed(기존 56+신규 22). ruff — 이 작업이 건드린 파일은 0 오류(저장소 기존 위반 246건은 무관 파일, 손대지 않음). 새 의존성 없음(httpx 기존) |
 
@@ -54,17 +57,19 @@ CLI/API/collect_all 쓰기를 직렬화한다.
   출처 링크 `https://platform.claude.com/docs/en/models/overview.md` 정확. `docs/experts/models.md`에
   반영 확인.
 - `--source codex-models` 실제 LLM 실행 — 6건 생성, 반영 확인.
-- `--source claude-releases` 실제 실행 — 90일 기준선 필터 후 청크 처리 중 한 청크가 LLM 검증
-  실패(`llm_failed`) → 코드가 반영을 보류하고 기존 위키 보존(설계대로 동작, 재실행 시 같은 diff
-  재시도). codex-changelog는 이번 세션에서 실제 LLM 반영 전 단계에서 중단(사용량 한도).
+- `--source claude-releases` 첫 실행은 90일 기준선 필터 후 청크 처리 중 한 청크가 LLM 검증
+  실패(`llm_failed`) → 코드가 반영을 보류하고 기존 위키 보존(설계대로 동작). **재실행**(코드
+  변경 없이 동일 명령 재호출)에서 같은 diff를 재시도해 성공 — 재시도 안전성(C3)이 실제
+  사례로도 확인됐다.
+- `--source codex-changelog` 실제 LLM 실행 — 90일 필터로 청크 1개까지 줄어 1회 호출로 반영 완료.
+- 4/4 소스 반영 후 `--fetch-only` 재실행 — 전부 `changed=False, llm_called=False`(불필요한 LLM
+  호출 없음, C1 실제 확인). 최종 `docs/experts/models.md` 44,472자, 최근 변화 20건.
 - 독립 검증 서버(127.0.0.1:64103, 운영 8123 미교체)에서 `/api/experts`에 `models` 도메인 노출,
   `/api/experts/models/wiki` 실제 내용 확인, `/api/experts/models/ask`에 실제 질문
   "Claude Opus 5.5의 기본 effort는 뭐야?" → 위키 근거 기반 정답("medium", 출처 링크 포함) 확인.
 
 ## 5. 남은 일
 
-- claude-releases 재시도(같은 diff 재실행)와 codex-changelog 첫 실행을 마쳐 4/4 실제 반영 완료.
-- PL 원문 대조(C5)·브라우저 확인(C6) — commit/base/revision/digest에 묶은 최종 판정.
-- 위 재시도는 코드 변경 없이 `scripts/collect_models.py`(또는 `collect_all_sources()`) 재실행만
-  필요 — 현재 구현이 재시도 안전(idempotent)함을 자동 테스트(C3)와 실제 claude-releases
-  `llm_failed` 사례 둘 다로 확인했다.
+- pl(대행 main 세션)의 실제 원문 대조(C5)와 브라우저 클릭 검수(C6), commit/base/revision/digest에
+  묶은 최종 verdict.
+- 그 외 구현·자동 검증·실제 4/4 수집은 이 문서 기준 완료.
