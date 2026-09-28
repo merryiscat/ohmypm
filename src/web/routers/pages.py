@@ -309,7 +309,22 @@ const escAttr = s => esc(s).replace(/"/g,'&quot;').replace(/'/g,'&#39;');
 // 가벼운 마크다운 렌더 — 에이전트 답에 ## 제목·**굵게**·- 목록·`코드`가 섞여 온다(외부 lib 없이)
 function md(src){
   const e = s => s.replace(/[&<>]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));
-  const inl = s => e(s).replace(/`([^`]+)`/g,'<code>$1</code>').replace(/\*\*([^*]+?)\*\*/g,'<strong>$1</strong>');
+  // 안전한 링크만 렌더 — 외부 https:// 또는 내부 전문가 페이지(#/experts/...)만 <a>로. 그 외
+  // (javascript: · 임의 파일 경로 등)는 표시 텍스트만 남기고 걷어낸다(T-007, 모델동향 출처 링크용).
+  const inl = s => {
+    const links = [];
+    let t = (s||'').replace(/\[([^\]]+)\]\(([^)\s]+)\)/g, (m, text, href) => {
+      const safe = /^https:\/\//.test(href) || /^#\/experts(\/|$)/.test(href);
+      if (!safe) return text;
+      const ext = href.startsWith('https://');
+      const rel = ext ? ' target="_blank" rel="noopener noreferrer"' : '';
+      links.push(`<a href="${href.replace(/"/g,'%22')}"${rel}>${e(text)}</a>`);
+      return `\u0000${links.length - 1}\u0000`;
+    });
+    t = e(t).replace(/`([^`]+)`/g,'<code>$1</code>')
+            .replace(/\*\*([^*]+?)\*\*/g,'<strong>$1</strong>');
+    return t.replace(/\u0000(\d+)\u0000/g, (m, i) => links[Number(i)]);
+  };
   const out=[]; let list=false;
   const close=()=>{ if(list){ out.push('</ul>'); list=false; } };
   for(const raw of (src||'').split('\n')){

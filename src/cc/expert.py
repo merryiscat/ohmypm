@@ -41,7 +41,17 @@ EXPERTS: dict[str, dict] = {
                  "티 나는 디자인을 피하는 구체적 기법**(획일적 보라 그라데이션·카드 남발·기본 "
                  "템플릿 룩·과한 장식을 벗어나 사람 손맛 나는 화면 만들기)",
     },
+    # 모델 동향 — 웹 자율 조사가 아니라 공식 출처 4개를 코드가 직접 수집(model_catalog.py).
+    # "웹으로 지식 수집" 버튼도 이 도메인에선 그 수집기를 대신 부른다(T-007 r2).
+    "models": {
+        "name": "모델 동향 전문가",
+        "topic": "Claude·Codex 공식 문서 기반 최신 모델·하네스 변화 추적 — 발표/릴리스 문서에서 "
+                 "실제 달라진 점만 근거 링크와 함께 정리하고 하네스(프롬프트·추론설정·컨텍스트관리·"
+                 "도구사용)에 대한 적용 제안을 asserted/inferred로 구분한다",
+    },
 }
+
+MODELS_DOMAIN = "models"
 
 _NEUTRAL: str | None = None
 
@@ -66,6 +76,30 @@ def expert_room(domain: str) -> str:
     return f"expert::{domain}"
 
 
+def _model_trend_brief() -> str:
+    """모델동향(models) 위키 요약 — 다른 전문가 수집/자문 입력에 주입(T-007 C7).
+
+    상태가 아직 없으면 빈 문자열 → 기존 프롬프트가 그대로 나가 기존 기능이 안 깨진다.
+    """
+    try:
+        from src.cc.model_catalog import trend_brief
+
+        return trend_brief()
+    except Exception as e:  # 모델동향 쪽 오류가 다른 전문가 수집/자문을 막지 않는다
+        logger.warning(f"[전문가] 모델동향 요약 주입 실패(무시): {e}")
+        return ""
+
+
+def _with_trend_brief(domain: str, existing: str) -> str:
+    if domain == MODELS_DOMAIN:
+        return existing
+    brief = _model_trend_brief()
+    if not brief:
+        return existing
+    block = f"[최신 모델 동향 요약]\n{brief}"
+    return f"{block}\n\n{existing}" if existing else block
+
+
 def collect_knowledge(domain: str) -> dict:
     """전문가가 웹으로 최신 지식을 조사해 위키를 갱신(코드가 파일 기록)."""
     e = EXPERTS.get(domain)
@@ -73,7 +107,7 @@ def collect_knowledge(domain: str) -> dict:
         return {"ok": False, "error": "unknown expert"}
     allowed, disallowed = tools_for("expert")
     out = run_headless(
-        prompt=expert_collect(e["topic"], read_wiki(domain)),
+        prompt=expert_collect(e["topic"], _with_trend_brief(domain, read_wiki(domain))),
         cwd=_neutral(),
         allowed_tools=allowed, disallowed_tools=disallowed,
         timeout=EXPERT_TIMEOUT, append_system_prompt=EXPERT_SYSTEM,
@@ -96,7 +130,7 @@ def consult(domain: str, question: str) -> str:
         return ""
     allowed, disallowed = tools_for("expert")
     out = run_headless(
-        prompt=expert_consult(e["topic"], read_wiki(domain), question),
+        prompt=expert_consult(e["topic"], _with_trend_brief(domain, read_wiki(domain)), question),
         cwd=_neutral(),
         allowed_tools=allowed, disallowed_tools=disallowed,
         timeout=EXPERT_TIMEOUT, append_system_prompt=EXPERT_SYSTEM,
@@ -151,13 +185,26 @@ def consult_agent_expert(project_path: str, question: str) -> str:
 
 
 def collect_all() -> dict:
-    """전 도메인 위키를 순차 수집·갱신(정기 cron용). 갱신 도메인 수 반환."""
+    """전 도메인 위키를 순차 수집·갱신(정기 cron용). 갱신 도메인 수 반환.
+
+    모델 동향(models)을 먼저 코드 수집기로 갱신한 다음 나머지 도메인을 수집해, 같은 실행에서
+    harness·llm-apps 등이 최신 모델 동향 요약을 참조하게 한다(T-007 C7).
+    """
     updated = 0
-    for domain in EXPERTS:
+    try:
+        from src.cc.model_catalog import collect_all_sources
+
+        if collect_all_sources().get("ok"):
+            updated += 1
+    except Exception as e:
+        logger.warning(f"[전문가] 모델동향 정기수집 실패: {e}")
+    domains = [d for d in EXPERTS if d != MODELS_DOMAIN]
+    for domain in domains:
         try:
             if collect_knowledge(domain).get("ok"):
                 updated += 1
         except Exception as e:  # 한 도메인 실패가 나머지를 안 멈춤
             logger.warning(f"[전문가] {domain} 정기수집 실패: {e}")
-    logger.info(f"[전문가] 정기수집 — {updated}/{len(EXPERTS)} 도메인 갱신")
-    return {"updated": updated, "total": len(EXPERTS)}
+    total = len(domains) + 1
+    logger.info(f"[전문가] 정기수집 — {updated}/{total} 도메인 갱신")
+    return {"updated": updated, "total": total}

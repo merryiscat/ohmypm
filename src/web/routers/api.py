@@ -333,12 +333,17 @@ def get_expert_wiki(domain: str) -> dict:
 
 @router.post("/experts/{domain}/collect")
 def collect_expert(domain: str, background: BackgroundTasks) -> dict:
-    """전문가가 웹으로 최신 지식을 수집해 위키 갱신(백그라운드)."""
-    from src.cc.expert import EXPERTS, collect_knowledge
+    """전문가 수집(백그라운드). models 도메인은 공식 출처 4개 코드 수집기를 대신 부른다(T-007)."""
+    from src.cc.expert import EXPERTS, MODELS_DOMAIN, collect_knowledge
 
     if domain not in EXPERTS:
         return {"ok": False, "error": "unknown expert"}
-    background.add_task(collect_knowledge, domain)
+    if domain == MODELS_DOMAIN:
+        from src.cc.model_catalog import collect_all_sources
+
+        background.add_task(collect_all_sources)
+    else:
+        background.add_task(collect_knowledge, domain)
     return {"ok": True, "started": True}
 
 
