@@ -75,7 +75,7 @@ def consult(domain: str, question: str) -> str:
     if not e:
         return ""
     allowed, disallowed = tools_for("expert")
-    out = run_headless(
+    out = run_headless(task="expert_consult",
         prompt=expert_consult(e["topic"], read_wiki(domain), question),
         cwd=_neutral(),
         allowed_tools=allowed, disallowed_tools=disallowed,
@@ -124,7 +124,7 @@ def consult_agent_expert(project_path: str, question: str) -> str:
     brief = _model_trend_brief()
     if brief:
         wiki = f"[최신 모델 동향 요약]\n{brief}\n\n{wiki}"
-    return (run_headless(
+    return (run_headless(task="agent_expert",
         prompt=expert_consult(topic, wiki, question),
         cwd=_neutral_cwd(),
         allowed_tools=allowed, disallowed_tools=disallowed,

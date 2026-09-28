@@ -30,6 +30,15 @@ class Settings(BaseSettings):
     # --- Claude Code headless ---
     # 판단·작업을 claude -p 로 호출할 때 쓰는 실행 파일. PATH에 있으면 "claude"
     cc_bin: str = "claude"
+    # 작업 등급별 모델(2026-09-28 사용자 결정: 작업 수준·난이도에 따른 모델 매칭은 필수).
+    # 모든 헤드리스 호출은 src/cc/models.py의 작업→등급 표를 거쳐 --model을 명시한다 —
+    # 개인 CLI 기본 모델(이 PC는 Fable)에 조용히 기대지 않는다. 사고: 수집기가 모델을 안 정해
+    # 정형 JSON 추출 40여 회를 Fable로 돌렸다(한 호출 $0.36).
+    model_light: str = "haiku"      # 분류·반응·택1 같은 짧고 정형인 일
+    model_standard: str = "sonnet"  # 요약·검토·대화·정형 추출
+    model_heavy: str = "opus"       # 종합·설계 수준의 글쓰기
+    # Fable·Mythos 같은 최상위 모델은 헤드리스에서 기본 금지 — 명시적으로 켜야만 쓴다
+    allow_frontier_headless: bool = False
 
     # --- 스케줄 ---
     # False면 서버가 cron을 아예 걸지 않는다 — 스캔·일간보고·게시판은 대시보드/API로 수동 실행.

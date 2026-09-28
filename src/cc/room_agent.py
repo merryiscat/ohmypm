@@ -43,7 +43,7 @@ def reply_in_room(project_path: str, name: str) -> None:
     hist_txt = "\n".join(f"{m['author']}: {m['body']}" for m in history)
     prompt = room_chat(name, project_path, hist_txt)
     allowed, disallowed = tools_for("room_chat")
-    result = run_headless(
+    result = run_headless(task="room_chat",
         prompt=prompt,
         cwd=_neutral_cwd(),           # 중립 cwd — 대상 훅·CLAUDE.md 격리
         allowed_tools=allowed,

@@ -23,7 +23,7 @@ REWARD_TIMEOUT = 120
 
 def _ask(prompt: str) -> dict:
     allowed, disallowed = tools_for("daily_pm")   # 읽기 전용
-    r = run_headless(
+    r = run_headless(task="reward",
         prompt=prompt, cwd=_neutral_cwd(),
         allowed_tools=allowed, disallowed_tools=disallowed,
         timeout=REWARD_TIMEOUT, append_system_prompt=REWARD_SYSTEM,

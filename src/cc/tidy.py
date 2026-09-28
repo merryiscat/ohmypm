@@ -78,7 +78,7 @@ def tidy_one(path: str, name: str, date: str) -> dict:
 
     allowed, disallowed = tools_for("reprocess")   # Read/Grep/Glob/Edit/Write — Bash 없음
     before = _dirty_files(path)
-    out = run_headless(
+    out = run_headless(task="tidy",
         prompt=tidy_docs(name, path, collect_facts(path, since)),
         cwd=path,
         allowed_tools=allowed,

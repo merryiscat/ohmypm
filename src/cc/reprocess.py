@@ -184,7 +184,7 @@ def reprocess_one(path: str, name: str, posts: list[dict], date: str) -> dict:
     allowed, disallowed = tools_for("reprocess")
 
     before = _dirty_files(path)   # 실행 전 스냅샷 — 사용자 WIP와 에이전트 변경을 구분
-    out = run_headless(
+    out = run_headless(task="reprocess",
         prompt=reprocess_docs(name, path, material),
         cwd=path,
         allowed_tools=allowed,

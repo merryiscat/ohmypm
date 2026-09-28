@@ -53,16 +53,21 @@ def _llm_calls(monkeypatch, responses, profile=PROFILE_OK):
     calls = []
     change_idx = [0]
 
-    def fake_run_headless(prompt, cwd, allowed_tools, disallowed_tools, timeout=300, **kw):
+    def fake_run_headless_ex(prompt, cwd, allowed_tools, disallowed_tools, timeout=300, *,
+                             task, **kw):
+        assert task in ("model_catalog_extract", "model_catalog_profile")
         if "상세 프로필" in prompt:
+            assert task == "model_catalog_profile"
             calls.append(("profile", prompt))
-            return profile
+            return {"result": profile, "model": "fake-heavy", "cost_usd": 0.02, "output_tokens": 1}
+        assert task == "model_catalog_extract"
         calls.append(("change", prompt))
         i = change_idx[0]
         change_idx[0] += 1
-        return responses[i] if i < len(responses) else responses[-1]
+        text = responses[i] if i < len(responses) else responses[-1]
+        return {"result": text, "model": "fake-standard", "cost_usd": 0.01, "output_tokens": 1}
 
-    monkeypatch.setattr(mc, "run_headless", fake_run_headless)
+    monkeypatch.setattr(mc, "run_headless_ex", fake_run_headless_ex)
     return calls
 
 

@@ -113,7 +113,7 @@ def audit_one(path: str, name: str, date: str) -> dict:
     # 처음 세팅이면 에이전트가 docs를 만들기 **전에** .gitignore부터 막는다(커밋에 섞이지 않게)
     docs_ignore = _ensure_docs_ignored(path) if _is_first_setup(path) else None
 
-    report = run_headless(
+    report = run_headless(task="harness_audit",
         prompt=harness_audit_prompt(name, path, BASELINE_NOTE, meta_block(path)),
         cwd=_neutral_cwd(),
         add_dirs=[path],

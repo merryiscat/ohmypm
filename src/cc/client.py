@@ -108,15 +108,45 @@ def run_headless(
     append_system_prompt: str | None = None,
     add_dirs: list[str] | None = None,
     model: str | None = None,
+    *,
+    task: str,
 ) -> str | None:
-    """claude -p 실행 → 최종 텍스트(result) 반환. 실패는 None.
+    """claude -p 실행 → 최종 텍스트(result) 반환. 실패는 None. 모델·비용은 run_headless_ex 참조."""
+    return run_headless_ex(
+        prompt, cwd, allowed_tools, disallowed_tools, permission_mode=permission_mode,
+        timeout=timeout, append_system_prompt=append_system_prompt, add_dirs=add_dirs,
+        model=model, task=task,
+    )["result"]
 
+
+def run_headless_ex(
+    prompt: str,
+    cwd: str,
+    allowed_tools: list[str],
+    disallowed_tools: list[str],
+    permission_mode: str = "default",
+    timeout: int = 300,
+    append_system_prompt: str | None = None,
+    add_dirs: list[str] | None = None,
+    model: str | None = None,
+    *,
+    task: str,
+) -> dict:
+    """claude -p 실행 → {"result": 텍스트|None, "model": 실제 쓴 모델, "cost_usd", "output_tokens"}.
+
+    ★ task는 필수 — src/cc/models.py 표에서 등급→모델을 정하고 **항상 --model을 명시**한다.
+      개인 CLI 기본 모델(이 PC는 Fable)에 기대지 않는다(2026-09-28 사고). model 인자는 담당별
+      지정 같은 명시적 override이며, 그것도 최상위 모델 금지 규칙을 거친다.
     ★ 프롬프트는 argv가 아니라 stdin으로 넘긴다 — Windows claude.CMD→cmd.exe가 특수문자(·→—"[]{})
       투성이 대형 프롬프트를 argv로 받으면 뭉갠다(후보 리스트·경로가 잘려 판정 불가). stdin은 무손실.
     ★ append_system_prompt로 대상 프로젝트 CLAUDE.md의 대화체 지시를 덮어쓴다(구조화 출력 강제).
     ★ 판정(읽기)은 중립 cwd + add_dirs로 대상을 '읽기만' — cwd=대상 프로젝트로 두면 그 프로젝트
       SessionStart 훅이 실행되고 CLAUDE.md 대화체가 JSON 출력을 깨므로. (편집 태스크는 cwd=대상 유지)
     """
+    from src.cc.models import resolve_model
+
+    model = resolve_model(task, model)
+    meta = {"result": None, "model": model, "cost_usd": 0.0, "output_tokens": 0, "task": task}
     cmd = [
         _resolve_bin(),
         "-p",
@@ -124,9 +154,9 @@ def run_headless(
         "json",
         "--permission-mode",
         permission_mode,
+        "--model",
+        model,
     ]
-    if model:
-        cmd += ["--model", model]   # 담당별 모델(opus/sonnet/haiku). 없으면 구독 기본
     if append_system_prompt:
         # ★ argv로 가는 시스템 프롬프트에서 개행 제거 — Windows claude.CMD→cmd.exe 재파싱이
         #   개행 뒤 인자(--add-dir 등)를 잘라먹는다(09-06 실증: 담당이 폴더를 못 열음).
@@ -162,13 +192,27 @@ def run_headless(
             full = (r.stdout or "") + (r.stderr or "")
             _capture_limit(full)   # 한도 429면 리셋 시각을 기억 — 야간 배치가 재개에 쓴다
             detail = ((r.stderr or "").strip() or (r.stdout or "").strip())[:300]
-            logger.warning(f"[headless] 종료코드 {r.returncode}: {detail}")
+            logger.warning(f"[headless] task={task} model={model} 종료코드 {r.returncode}: "
+                           f"{detail}")
             _count(False)
-            return None
+            return meta
         data = json.loads(r.stdout)
         _count(True, data)
-        return data.get("result")
+        meta["result"] = data.get("result")
+        try:
+            meta["cost_usd"] = float(data.get("total_cost_usd") or 0)
+            meta["output_tokens"] = int((data.get("usage") or {}).get("output_tokens") or 0)
+        except (TypeError, ValueError):
+            pass
+        # 실제로 쓴 모델(CLI가 별칭을 풀어 준다) — 요청과 다르면 정책 위반이니 눈에 띄게 남긴다
+        used = list((data.get("modelUsage") or {}).keys())
+        if used:
+            meta["model"] = used[0] if len(used) == 1 else ",".join(used)
+        # 한 줄 회계 — 어떤 작업이 어떤 모델로 얼마를 썼는지 매 호출 남긴다(09-28 Fable 사고 항체)
+        logger.info(f"[headless] task={task} model={meta['model']} cost=${meta['cost_usd']:.4f} "
+                    f"out_tokens={meta['output_tokens']}")
+        return meta
     except Exception as e:
-        logger.warning(f"[headless] 호출 실패: {e}")
+        logger.warning(f"[headless] task={task} model={model} 호출 실패: {e}")
         _count(False)
-        return None
+        return meta

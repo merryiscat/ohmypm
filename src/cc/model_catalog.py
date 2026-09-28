@@ -28,7 +28,7 @@ from pathlib import Path
 import httpx
 from loguru import logger
 
-from src.cc.client import run_headless
+from src.cc.client import run_headless_ex
 from src.cc.permissions import NEVER_ALLOW
 from src.cc.prompts import model_catalog_update, model_profile
 
@@ -576,14 +576,17 @@ def _entries_text(state: dict, model: str) -> str:
 def _refresh_profiles(state: dict, models: set[str]) -> dict:
     """바뀐 모델의 프로필을 LLM으로 다시 쓴다. 실패한 모델은 이전 프로필을 유지(없으면 비움)."""
     vendor = state["vendor"]
-    result = {"ok": 0, "failed": []}
+    result = {"ok": 0, "failed": [], "cost_usd": 0.0, "model": None}
     for model in sorted(models):
-        raw = run_headless(
+        meta = run_headless_ex(
             prompt=model_profile(VENDORS[vendor]["name"], model,
                                  _entries_text(state, model), _overview_excerpt(vendor, model)),
             cwd=_neutral_cwd(), allowed_tools=[], disallowed_tools=NEVER_ALLOW,
-            timeout=MODEL_CATALOG_TIMEOUT,
+            timeout=MODEL_CATALOG_TIMEOUT, task="model_catalog_profile",
         )
+        raw = meta["result"]
+        result["cost_usd"] += meta["cost_usd"]
+        result["model"] = meta["model"]
         prof = _parse_profile(raw)
         if prof is None:
             _atomic_write(vendor_dir(vendor) / f"profile-failed-{_hash(model)[:8]}.txt",
@@ -593,6 +596,7 @@ def _refresh_profiles(state: dict, models: set[str]) -> dict:
             continue
         prof["updated_at"] = _now_iso()
         prof["entry_count"] = sum(1 for c in state["changes"] if c["model"] == model)
+        prof["llm_model"], prof["cost_usd"] = meta["model"], round(meta["cost_usd"], 4)
         state["profiles"][model] = prof
         result["ok"] += 1
     return result
@@ -636,7 +640,9 @@ def _render_wiki(state: dict) -> str:
                 lines += ["", "### 주의"] + [f"- {g}" for g in prof["gotchas"]]
             lines.append("")
             srcs = " · ".join(f"[{s}]({s})" for s in prof["sources"])
-            lines.append(f"프로필 갱신: {prof.get('updated_at', '?')}" +
+            cost = (f" · {prof['llm_model']} ${prof['cost_usd']:.2f}"
+                    if prof.get("llm_model") else "")
+            lines.append(f"프로필 갱신: {prof.get('updated_at', '?')}{cost}" +
                          (f" · 근거: {srcs}" if srcs else ""))
         else:
             lines.append("(상세 프로필 미생성 — 다음 수집에서 다시 시도)")
@@ -665,8 +671,16 @@ def _render_wiki(state: dict) -> str:
         status = src.get("last_status") or "미수집"
         lines.append(f"  - 최종 확인: {checked} ({status})")
         lines.append(f"  - 최종 반영: {src.get('applied_at') or '없음'}")
+        if src.get("last_llm_model"):
+            lines.append(f"  - 최근 추출 LLM: {src['last_llm_model']} "
+                         f"(${src.get('last_llm_cost_usd', 0):.2f})")
         if src.get("last_error"):
             lines.append(f"  - 마지막 오류: {src['last_error']}")
+    prof_cost = sum(p.get("cost_usd", 0) for p in state["profiles"].values())
+    prof_models = sorted({p["llm_model"] for p in state["profiles"].values() if p.get("llm_model")})
+    if state["profiles"]:
+        lines.append(f"- 모델 프로필 {len(state['profiles'])}개 — "
+                     f"LLM {', '.join(prof_models) or '?'} · 누적 ${prof_cost:.2f}")
     return "\n".join(lines) + "\n"
 
 
@@ -765,14 +779,20 @@ def collect_source(key: str, fetch_only: bool = False, profiles: bool = True) ->
         chunks = _chunk_sections(sections) if sections else []
         all_changes: list[dict] = []
         llm_calls = 0
+        llm_cost = 0.0
+        llm_model = None
         for chunk in chunks:
             llm_calls += 1
-            raw = run_headless(
+            meta = run_headless_ex(
                 prompt=model_catalog_update(VENDORS[vendor]["name"], key, srec["final_url"],
                                              window_note, chunk),
                 cwd=_neutral_cwd(), allowed_tools=[], disallowed_tools=NEVER_ALLOW,
-                timeout=MODEL_CATALOG_TIMEOUT,
+                timeout=MODEL_CATALOG_TIMEOUT, task="model_catalog_extract",
             )
+            raw = meta["result"]
+            llm_cost += meta["cost_usd"]
+            llm_model = meta["model"]
+            srec["last_llm_model"], srec["last_llm_cost_usd"] = llm_model, round(llm_cost, 4)
             parsed = _parse_llm_changes(raw)
             if parsed is None:
                 # 실패 원문을 남겨 다음에 원인을 볼 수 있게(형식 위반인지, 빈 응답인지)
@@ -790,17 +810,20 @@ def collect_source(key: str, fetch_only: bool = False, profiles: bool = True) ->
         _save_state(state)
         _write_wiki_from_state(state)
 
-        prof = {"ok": 0, "failed": []}
+        prof = {"ok": 0, "failed": [], "cost_usd": 0.0, "model": None}
         if profiles and touched:
             prof = _refresh_profiles(state, touched)
             llm_calls += len(touched)
             _save_state(state)
             _write_wiki_from_state(state)
+        total_cost = round(llm_cost + prof["cost_usd"], 4)
         logger.info(f"[모델동향] {key} 반영 — 변경 {len(all_changes)}건, "
-                    f"모델 {len(touched)}개 프로필, LLM 호출 {llm_calls}회")
+                    f"모델 {len(touched)}개 프로필, LLM 호출 {llm_calls}회, "
+                    f"추출={llm_model} 프로필={prof['model']} 비용=${total_cost:.4f}")
         return {"ok": True, "changed": True, "llm_called": llm_calls > 0,
                 "changes": len(all_changes), "models": sorted(touched),
-                "profiles_failed": prof["failed"]}
+                "profiles_failed": prof["failed"], "llm_model": llm_model,
+                "profile_model": prof["model"], "cost_usd": total_cost}
 
 
 def refresh_profiles(vendor: str, models: set[str] | None = None) -> dict:
