@@ -16,7 +16,7 @@ from pathlib import Path
 from workflow_core import WorkflowError, digest, git, read_json, require, safe_id, write_json
 
 SCHEMA = 2
-VERSION = "2.0.0"
+VERSION = "2.0.1"
 
 
 @contextlib.contextmanager

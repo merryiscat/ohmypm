@@ -32,6 +32,15 @@ valid verdicts. Continue approved work, but do not merge without pl's verdict.
 Never replace pl's judgement with main's. Existing sessions need explicit context
 reconnection; an installed plugin or successful doctor is not proof of delivery.
 
+All roles, when speaking to the user: use plain descriptive language. Do not
+refer to things by internal shorthand codes — revision numbers (r2, r3), task
+IDs (T-007), request/message IDs (R-008, Q-002), Orca handles, or role names
+(main, pl, work) — as the way the user is expected to understand them. Say
+"the design now being implemented", "the next design that adds the Jev source",
+"the design-and-review role (Codex)". Codes belong in state files and records;
+if one is needed in conversation, put it once in parentheses after the plain
+description. (User instruction, 2026-09-28: "r2, r3 이라고 하면 내가 못알아먹어".)
+
 If project rules conflict with this context, preserve both and report the conflict.
 No repository instruction blocks, hooks or tracked config are installed by these
 commands. Push, deployment and migration of other projects require separate scope.

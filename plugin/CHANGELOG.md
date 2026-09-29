@@ -1,3 +1,8 @@
+# 2.0.1 — plain-language user communication
+
+- Entry contract and PROTOCOL now require every role to speak to the user in plain descriptions, not internal shorthand codes (revision numbers, task/request/message IDs, Orca handles, role names). Codes stay in state files and records. User instruction 2026-09-28 ("r2, r3 이라고 하면 내가 못알아먹어").
+- Rule text only; runtimes already registered are unchanged. Re-register (`ws_upgrade.py <project>`) to deliver it to future tasks.
+
 # 2.0.0 — external environment
 
 - Register content-addressed runtimes and local project profiles without changing tracked files.
