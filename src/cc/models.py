@@ -35,6 +35,8 @@ TASK_TIER: dict[str, str] = {
     "harness_audit": "standard",
     "reprocess": "standard",
     "tidy": "standard",
+    # 주간보고 — 커밋 팩트를 종합해 한 장 보고(종합 글쓰기라 heavy)
+    "weekly_report": "heavy",
     # 전문가
     "expert_consult": "standard",
     "agent_expert": "standard",
