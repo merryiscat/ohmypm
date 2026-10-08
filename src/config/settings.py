@@ -4,6 +4,7 @@
 """
 
 import sys
+from pathlib import Path
 
 from loguru import logger
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -47,12 +48,11 @@ class Settings(BaseSettings):
     model_track_codex: str = "GPT-6 Astra,GPT-6 Sol,GPT-6 Luna"
 
     # --- 스케줄 ---
-    # False면 서버가 cron을 아예 걸지 않는다 — 스캔·일간보고·게시판은 대시보드/API로 수동 실행.
-    # 폴더로만 관리하는 프로젝트가 많고 인터넷이 제한적인 PC용(2026-09-15 사용자 확정)
+    # False면 서버가 cron을 아예 걸지 않는다. 2026-10-07 사용자 결정으로 자동 스캔(8시)과
+    # 새벽 일간보고 배치는 제거됨 — 정시 배치는 전문가수집(주 1회)만 남았고,
+    # 스캔·일간보고는 대시보드에서 수동 실행한다.
     scheduler_enabled: bool = True
-    scan_hour: int = 8       # 매일 정시 스캔 시각(24시간)
-    # 일간보고(멀티에이전트) — 03:00 시작(사용량 리셋 직후, 01시는 리셋 전이라 한도로 전량실패했음
-    # 2026-09-01), 보고 소프트마감 05:00, 게시판 토론 마감 06:00
+    # 아래 시각들은 일간보고를 수동 실행할 때 내부 마감 계산에 쓰인다(src/cc/daily_report.py)
     daily_report_hour: int = 3
     daily_soft_deadline_hour: int = 5
     discussion_until_hour: int = 6
@@ -76,6 +76,52 @@ class Settings(BaseSettings):
 
 # 전역 설정 인스턴스
 settings = Settings()
+
+# ohmyPM 저장소 루트 — 이 파일(src/config/settings.py)에서 두 단계 위 폴더.
+# .env를 어디에 만들지 정할 때 쓴다 (경로 하드코딩 금지 원칙).
+REPO_ROOT = Path(__file__).resolve().parents[2]
+
+
+def ensure_env() -> bool:
+    """.env가 없으면 기본값으로 만들어 준다. 새로 만들었으면 True를 돌려준다.
+
+    배경(2026-10-07 사용자 결정): .env가 없으면 스캔이 아무 경고 화면 없이
+    "프로젝트 0개"로 끝나는 사고가 있었다. 그래서 스캔이 시작될 때마다 이 함수가
+    먼저 .env가 있는지 확인하고, 없으면 ohmyPM 저장소 위치를 기준으로 기본
+    .env를 만들어 바로 쓸 수 있게 한다.
+
+    기본 관리 루트(PROJECTS_ROOT)를 정하는 방법:
+    - ohmyPM 저장소의 부모 폴더 아래에 'projects' 폴더가 있으면 그것을 쓴다
+      (이 PC의 실제 배치: orca/ohmypm 옆에 orca/projects가 있다).
+    - 없으면 부모 폴더 자체를 쓴다.
+    """
+    env_path = REPO_ROOT / ".env"
+    if env_path.exists():
+        return False  # 이미 있으면 손대지 않는다
+
+    # 기본 관리 루트 결정
+    parent = REPO_ROOT.parent
+    candidate = parent / "projects"
+    default_root = candidate if candidate.is_dir() else parent
+
+    # .env.example을 바탕으로 내용을 만든다 — PROJECTS_ROOT 줄만 기본값으로 채우고
+    # 나머지 항목(모델 등급, 스케줄 등)은 예시 그대로 둔다.
+    example = REPO_ROOT / ".env.example"
+    if example.exists():
+        lines = example.read_text(encoding="utf-8").splitlines()
+        content = "\n".join(
+            f"PROJECTS_ROOT={default_root}" if line.startswith("PROJECTS_ROOT=") else line
+            for line in lines
+        ) + "\n"
+    else:
+        content = f"PROJECTS_ROOT={default_root}\n"
+
+    env_path.write_text(content, encoding="utf-8")
+    # 이미 떠 있는 서버에도 바로 반영한다 — .env 파일은 프로그램 시작 때 한 번만
+    # 읽히므로, 파일만 만들면 재시작 전까지 설정이 빈 값 그대로 남기 때문이다.
+    settings.projects_root = str(default_root)
+    logger.warning(f"[설정] .env가 없어 기본값으로 새로 생성 — 관리 루트: {default_root}")
+    return True
 
 # 로깅 설정 (loguru) — 콘솔 + logs/ 일별 파일
 logger.remove()

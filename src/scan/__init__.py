@@ -6,16 +6,20 @@
 
 from loguru import logger
 
+from src.config.settings import ensure_env
 from src.db import issues as issues_db
 from src.scan.discover import discover_projects
 from src.scan.llmwiki import parse_wiki
 
 
 def run_scan() -> dict:
-    """전체 스캔: 프로젝트 발견 → 각 위키 파싱 → 이슈 적재. 요약 통계 반환.
+    """전체 스캔: .env 확인 → 프로젝트 발견 → 각 위키 파싱 → 이슈 적재. 요약 통계 반환.
 
     한 프로젝트 실패가 배치 전체를 멈추지 않게 per-project try/except.
     """
+    # .env가 없으면 ohmyPM 위치 기준 기본값으로 만들고 진행한다(2026-10-07 사용자 결정 —
+    # .env 부재로 스캔이 조용히 0건으로 끝났던 사고의 항체)
+    ensure_env()
     projects = discover_projects()
     total_issues = 0
     total_stale = 0
