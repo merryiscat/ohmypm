@@ -277,7 +277,7 @@ _HTML = r"""<!doctype html>
     <nav>
       <div class="nav-item" data-nav="dashboard" onclick="go('#/dashboard')">대시보드</div>
       <div class="nav-item" data-nav="board" onclick="go('#/board')">게시판</div>
-      <div class="nav-item" data-nav="daily" onclick="go('#/daily')">일간보고</div>
+      <div class="nav-item" data-nav="daily" onclick="go('#/daily')">주간보고</div>
       <div class="nav-item" data-nav="experts" onclick="go('#/experts')">전문가</div>
       <div class="nav-item" data-nav="agents" onclick="go('#/agents')">에이전트</div>
       <div class="nav-item" data-nav="ports" onclick="go('#/ports')">포트</div>
@@ -553,7 +553,7 @@ async function fillBoardList(){
   const box = document.getElementById('board');
   if(!box) return;
   if(!posts.length){
-    box.innerHTML = '<div class="empty">아직 글이 없습니다 — 일간보고가 돌면 프로젝트별 글이 올라옵니다</div>';
+    box.innerHTML = '<div class="empty">아직 글이 없습니다 — 주간보고가 돌면 프로젝트별 글이 올라옵니다</div>';
     return;
   }
   box.innerHTML = posts.map(p=>{
@@ -844,9 +844,11 @@ async function saveInlineReg(port, btn){
 }
 function cancelInlineReg(){ portEditing = false; fillPorts(); }
 
-// ── 일간보고 뷰(상단 날짜바 → 좌 프로젝트목록 · 중 PM↔담당 대화 · 우 PM 대화 패널) ──
+// ── 주간보고 뷰(상단 날짜바 → 좌 프로젝트목록 · 중 PM↔담당 대화 · 우 PM 대화 패널) ──
+// 2026-10-08 사용자 결정: 보고는 주간 주기(수동 실행)로 — 화면 이름을 '주간보고'로 바꿈.
+// 내부 키(#/daily, 방 키 daily::)는 그대로 둔다 — 바꾸면 쌓인 보고 이력과 연결이 끊긴다.
 function renderDaily(){
-  setHeader('일간보고', {summary:false, actions:false});
+  setHeader('주간보고', {summary:false, actions:false});
   document.getElementById('view').innerHTML =
     '<div class="daily-wrap">'+
       '<div class="daily-datebar" id="daily-datebar">불러오는 중…</div>'+
@@ -867,7 +869,7 @@ function renderDaily(){
 async function fillDailyNav(){
   try{ DAILY_DATA = await fetch('/api/daily').then(r=>r.json()); }catch(e){ DAILY_DATA = []; }
   const bar = document.getElementById('daily-datebar'); if(!bar) return;
-  if(!DAILY_DATA.length){ bar.innerHTML = '<div class="empty" style="padding:8px;font-size:12px">아직 일간보고가 없습니다</div>'; return; }
+  if(!DAILY_DATA.length){ bar.innerHTML = '<div class="empty" style="padding:8px;font-size:12px">아직 주간보고가 없습니다</div>'; return; }
   bar.innerHTML = DAILY_DATA.map((d,di)=>
     `<div class="datechip" onclick="pickDate(${di},this)">${esc(d.date)}<span class="cnt">${d.projects.length}</span></div>`
   ).join('');
@@ -1202,7 +1204,7 @@ function route(){
     renderBoard();
   } else if(h.startsWith('#/chat/')){
     const room = h.slice('#/chat/'.length);
-    if(room === 'daily') renderChat('daily', '일간보고', '매일 새벽 PM과 각 담당 에이전트의 일간보고 대화 기록');
+    if(room === 'daily') renderChat('daily', '주간보고', 'PM과 각 담당 에이전트의 주간보고 대화 기록');
     else renderChat('global', '전체 채팅방', '에이전트와 사용자가 함께 쓰는 방');
   } else if(h.startsWith('#/room/')){
     renderRoom(h.slice('#/room/'.length));
