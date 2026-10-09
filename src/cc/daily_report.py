@@ -255,7 +255,7 @@ def _is_failed(r: dict) -> bool:
 
 
 def _pm_call(name: str, facts: str, history: str, issues: str) -> dict:
-    r = run_headless(
+    r = run_headless(task="daily_pm",
         prompt=pm_turn(name, facts, history, issues),
         cwd=_neutral_cwd(),
         allowed_tools=tools_for("daily_pm")[0],
@@ -276,7 +276,7 @@ def _project_issues(path: str) -> list[dict]:
 
 def _manage_call(name: str, issue_list: str, transcript: str) -> list:
     """대화 종료 후 PM이 칸반 상태·일정을 확정(JSON 배열). 실패는 빈 리스트."""
-    r = run_headless(
+    r = run_headless(task="daily_manage",
         prompt=pm_manage(name, issue_list, transcript),
         cwd=_neutral_cwd(),
         allowed_tools=tools_for("daily_pm")[0],
@@ -334,7 +334,7 @@ def _agent_call(name: str, path: str, question: str, history: str) -> str:
     if not writable:
         prompt += ("\n\n[주의] 이 프로젝트는 '기록 자동 반영'이 꺼져 있다. 파일을 고치지 말고 "
                    "읽고 답만 하라. 고쳐야 할 것이 보이면 답에 '기록장에 반영 필요: …'로 적어라.")
-    r = run_headless(
+    r = run_headless(task="daily_agent",
         prompt=prompt,
         cwd=_neutral_cwd(),
         allowed_tools=tools_for(task)[0],
@@ -631,7 +631,7 @@ def run_board_posts(paths: list[str] | None = None, deadline_ts: float | None = 
         # 마감을 넘겨 '시작'하는 담당만 스킵(이미 도는 콜은 끝까지 간다) — 순차 때의 break 자리
         if deadline_ts and time.time() > deadline_ts:
             return 0
-        out = run_headless(
+        out = run_headless(task="board_write",
             prompt=agents_db.persona_prefix(p["path"])
                    + board_write(p["name"], p["path"], _past_posts_text(p["path"], past)),
             cwd=_neutral_cwd(),
@@ -742,7 +742,7 @@ def run_board_discussion(paths: list[str] | None = None, deadline_ts: float | No
         """한 담당의 둘러보기 → (좋아요 수, 싫어요 수, 댓글 수)."""
         if deadline_ts and time.time() > deadline_ts:
             return 0, 0, 0
-        out = run_headless(
+        out = run_headless(task="board_comment",
             prompt=agents_db.persona_prefix(p["path"]) + board_comment(p["name"], p["path"], board_text),
             cwd=_neutral_cwd(),
             allowed_tools=allowed,
@@ -811,7 +811,7 @@ def run_post_feedback(paths: list[str] | None = None, deadline_ts: float | None 
             return 0
         cids = {c["id"] for c in top}
         ctext = "\n".join(f"[{c['id']}] {c['author']}: {(c['body'] or '')[:200]}" for c in top)
-        out = run_headless(
+        out = run_headless(task="board_feedback",
             prompt=agents_db.persona_prefix(post["project"]) + post_feedback(post["author"], post["project"], post["title"], post["body"], ctext),
             cwd=_neutral_cwd(),
             allowed_tools=allowed, disallowed_tools=disallowed,
@@ -912,7 +912,7 @@ def run_reply_followup(paths: list[str] | None = None, deadline_ts: float | None
         if deadline_ts and time.time() > deadline_ts:
             return 0
         path = path_by_name[agent]
-        out = run_headless(
+        out = run_headless(task="board_followup",
             prompt=agents_db.persona_prefix(path) + comment_followup(agent, path, "\n\n".join(threads)),
             cwd=_neutral_cwd(),
             allowed_tools=allowed, disallowed_tools=disallowed,

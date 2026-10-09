@@ -100,7 +100,7 @@ def review_project(path: str, name: str) -> str | None:
     리포트는 게시판에 올리지 않는다(게시판 = 담당 창작 글 전용, 2026-09-06 재설계).
     """
     allowed, disallowed = tools_for("daily_agent")   # Read/Grep/Glob 읽기 전용
-    out = run_headless(
+    out = run_headless(task="onboarding",
         prompt=onboarding_review(name, path, _harness_ref(), meta_block(path)),
         cwd=_neutral_cwd(),
         allowed_tools=allowed,

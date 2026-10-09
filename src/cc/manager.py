@@ -59,7 +59,7 @@ def plan_day(projects: list[dict]) -> dict[str, str]:
     """{path: 오늘의 지침}. projects: [{path,name}] 순서 고정. 지침 없는 프로젝트는 빠짐."""
     digest = "\n".join(f"{i}. {p['name']} — {_facts_brief(p['path'])}" for i, p in enumerate(projects))
     allowed, disallowed = tools_for("daily_pm")
-    r = run_headless(
+    r = run_headless(task="manager",
         prompt=manager_plan(read_journal(), digest), cwd=_neutral(),
         allowed_tools=allowed, disallowed_tools=disallowed,
         timeout=MANAGER_TIMEOUT, append_system_prompt=MANAGER_SYSTEM,
@@ -125,7 +125,7 @@ def pm_chat_reply() -> str:
     posts = board_db.list_posts()[:12]
     brief = "\n".join(f"- [{p['author']}] {p['title']}" for p in posts)
     allowed, disallowed = tools_for("daily_pm")
-    out = run_headless(
+    out = run_headless(task="pm_chat",
         prompt=pm_chat(journal, brief, history, last), cwd=_neutral(),
         allowed_tools=allowed, disallowed_tools=disallowed,
         timeout=MANAGER_TIMEOUT, append_system_prompt=PM_CHAT_SYSTEM,
@@ -143,7 +143,7 @@ def close_day(date: str, results: list[dict]) -> str:
     digest = "\n".join(f"- {r.get('name')}: {(r.get('summary') or '')[:150]}" for r in results)
     best = _best_text(date)
     allowed, disallowed = tools_for("daily_pm")
-    out = run_headless(
+    out = run_headless(task="manager",
         prompt=manager_close(read_journal(), digest, best), cwd=_neutral(),
         allowed_tools=allowed, disallowed_tools=disallowed,
         timeout=MANAGER_TIMEOUT, append_system_prompt=MANAGER_SYSTEM,

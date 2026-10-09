@@ -34,7 +34,7 @@ def verify_project(path: str, name: str, candidates: list[dict]) -> int:
         for i, c in enumerate(candidates)
     )
     allowed, disallowed = tools_for("daily_agent")   # Read/Grep/Glob 읽기 전용
-    out = run_headless(
+    out = run_headless(task="issue_verify",
         prompt=agents_db.persona_prefix(path) + issue_verify(name, path, items),
         cwd=_neutral_cwd(),
         allowed_tools=allowed,

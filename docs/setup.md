@@ -43,44 +43,11 @@ cd ohmypm
 uv sync
 ```
 
-## 3. 하네스 플러그인 — 이 저장소의 `plugin/` (2026-09-17, kickoff_pack 대체)
+> 하네스 플러그인(`plugin/`, 구 kickoff_pack 대체)은 2026-10-07 작업 구조(main/pl/work) 기각과
+> 함께 저장소에서 제거했다 — [plan.md](plan.md) 참조. screen-plan·grill 등 글로벌 스킬과
+> Orca 동봉 스킬(`~/.agents/skills` + junction)은 각 PC에서 따로 관리한다.
 
-킥오프(interview → workspaces)·선택 스킬(refsweep·usecases)·llmwiki는 **이 저장소 안의 Claude Code 플러그인**이다.
-클론이 곧 마켓플레이스라 별도 다운로드가 없다:
-
-```powershell
-claude plugin marketplace add D:\dev\project\ohmypm\.claude-plugin\marketplace.json   # 클론 경로에 맞춘다
-claude plugin install ohmypm@ohmypm-local --scope user -y
-claude plugin list                                                                # 설치된 버전과 enabled 확인
-```
-
-2.0 작업 환경(T-006)은 **프로젝트 파일을 바꾸지 않고** 외부에 등록한다. 실행기·절차·템플릿은
-`%LOCALAPPDATA%\ohmypm\runtimes\<내용 해시>`(`--home`·`OHMYPM_HOME`으로 변경)에 불변 설치되고,
-프로필·원문·route·승인·질문·증거는 그 프로젝트의 `.git/ohmypm/`에 남는다. 커밋할 것이 없다:
-```powershell
-python plugin/skills/kickoff-workspaces/scripts/ws_upgrade.py <프로젝트경로> --dry-run
-python plugin/skills/kickoff-workspaces/scripts/ws_upgrade.py <프로젝트경로> [--profiles <roles.json>]
-python <runtime.path>\scripts\environment_cli.py --project <프로젝트경로> doctor
-python <runtime.path>\scripts\environment_cli.py --project <프로젝트경로> role-connect --role main
-```
-
-`runtime.path`는 등록 결과 JSON의 `config.runtime.path`다. 역할·모델·approval은 `--profiles`의 JSON
-(`{"roles":{"main":…,"pl":…,"work":…}}`)으로 정하며 생략하면 플러그인 템플릿 기본값이다.
-명령·복구는 `plugin/skills/dispatch/references/runtime.md`, 절차는 `plugin/skills/kickoff-workspaces/PROTOCOL.md`.
-`.git/ohmypm/`은 clone으로 복구되지 않으므로 `environment_cli.py export`로 따로 백업한다.
-
-기존 1.0 설치본(`docs/protocol.md`·`.ohmypm/bin/` 등)이 있는 프로젝트는 등록 뒤 `migration-plan`으로
-파일별 remove/edit/keep/conflict 표를 받아 검토하고, 그 digest로 `migration-apply`한다. 적용 결과는 작업 트리 변경으로만
-남으며 stage·commit·push하지 않는다 — 정리 커밋은 사용자가 별도로 검토한다. 활성 1.0 작업이 있으면 적용되지 않는다.
-2026-09-22 기준 ohmypm 자체만 전환했다. odin-3.0·log_moniteoling 전환은 별도 요청이다(pending 참조).
-
-스킬은 `ohmypm:kickoff-interview`처럼 이름공간이 붙는다. `plugin/`을 고쳤으면 plugin.json의 version을 올리고 `claude plugin update ohmypm@ohmypm-local` — 버전이 같으면 갱신하지 않는다.
-플러그인 갱신 뒤 프로젝트에서 `ws_upgrade.py`를 다시 실행하면 새 runtime이 설치되고 **다음 작업부터** 쓰인다. 진행 중 작업은 고정 runtime을 계속 쓴다.
-
-> screen-plan·grill 등 범용 글로벌 스킬과 Orca 동봉 스킬(orca-cli·orchestration·computer-use, `~/.agents/skills` + junction)은 플러그인 밖이다.
-> 구 kickoff_pack(`npx skills add merryiscat/kickoff_pack`)은 더 쓰지 않는다 — kickoff-harness는 폐기됐고 나머지는 여기로 옮겼다.
-
-## 4. 프로젝트 로컬 스킬 재설치 (skills-lock.json 기반)
+## 3. 프로젝트 로컬 스킬 재설치 (skills-lock.json 기반)
 
 ```powershell
 npx skills experimental_install
@@ -91,7 +58,7 @@ npx skills experimental_install
 > 명령 이름 주의: lock 복원은 `add`/`install`이 아니라 **`experimental_install`**이다
 > (2026-09-10 실측 — `npx skills install`은 `add`로 해석돼 "Missing required argument: source"로 죽는다).
 
-## 5. 세팅 wizard — `.env` + 부팅 자동실행
+## 4. 세팅 wizard — `.env` + 부팅 자동실행
 
 ```powershell
 scripts\setup_wizard.cmd
@@ -107,13 +74,13 @@ scripts\setup_wizard.cmd
 5. 로그인 시 자동 실행 등록 (시작프로그램 바로가기 → 창 없이 기동)
 
 wizard는 대화형이라 **터미널에서 사람이 직접** 실행해야 한다.
-수동으로 할 거면 `.env.example`을 `.env`로 복사해 채우고, 자동 실행은 아래 §6.
+수동으로 할 거면 `.env.example`을 `.env`로 복사해 채우고, 자동 실행은 아래 §5.
 
 > `.env`에 **모델에 없는 키가 있으면 서버가 아예 안 뜬다**(pydantic-settings가
 > `extra_forbidden`으로 거부). `.env.example`은 항상 `src/config/settings.py`와 맞춰 둔다 —
 > 2026-09-10에 이미 제거된 `HEARTBEAT_SEC`가 남아 있어 새 PC가 그대로 밟았다.
 
-## 6. 기동 · 자동 실행 · 종료
+## 5. 기동 · 자동 실행 · 종료
 
 ```powershell
 scripts\run_ohmypm.cmd          # 창 + 실시간 로그로 기동 (http://127.0.0.1:8123)
@@ -154,7 +121,7 @@ Orca 자동화(`orca automations`)는 스케줄 트리거뿐이라 '앱 실행 �
 >   탓이다. 단 `WScript.Shell` **COM 객체**는 멀쩡해서 .lnk 생성에는 쓸 수 있다
 >   (깨진 건 `wscript.exe` 실행기뿐).
 
-## 7. MCP 승인 (각 PC)
+## 6. MCP 승인 (각 PC)
 
 Playwright·context7 MCP는 프로젝트에 등록돼 있으나 각 PC에서 승인 필요:
 
@@ -162,7 +129,7 @@ Playwright·context7 MCP는 프로젝트에 등록돼 있으나 각 PC에서 승
 claude   # 실행 후 pending MCP(playwright·context7) 승인
 ```
 
-## 8. 위키 운영 파일 (선택)
+## 7. 위키 운영 파일 (선택)
 
 `docs/status.md` · `log.md` · `mistakes.md` · `pending.md`는 git에 없다. 이 PC에서 처음
 작업할 때 새로 만든다(빈 파일이어도 됨) — 규약은 [conventions-wiki.md](conventions-wiki.md).
@@ -171,15 +138,15 @@ claude   # 실행 후 pending MCP(playwright·context7) 승인
 
 ## 검증 (2026-09-10, `D:\dev\project\ohmypm`)
 
-1~4·6번을 이 PC에서 실제로 돌려 확인했다 — `uv sync` → `.env` 작성 →
+1~3·5번을 이 PC에서 실제로 돌려 확인했다 — `uv sync` → `.env` 작성 →
 `npx skills experimental_install`(fastapi 1개) → `scripts\run_ohmypm.cmd`.
 `data/ohmypm.db` 자동 생성, `PROJECTS_ROOT=D:\dev\project` 하위 **8개 프로젝트 발견**,
 `GET /api/projects` 200 확인.
 
-6번 자동 실행도 실측했다 — `startup_shortcut.ps1`로 등록 후 바로가기를 직접 실행해
+5번 자동 실행도 실측했다 — `startup_shortcut.ps1`로 등록 후 바로가기를 직접 실행해
 창 없이 기동(`pythonw`) + HTTP 200 확인.
 
-5번 wizard는 대화형(TTY 필요)이라 **텔레그램 3단계와 등록 실행은 미검증**이다. 다만
+4번 wizard는 대화형(TTY 필요)이라 **텔레그램 3단계와 등록 실행은 미검증**이다. 다만
 wizard가 쓰는 경로 산출은 따로 확인했다 — cwd를 `C:\`로 두고도 `REPO_ROOT`가 저장소로
 잡히고, `ENV_FILE`이 저장소의 `.env`, `write_env` 2회에 1줄(멱등). `.env`는 손으로 썼다.
 

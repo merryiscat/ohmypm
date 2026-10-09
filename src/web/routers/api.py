@@ -333,7 +333,7 @@ def get_expert_wiki(domain: str) -> dict:
 
 @router.post("/experts/{domain}/collect")
 def collect_expert(domain: str, background: BackgroundTasks) -> dict:
-    """전문가가 웹으로 최신 지식을 수집해 위키 갱신(백그라운드)."""
+    """전문가 수집(백그라운드). 모델 동향 탭은 그 벤더의 공식 출처를 코드 수집기가 받는다(T-007·R-010)."""
     from src.cc.expert import EXPERTS, collect_knowledge
 
     if domain not in EXPERTS:

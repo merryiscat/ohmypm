@@ -75,7 +75,7 @@ def judge_project(project_path: str, name: str, candidates: list[dict]) -> int:
     docs_path = str(Path(project_path) / "docs")
     prompt = judge_issues(name, items, docs_path)
     allowed, disallowed = tools_for("judge")
-    result = run_headless(
+    result = run_headless(task="judge",
         prompt=prompt,
         cwd=_neutral_cwd(),  # 중립 cwd — 대상 프로젝트 훅·CLAUDE.md 격리
         allowed_tools=allowed,

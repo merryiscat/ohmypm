@@ -4,6 +4,7 @@
 """
 
 import sys
+from pathlib import Path
 
 from loguru import logger
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -30,30 +31,32 @@ class Settings(BaseSettings):
     # --- Claude Code headless ---
     # 판단·작업을 claude -p 로 호출할 때 쓰는 실행 파일. PATH에 있으면 "claude"
     cc_bin: str = "claude"
+    # 작업 등급별 모델(2026-09-28 사용자 결정: 작업 수준·난이도에 따른 모델 매칭은 필수).
+    # 모든 헤드리스 호출은 src/cc/models.py의 작업→등급 표를 거쳐 --model을 명시한다 —
+    # 개인 CLI 기본 모델(이 PC는 Fable)에 조용히 기대지 않는다. 사고: 수집기가 모델을 안 정해
+    # 정형 JSON 추출 40여 회를 Fable로 돌렸다(한 호출 $0.36).
+    model_light: str = "haiku"      # 분류·반응·택1 같은 짧고 정형인 일
+    model_standard: str = "sonnet"  # 요약·검토·대화·정형 추출
+    model_heavy: str = "opus"       # 종합·설계 수준의 글쓰기
+    # Fable·Mythos 같은 최상위 모델은 헤드리스에서 기본 금지 — 명시적으로 켜야만 쓴다
+    allow_frontier_headless: bool = False
+    # 모델 동향 위키가 추적하는 모델(쉼표 구분, 공식 문서 표기 그대로). 2026-09-28 사용자 결정:
+    # "실제 사용할 모델만 — 옛날 모델 필요 없다". 목록 밖 모델의 변경은 추적 모델에 영향을 줄 때만
+    # (대체·마이그레이션) 그 추적 모델 항목으로 적고, 아니면 버린다.
+    model_track_claude: str = ("Claude Fable 5.1,Claude Opus 5.5,Claude Opus 5,Claude Sonnet 5,"
+                               "Claude Haiku 4.5")
+    model_track_codex: str = "GPT-6 Astra,GPT-6 Sol,GPT-6 Luna"
 
     # --- 스케줄 ---
-    # False면 서버가 cron을 아예 걸지 않는다 — 스캔·일간보고·게시판은 대시보드/API로 수동 실행.
-    # 폴더로만 관리하는 프로젝트가 많고 인터넷이 제한적인 PC용(2026-09-15 사용자 확정)
+    # False면 서버가 cron을 아예 걸지 않는다. 2026-10-07 사용자 결정으로 자동 스캔(8시)과
+    # 새벽 일간보고 배치는 제거됨 — 정시 배치는 전문가수집(주 1회)만 남았고,
+    # 스캔·일간보고는 대시보드에서 수동 실행한다.
     scheduler_enabled: bool = True
-    # ★ 2026-09-23 사용자 확정 — 매일 08시 스캔 잡을 **끈다**(종전 기본 켬).
-    #   이유: 주간 배치가 자기 안에서 스캔을 돈다(daily_report.run_nightly). 배치가 주 1회가 된
-    #   이상 매일 스캔은 그 사이 화면 숫자를 최신으로 두는 것뿐인데, 그 대가로 24개 프로젝트에
-    #   모델을 부르며 매일 18분을 썼다(이 잡은 비용 집계도 안 됐다). 화면은 '스캔'·'판정' 버튼으로
-    #   그 자리에서 최신화할 수 있다(/api/scan, /api/judge).
-    #   되살리려면 .env에 SCAN_ENABLED=true — 스캔 코드도 버튼도 그대로 남아 있다.
-    scan_enabled: bool = False
-    scan_hour: int = 8       # 스캔 잡을 다시 켤 때 쓰는 시각(24시간)
-    # 주간보고(멀티에이전트) — 03:00 시작(사용량 리셋 직후, 01시는 리셋 전이라 한도로 전량실패했음
-    # 2026-09-01), 보고 소프트마감 05:00, 게시판 토론 마감 06:00
+    # 아래 시각들은 일간보고를 수동 실행할 때 내부 마감 계산에 쓰인다(src/cc/daily_report.py)
     daily_report_hour: int = 3
-    # ★ 2026-09-23 사용자 확정 — 매일 새벽에서 **매주 토요일 새벽**으로 바꿨다.
-    #   0=월요일 … 6=일요일. 이 값을 바꾸면 바로 아래 activity_window_hours도 같이 봐야 한다:
-    #   활동 판정 창이 배치 주기보다 좁으면 그 사이에 한 작업을 통째로 못 보고 넘어간다.
-    #   놓쳤을 때(PC가 꺼져 있었다면) 따라잡기는 하지 않는다 — 그 주는 건너뛴다(사용자 확정).
-    daily_report_weekday: int = 5
     # 담당을 부를지 말지 정하는 '사람의 작업이 있었나' 판정 창(시간 단위).
     # 매일 돌던 시절엔 24였다 — 주 1회로 바뀌면서 168시간(7일)으로 넓혔다.
-    # 이게 좁으면 토큰은 아끼지만 놓침이 생긴다. 배치 주기와 같거나 넓게 유지할 것.
+    # 2026-10-07 이후 주간보고는 수동 실행이므로 '마지막 실행 이후'를 넉넉히 덮도록 넓게 유지할 것.
     activity_window_hours: int = 168
     daily_soft_deadline_hour: int = 5
     discussion_until_hour: int = 6
@@ -62,7 +65,7 @@ class Settings(BaseSettings):
     # 2026-09-17 사용자 확정: 기본 끄고 주 1회. 쉼표로 여러 요일("2,6"), 빈 값이면 절대 안 돈다.
     # ★ 2026-09-23 일요일(6) → 토요일(5). 게시판은 야간 배치 **안에서** 도는 경로라,
     #   배치가 토요일에만 도는데 요일이 일요일이면 영영 안 돈다(사용자 확정: 같이 돌린다).
-    #   0=월요일 … 6=일요일 — daily_report_weekday와 같은 값으로 두어야 한다.
+    #   0=월요일 … 6=일요일. 2026-10-07 이후 주간보고는 수동 실행이라 실행 당일 요일이 여기 들면 게시판도 돈다.
     board_weekdays: str = "5"
     # 전문가 위키 정기 수집 — 매주 지정 요일·시각(웹 조사라 자주 돌릴 필요 없음)
     expert_collect_weekday: int = 0   # 0=월요일 … 6=일요일
@@ -79,6 +82,52 @@ class Settings(BaseSettings):
 
 # 전역 설정 인스턴스
 settings = Settings()
+
+# ohmyPM 저장소 루트 — 이 파일(src/config/settings.py)에서 두 단계 위 폴더.
+# .env를 어디에 만들지 정할 때 쓴다 (경로 하드코딩 금지 원칙).
+REPO_ROOT = Path(__file__).resolve().parents[2]
+
+
+def ensure_env() -> bool:
+    """.env가 없으면 기본값으로 만들어 준다. 새로 만들었으면 True를 돌려준다.
+
+    배경(2026-10-07 사용자 결정): .env가 없으면 스캔이 아무 경고 화면 없이
+    "프로젝트 0개"로 끝나는 사고가 있었다. 그래서 스캔이 시작될 때마다 이 함수가
+    먼저 .env가 있는지 확인하고, 없으면 ohmyPM 저장소 위치를 기준으로 기본
+    .env를 만들어 바로 쓸 수 있게 한다.
+
+    기본 관리 루트(PROJECTS_ROOT)를 정하는 방법:
+    - ohmyPM 저장소의 부모 폴더 아래에 'projects' 폴더가 있으면 그것을 쓴다
+      (이 PC의 실제 배치: orca/ohmypm 옆에 orca/projects가 있다).
+    - 없으면 부모 폴더 자체를 쓴다.
+    """
+    env_path = REPO_ROOT / ".env"
+    if env_path.exists():
+        return False  # 이미 있으면 손대지 않는다
+
+    # 기본 관리 루트 결정
+    parent = REPO_ROOT.parent
+    candidate = parent / "projects"
+    default_root = candidate if candidate.is_dir() else parent
+
+    # .env.example을 바탕으로 내용을 만든다 — PROJECTS_ROOT 줄만 기본값으로 채우고
+    # 나머지 항목(모델 등급, 스케줄 등)은 예시 그대로 둔다.
+    example = REPO_ROOT / ".env.example"
+    if example.exists():
+        lines = example.read_text(encoding="utf-8").splitlines()
+        content = "\n".join(
+            f"PROJECTS_ROOT={default_root}" if line.startswith("PROJECTS_ROOT=") else line
+            for line in lines
+        ) + "\n"
+    else:
+        content = f"PROJECTS_ROOT={default_root}\n"
+
+    env_path.write_text(content, encoding="utf-8")
+    # 이미 떠 있는 서버에도 바로 반영한다 — .env 파일은 프로그램 시작 때 한 번만
+    # 읽히므로, 파일만 만들면 재시작 전까지 설정이 빈 값 그대로 남기 때문이다.
+    settings.projects_root = str(default_root)
+    logger.warning(f"[설정] .env가 없어 기본값으로 새로 생성 — 관리 루트: {default_root}")
+    return True
 
 # 로깅 설정 (loguru) — 콘솔 + logs/ 일별 파일
 logger.remove()
