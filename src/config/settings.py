@@ -17,6 +17,8 @@ class Settings(BaseSettings):
         env_file=".env",
         env_file_encoding="utf-8",
         case_sensitive=False,  # 대소문자 구분 안 함
+        # 모르는 변수는 무시한다 — 설정을 없앤 뒤(예: 텔레그램) 다른 PC의 옛 .env가 기동을 막지 않게
+        extra="ignore",
     )
 
     # --- 관리 대상 ---
@@ -52,28 +54,13 @@ class Settings(BaseSettings):
     # 새벽 일간보고 배치는 제거됨 — 정시 배치는 전문가수집(주 1회)만 남았고,
     # 스캔·일간보고는 대시보드에서 수동 실행한다.
     scheduler_enabled: bool = True
-    # 아래 시각들은 일간보고를 수동 실행할 때 내부 마감 계산에 쓰인다(src/cc/daily_report.py)
-    daily_report_hour: int = 3
     # 담당을 부를지 말지 정하는 '사람의 작업이 있었나' 판정 창(시간 단위).
     # 매일 돌던 시절엔 24였다 — 주 1회로 바뀌면서 168시간(7일)으로 넓혔다.
     # 2026-10-07 이후 주간보고는 수동 실행이므로 '마지막 실행 이후'를 넉넉히 덮도록 넓게 유지할 것.
     activity_window_hours: int = 168
-    daily_soft_deadline_hour: int = 5
-    discussion_until_hour: int = 6
-    telegram_hour: int = 7   # 일간보고 요약 텔레그램 발송 시각(생성은 새벽, 발송은 아침)
-    # 게시판 경로(기록 정리·글쓰기·둘러보기·반응·대대댓글·조언 반영·보상)를 돌리는 요일 —
-    # 2026-09-17 사용자 확정: 기본 끄고 주 1회. 쉼표로 여러 요일("2,6"), 빈 값이면 절대 안 돈다.
-    # ★ 2026-09-23 일요일(6) → 토요일(5). 게시판은 야간 배치 **안에서** 도는 경로라,
-    #   배치가 토요일에만 도는데 요일이 일요일이면 영영 안 돈다(사용자 확정: 같이 돌린다).
-    #   0=월요일 … 6=일요일. 2026-10-07 이후 주간보고는 수동 실행이라 실행 당일 요일이 여기 들면 게시판도 돈다.
-    board_weekdays: str = "5"
     # 전문가 위키 정기 수집 — 매주 지정 요일·시각(웹 조사라 자주 돌릴 필요 없음)
     expert_collect_weekday: int = 0   # 0=월요일 … 6=일요일
-    expert_collect_hour: int = 5      # 새벽(일간보고 흐름과 겹치지 않게)
-
-    # --- 텔레그램 (비우면 알림 no-op) ---
-    telegram_bot_token: str = ""
-    telegram_chat_id: str = ""
+    expert_collect_hour: int = 5      # 새벽
 
     # --- 시스템 ---
     log_level: str = "INFO"

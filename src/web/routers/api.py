@@ -136,22 +136,6 @@ def trigger_scan() -> dict:
     return run_scan()
 
 
-@router.post("/judge")
-def trigger_judge() -> dict:
-    """수동 판정 트리거(대시보드 '판정' 버튼).
-
-    ①완결 검증 — 담당이 새 이슈를 코드와 대조, 끝난 일은 완료 처리(2026-09-06)
-    ②판정 — 남은 미판정 기한 후보의 오탐을 가린다. 둘 다 LLM 호출이라 느릴 수 있다.
-    """
-    from src.cc.issue_verify import run_issue_verification
-    from src.cc.judge import run_judgment
-
-    verified = run_issue_verification()
-    result = run_judgment()
-    result["verified"] = verified
-    return result
-
-
 # ── 메시지 보드 (에이전트 채팅방 + 프로젝트 룸) ───────────────────────────
 
 
@@ -271,40 +255,6 @@ def set_daily_check(c: DailyCheck) -> dict:
 
 
 # ── PM 대화 패널 (사용자 ↔ 총괄 PM, 일간보고 화면 오른쪽) ─────────────────────
-class PmChatMsg(BaseModel):
-    message: str
-
-
-@router.post("/pm-chat")
-def pm_chat_api(m: PmChatMsg, background: BackgroundTasks) -> dict:
-    """사용자가 PM에게 말하면 즉시 방에 기록, PM 답변은 백그라운드(저널+게시판 근거)로."""
-    from src.cc.manager import PM_CHAT_ROOM, pm_chat_reply
-
-    body = m.message.strip()
-    if not body:
-        return {"ok": False, "error": "빈 메시지"}
-    messages_db.add_message(PM_CHAT_ROOM, "user", body)
-    background.add_task(pm_chat_reply)
-    return {"ok": True, "started": True, "room": PM_CHAT_ROOM}
-
-
-# ── PM 온보딩 검토 (프로젝트 초기 세팅·하네스 read-only 점검) ─────────────────
-class OnboardReq(BaseModel):
-    path: str
-
-
-@router.post("/onboarding")
-def trigger_onboarding(req: OnboardReq, background: BackgroundTasks) -> dict:
-    """PM이 그 프로젝트 세팅·하네스를 read-only로 점검(백그라운드). 리포트는 담당 방에 뜬다."""
-    proj = next((p for p in projects_db.list_projects() if p["path"] == req.path), None)
-    if not proj:
-        return {"ok": False, "error": "unknown project"}
-    from src.cc.onboarding import review_project
-
-    background.add_task(review_project, proj["path"], proj["name"])
-    return {"ok": True, "started": True}
-
-
 # ── 전문가 에이전트 (ohmyPM 상주, 웹 지식수집 + PM 자문) ────────────────────
 @router.get("/experts")
 def get_experts() -> list[dict]:
@@ -445,28 +395,6 @@ def stop_port_api(port_id: int) -> dict:
     return stop_port(port_id)
 
 
-class DailyReportReq(BaseModel):
-    paths: list[str] | None = None   # 지정 시 그 프로젝트만(테스트). None=전체
-    max_rounds: int = 8
-    notify: bool = True              # 텔레그램 종합 발송 여부
-
-
-@router.post("/daily-report")
-def trigger_daily_report(background: BackgroundTasks, cfg: DailyReportReq | None = None) -> dict:
-    """일간보고 수동 트리거. 오래 걸리는 headless 오케스트레이션이라 백그라운드로 돌리고,
-    진행/결과는 '일간보고' 방(room='daily')에 쌓인다(사이드바에서 확인)."""
-    cfg = cfg or DailyReportReq()
-    from src.cc.daily_report import run_daily_report
-
-    background.add_task(
-        run_daily_report,
-        paths=cfg.paths,
-        max_rounds=cfg.max_rounds,
-        notify=cfg.notify,
-    )
-    return {"ok": True, "started": True}
-
-
 @router.get("/posts")
 def get_posts(board: str = board_db.DAILY_BOARD) -> list[dict]:
     """게시판 글 목록(각 글에 comments 배열 포함). 화면 '게시판'이 이걸 그린다."""
@@ -544,30 +472,4 @@ def trigger_post_feedback(background: BackgroundTasks, cfg: BoardDiscussionReq |
     from src.cc.daily_report import run_post_feedback
 
     background.add_task(run_post_feedback, paths=cfg.paths)
-    return {"ok": True, "started": True}
-
-
-@router.post("/harness-audit")
-def trigger_harness_audit(background: BackgroundTasks, cfg: BoardDiscussionReq | None = None) -> dict:
-    """하네스 감사(일일보고) 수동 트리거 — 환경·하네스 점검 + 빠진 기본기 자동 반영(git 커밋, push X).
-
-    에이전트는 Write/Edit만(Bash 없음), 커밋은 코드가 안전 경로만 스코프. 리포트는 게시판에 올라간다.
-    """
-    cfg = cfg or BoardDiscussionReq()
-    from src.cc.harness_audit import run_harness_audit
-
-    background.add_task(run_harness_audit, paths=cfg.paths)
-    return {"ok": True, "started": True}
-
-
-@router.post("/reprocess")
-def trigger_reprocess(background: BackgroundTasks, cfg: BoardDiscussionReq | None = None) -> dict:
-    """문서 재가공(#4) 수동 트리거 — 담당이 당일 게시판 조언을 자기 docs에 반영(git 커밋, push 안 함).
-
-    게시판 원본 글·댓글은 남는다. 에이전트는 Write/Edit만, 커밋은 코드가 docs/만 스코프.
-    """
-    cfg = cfg or BoardDiscussionReq()
-    from src.cc.reprocess import run_reprocess
-
-    background.add_task(run_reprocess, paths=cfg.paths)
     return {"ok": True, "started": True}

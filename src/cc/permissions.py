@@ -14,9 +14,6 @@ NEVER_ALLOW = [
 
 # 태스크 유형별 허용 도구. 사용자 화이트리스트(alerts.whitelist.*)가 켜진 것만 실제 자율 실행.
 TASK_TOOLS = {
-    "scan": ["Read", "Grep", "Glob"],  # 읽기 전용
-    # 판정 에이전트(자가 확인형) — 대상 프로젝트 llmwiki를 직접 열어보고 이슈를 가린다. 읽기만.
-    "judge": ["Read", "Grep", "Glob"],
     # 프로젝트 담당 에이전트(사용자와의 룸 대화) — 2026-09-09 사용자 확정으로 편집 허용.
     #   사용자가 그 자리에서 지시하고 결과를 바로 보므로 승인이 곧 사용자 판단이다.
     #   **코드까지 고칠 수 있다**(docs 한정 아님). Bash는 없어 임의 명령·푸시는 여전히 불가하고,
@@ -27,8 +24,6 @@ TASK_TOOLS = {
     #   커밋은 코드가 대화 종료 후 docs/ 범위로만 한다.
     "daily_pm": ["Read", "Grep", "Glob"],
     "daily_agent": ["Read", "Grep", "Glob", "Edit", "Write"],
-    # 형식 표준화 = git 커밋 단위 자율(변경→add→commit). push는 NEVER_ALLOW로 차단.
-    "format_standardize": ["Read", "Edit", "Write", "Bash(git add:*)", "Bash(git commit:*)"],
     # 문서 재가공(#4) = 담당이 자기 docs에만 쓴다. Bash 없음 — git 커밋은 코드가 docs/만 스코프해서
     # 대신 한다(에이전트가 임의 명령·푸시를 못 돌리게). 되돌리기는 로컬 커밋(push 없음).
     "reprocess": ["Read", "Grep", "Glob", "Edit", "Write"],

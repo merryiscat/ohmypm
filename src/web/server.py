@@ -23,7 +23,7 @@ async def lifespan(app: FastAPI):
 
     if not settings.projects_root:
         logger.error("[설정] PROJECTS_ROOT 비어 있음 — .env에 관리 대상 루트를 넣어야 "
-                     "프로젝트 발견·일간보고·게시판이 전부 0건으로 돈다 "
+                     "프로젝트 발견이 0건으로 돈다 "
                      "(scripts/setup_wizard.cmd 실행 또는 .env 직접 편집)")
     elif not _P(settings.projects_root).is_dir():
         logger.error(f"[설정] PROJECTS_ROOT 경로가 없다: {settings.projects_root}")

@@ -32,12 +32,12 @@ def test_override_is_honored_but_frontier_is_downgraded(monkeypatch):
     monkeypatch.setattr(settings, "allow_frontier_headless", False)
     assert models.resolve_model("room_chat", override="sonnet") == "sonnet"
     assert models.resolve_model("room_chat", override="claude-fable-5-1[1m]") == "opus"
-    assert models.resolve_model("judge", override="mythos") == "opus"
+    assert models.resolve_model("room_chat", override="mythos") == "opus"
 
 
 def test_frontier_allowed_only_with_explicit_setting(monkeypatch):
     monkeypatch.setattr(settings, "allow_frontier_headless", True)
-    assert models.resolve_model("judge", override="claude-fable-5-1") == "claude-fable-5-1"
+    assert models.resolve_model("room_chat", override="claude-fable-5-1") == "claude-fable-5-1"
 
 
 def test_every_registered_task_has_a_known_tier():
@@ -69,7 +69,7 @@ def test_all_call_sites_pass_a_registered_task():
             assert found, f"{f.name}: task 없는 헤드리스 호출: {call[:80]}"
             assert found.group(1) in models.TASK_TIER, f"{f.name}: 미등록 task {found.group(1)}"
             seen.add(found.group(1))
-    assert "model_catalog_extract" in seen and "judge" in seen
+    assert "model_catalog_extract" in seen and "room_chat" in seen
 
 
 def test_run_headless_always_passes_model_flag(monkeypatch):
@@ -88,7 +88,7 @@ def test_run_headless_always_passes_model_flag(monkeypatch):
     monkeypatch.setattr(client.subprocess, "run", fake_run)
     monkeypatch.setattr(settings, "model_standard", "sonnet")
     monkeypatch.setattr(settings, "allow_frontier_headless", False)
-    meta = client.run_headless_ex("p", ".", [], [], task="judge")
+    meta = client.run_headless_ex("p", ".", [], [], task="room_chat")
     cmd = captured["cmd"]
     assert "--model" in cmd and cmd[cmd.index("--model") + 1] == "sonnet"
     assert meta["result"] == "ok" and meta["model"] == "claude-sonnet-5"

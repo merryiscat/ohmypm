@@ -11,8 +11,7 @@ from loguru import logger
 
 from src.cc.client import run_headless
 from src.cc.permissions import tools_for
-from src.cc.prompts import (DEFAULT_REWARD, REWARD_MENU, REWARD_SYSTEM, reward_choice,
-                            wish_prompt)
+from src.cc.prompts import DEFAULT_REWARD, REWARD_MENU, REWARD_SYSTEM, reward_choice, wish_prompt
 from src.cc.room_agent import _neutral_cwd
 from src.db import agents as agents_db
 from src.db import projects as projects_db

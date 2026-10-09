@@ -295,7 +295,6 @@ _HTML = r"""<!doctype html>
         <span class="hot">임박 <b id="s-soon">–</b></span>
       </div>
       <div class="actions" id="hdr-actions">
-        <button class="ghost" onclick="doJudge()" id="btn-judge">판정</button>
         <button onclick="doScan()">스캔</button>
       </div>
     </header>
@@ -418,23 +417,20 @@ function renderSidebar(){
 
 // ── 대시보드 뷰 ─────────────────────────────────────────
 function renderDashboard(){
-  setHeader('대시보드', {summary:true, actions:true});   // 판정·스캔은 전역 액션 → 대시보드에서만
+  setHeader('대시보드', {summary:true, actions:true});   // 스캔은 전역 액션 → 대시보드에서만
   const is = ISSUES;
-  const judged = i => i.verdict === 'keep' || i.verdict === 'reclass';
-  const soon = is.filter(i => i.kind==='deadline' && judged(i) && i.due && daysTo(i.due) <= 7)
+  const soon = is.filter(i => i.kind==='deadline' && i.due && daysTo(i.due) <= 7)
                  .sort((a,b)=> a.due.localeCompare(b.due));
-  const pendingJudge = is.filter(i => i.kind==='deadline' && !i.verdict).length;
   const conditional = is.filter(i => i.kind==='conditional').length;
   document.getElementById('s-proj').textContent = PROJECTS.length;
   document.getElementById('s-iss').textContent = is.length;
   document.getElementById('s-soon').textContent = soon.length;
 
   const noteParts = [];
-  if(pendingJudge) noteParts.push(`미판정 기한 후보 ${pendingJudge}건 — '판정'을 눌러 가려내세요`);
   if(conditional) noteParts.push(`조건부 보류 ${conditional}건(기한 아님)`);
 
   let soonHtml = '';
-  if(soon.length || pendingJudge || conditional){
+  if(soon.length || conditional){
     const rows = soon.map(i=>{
       const dd = daysTo(i.due); const cls = dd<=0?'today':'week';
       const label = dd<0?`${-dd}일 지남`:(dd===0?'오늘':`${dd}일 후`);
@@ -1256,12 +1252,6 @@ async function doScan(){
   document.getElementById('s-iss').textContent = '…';
   await fetch('/api/scan',{method:'POST'});
   await loadData(); route();
-}
-async function doJudge(){
-  const b = document.getElementById('btn-judge'); const old = b.textContent;
-  b.disabled = true; b.textContent = '판정 중…';
-  try{ await fetch('/api/judge',{method:'POST'}); await loadData(); route(); }
-  finally{ b.disabled = false; b.textContent = old; }
 }
 
 // 시작

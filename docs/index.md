@@ -8,9 +8,6 @@
 - [design.md](design.md) — 아키텍처 그림 한 장 v2(2026-09-23, mermaid): 전체 구성·주간 배치·데이터 지도·경계. 그 안의 작업 구조(main/pl/work) 절은 2026-10-07 기각으로 효력 없음
 - [interfaces.md](interfaces.md) — 인터페이스 명세 v1: 내놓는 API 38개(용도·입력·동작 방식) + 쓰는 외부 서비스·키·한도. `/openapi.json`으로 기계 대조
 - [deliverables.md](deliverables.md) — 산출물 대장: 단계(기획·설계·구축·검증·운영)별 산출물 기준표, PM이 단계 판단·요구에 쓴다
-- [tasks/T-007-model-catalog.md](tasks/T-007-model-catalog.md) — **모델 동향 전문가**: Claude·Codex 공식 문서 4곳 수집 → 새 모델·하네스 변화 설명 위키(`docs/experts/models.md`). 구현·검증 기록, 실제 수집 증거
-- `tasks/` — 작업 스펙 · `reviews/` — 과거 교차 검토 기록(보존). 작업 구조(main/pl/work)와 플러그인은 2026-10-07 기각 — [plan.md](plan.md) 참조
-- [review-2026-09-17.md](review-2026-09-17.md) — 모델 교체 후 전면 재평가(목적·설계·운영·권고) + 오늘 조치·결정 대기 *(흡수 후 삭제 대상)*
 - [setup.md](setup.md) — 다른 PC 재현 절차 (PC마다 **독립 인스턴스** 전제, wizard 5단계, 하드코딩 금지 규칙)
 
 ## 위키 운영

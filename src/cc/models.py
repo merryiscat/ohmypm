@@ -15,9 +15,6 @@ from src.config.settings import settings
 
 # 작업 → 등급. 새 헤드리스 호출부는 여기 한 줄 추가가 먼저다.
 TASK_TIER: dict[str, str] = {
-    # 감지·판정
-    "judge": "standard",              # 이슈 오탐·분류 판정(틀리면 기한 목록이 오염되니 standard)
-    "issue_verify": "standard",       # 완결 검증(코드 대조)
     # 일간보고·게시판
     "daily_pm": "standard",
     "daily_manage": "standard",
@@ -28,13 +25,8 @@ TASK_TIER: dict[str, str] = {
     "board_followup": "light",
     "reward": "light",                # 보상 택1
     # 관리·대화
-    "manager": "standard",
-    "pm_chat": "standard",
     "room_chat": "standard",          # 담당별 지정 모델이 우선
-    "onboarding": "standard",
-    "harness_audit": "standard",
     "reprocess": "standard",
-    "tidy": "standard",
     # 주간보고 — 커밋 팩트를 종합해 한 장 보고(종합 글쓰기라 heavy)
     "weekly_report": "heavy",
     # 전문가

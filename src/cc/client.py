@@ -11,15 +11,11 @@ import shutil
 import subprocess
 import time
 from datetime import datetime, timedelta
-from pathlib import Path
 
 from loguru import logger
 
 from src.config.settings import settings
 from src.proc import NO_WINDOW
-
-# PreToolUse 훅(인자 레벨 방어 L3) — ohmyPM 안에 둔다(대상 에이전트가 자기 게이트를 못 고치게)
-GUARD_HOOK = Path(__file__).resolve().parents[2] / "scripts" / "pretooluse_guard.ps1"
 
 # ── 사용량 한도 감지 — 429 메시지의 리셋 시각을 붙잡아 야간 배치가 재개 시점을 안다 ──
 # 예: "You've hit your session limit · resets 3am (Asia/Seoul)" / "resets 11:40am"
