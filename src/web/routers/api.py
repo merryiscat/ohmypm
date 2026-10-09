@@ -74,6 +74,26 @@ def job_status(name: str) -> dict:
     return jobs.status(name)
 
 
+# ── 주간보고 ────────────────────────────────────────────────────────────────
+@router.get("/weekly")
+def get_weekly() -> list[dict]:
+    """주간보고 목록 — [{date, overall_room, projects:[{project, name, room, written}]}], 최신 먼저."""
+    from src.cc.weekly_report import list_reports
+
+    return list_reports()
+
+
+@router.post("/weekly/run")
+def run_weekly() -> dict:
+    """주간보고 실행(백그라운드, 몇 분). 상태는 /api/jobs/weekly."""
+    from src import jobs
+    from src.cc.weekly_report import JOB_NAME, run_weekly_report
+
+    if not jobs.start(JOB_NAME, run_weekly_report):
+        return {"ok": False, "error": "주간보고가 이미 작성 중입니다"}
+    return {"ok": True, "started": True}
+
+
 # ── 게시판 토론 세션 ────────────────────────────────────────────────────────
 class SessionReq(BaseModel):
     minutes: int = 30
@@ -234,14 +254,20 @@ def get_ports() -> dict:
         })
         by_port.setdefault(r["port"], []).append(names.get(r["project"], r["project"]))
     conflicts = [{"port": p, "projects": ns} for p, ns in by_port.items() if len(ns) > 1]
-    dev_procs = {"python", "pythonw", "node", "deno", "bun", "ruby", "java",
-                 "dotnet", "go", "php", "uvicorn", "gunicorn", "caddy", "nginx"}
+    # 미등록인데 떠 있는 포트는 운영체제 서비스만 빼고 전부 — 명령줄 경로로 맞춘 프로젝트가 있으면 먼저
+    from src.portscan import SYSTEM_PROCS
+
     registered_ports = set(by_port.keys())
-    detected = [
-        {"port": p, "pid": info["pid"], "proc": info["proc"]}
-        for p, info in sorted(live.items())
-        if p not in registered_ports and (info["proc"] or "").lower() in dev_procs
-    ]
+    detected = []
+    for port, info in live.items():
+        if port in registered_ports or (info.get("proc") or "").lower() in SYSTEM_PROCS:
+            continue
+        detected.append({"port": port, "pid": info["pid"], "proc": info["proc"],
+                         "cmdline": (info.get("cmdline") or "")[:160],
+                         "project": info.get("project"),
+                         "project_name": names.get(info.get("project") or "", "") or
+                                         ("ohmyPM" if info.get("project") and not names.get(info["project"]) else "")})
+    detected.sort(key=lambda x: (0 if x["project"] else 1, x["port"]))
     return {"rows": rows, "conflicts": conflicts, "detected": detected}
 
 
