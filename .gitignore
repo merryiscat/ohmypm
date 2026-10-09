@@ -31,6 +31,7 @@ docs/mistakes.md
 # Playwright 스크래치(스크린샷·콘솔 로그)
 .playwright-mcp/
 
-# 전문가 에이전트 자동 생성 지식 위키(런타임 캐시)
+# 랩실 연구 위키·옛 산출물(런타임, 로컬 전용)
+docs/lab/
 docs/experts/
 docs/manager/

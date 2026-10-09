@@ -62,7 +62,7 @@ class Settings(BaseSettings):
     # 매일 돌던 시절엔 24였다 — 주 1회로 바뀌면서 168시간(7일)으로 넓혔다.
     # 2026-10-07 이후 주간보고는 수동 실행이므로 '마지막 실행 이후'를 넉넉히 덮도록 넓게 유지할 것.
     activity_window_hours: int = 168
-    # 전문가 위키 정기 수집 — 매주 지정 요일·시각(웹 조사라 자주 돌릴 필요 없음)
+    # 랩실 정기 조사(모델·디자인·스킬 연구원) — 매주 지정 요일·시각. 이름은 옛 .env 호환으로 유지
     expert_collect_weekday: int = 0   # 0=월요일 … 6=일요일
     expert_collect_hour: int = 5      # 새벽
 

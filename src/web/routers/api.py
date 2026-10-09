@@ -94,6 +94,82 @@ def run_weekly() -> dict:
     return {"ok": True, "started": True}
 
 
+# ── 랩실 ──────────────────────────────────────────────────────────────────
+@router.get("/lab")
+def get_lab() -> list[dict]:
+    """연구원 명부 + 위키 크기·마지막 조사·진행 여부."""
+    from src.cc import lab
+
+    return lab.list_researchers()
+
+
+@router.get("/lab/{rid}/wiki")
+def get_lab_wiki(rid: str) -> dict:
+    """연구원 위키(모델 연구원은 벤더별 탭 2개)."""
+    from src.cc import lab
+
+    return {"tabs": lab.wiki_tabs(rid)}
+
+
+@router.post("/lab/{rid}/run")
+def run_lab(rid: str) -> dict:
+    """연구원 조사 실행(백그라운드, 웹 조사라 몇 분). 상태는 /api/lab."""
+    from src import jobs
+    from src.cc import lab
+
+    if rid not in lab.RESEARCHERS:
+        return {"ok": False, "error": "unknown researcher"}
+    if not jobs.start(lab.job_name(rid), lab.research, rid):
+        return {"ok": False, "error": "이미 조사 중입니다"}
+    return {"ok": True, "started": True}
+
+
+class LabQ(BaseModel):
+    question: str
+
+
+@router.post("/lab/{rid}/ask")
+def ask_lab(rid: str, q: LabQ, background: BackgroundTasks) -> dict:
+    """연구원에게 질문 — 질문은 즉시 방에 기록, 답은 백그라운드."""
+    from src.cc import lab
+
+    if rid not in lab.RESEARCHERS:
+        return {"ok": False, "error": "unknown researcher"}
+    body = q.question.strip()
+    if not body:
+        return {"ok": False, "error": "빈 질문"}
+    messages_db.add_message(lab.lab_room(rid), "user", body)
+    background.add_task(lab.ask, rid, body)
+    return {"ok": True, "started": True}
+
+
+@router.get("/lab/proposals")
+def get_proposals(researcher: str | None = None, project: str | None = None) -> list[dict]:
+    """제안서 목록. project를 주면 그 프로젝트 대상 + 전체 대상."""
+    from src.cc import lab
+    from src.db import lab as lab_db
+
+    names = {p["path"]: p["name"] for p in projects_db.list_projects(enabled_only=False)}
+    out = lab_db.list_proposals(researcher, project)
+    for r in out:
+        r["researcher_name"] = lab.RESEARCHERS.get(r["researcher"], {}).get("name", r["researcher"])
+        r["target_name"] = names.get(r["target_project"] or "", "") or (r["target_project"] or "")
+    return out
+
+
+class ProposalStatus(BaseModel):
+    status: str   # open | done | dismissed
+
+
+@router.post("/lab/proposals/{pid}/status")
+def set_proposal_status(pid: int, s: ProposalStatus) -> dict:
+    from src.db import lab as lab_db
+
+    if not lab_db.set_status(pid, s.status):
+        return {"ok": False, "error": "상태는 open/done/dismissed"}
+    return {"ok": True}
+
+
 # ── 게시판 토론 세션 ────────────────────────────────────────────────────────
 class SessionReq(BaseModel):
     minutes: int = 30

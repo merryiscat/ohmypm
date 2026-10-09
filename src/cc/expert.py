@@ -1,10 +1,8 @@
-"""전문가 에이전트 — ohmyPM에 상주하는 사내 전문가 명부와 자문 창구.
+"""모델 동향 전문가(벤더별 탭) — 랩실 '모델 연구원'의 수집 엔진.
 
-2026-09-28 사용자 결정(R-010): 웹 자율 조사형 전문가(하네스·LLM 앱·프로덕트·디자인)는
-한 번도 수집되지 않아 명부에서 뺐다. 남은 것은 **모델 동향 전문가(벤더별 탭)** — 공식 문서를
-코드가 직접 수집하고 모델별 상세를 정리한다(`src/cc/model_catalog.py`). 자문은 그 위키를 1차
-근거로 답한다.
-지식 위키 파일 쓰기는 **코드**가 한다(에이전트는 읽기+웹만, 텍스트로 반환).
+공식 문서를 코드가 직접 수집하고 모델별 상세를 정리한다(`src/cc/model_catalog.py`). 위키는
+docs/lab/models-<vendor>.md. 2026-10-09부터 화면·스케줄은 src/cc/lab.py가 맡고, 이 모듈은
+명부(EXPERTS)·수집(collect_all)·자문(consult)만 제공한다. 위키 파일 쓰기는 코드가 한다.
 """
 
 import tempfile
@@ -38,7 +36,7 @@ def _neutral() -> str:
 
 
 def wiki_path(domain: str) -> Path:
-    return ROOT / "docs" / "experts" / f"{domain}.md"
+    return ROOT / "docs" / "lab" / f"{domain}.md"     # 랩실 위키 폴더(런타임 산출물, git 미추적)
 
 
 def read_wiki(domain: str) -> str:
@@ -83,8 +81,6 @@ def ask_expert(domain: str, question: str) -> None:
     messages_db.add_message(expert_room(domain), domain, answer or "(답변을 만들지 못했어)")
 
 
-# ── 담당 전문가(전문가개업 보상으로 승격) — 사내 명부에 가상 도메인으로 노출 ──
-# 고정 명부 EXPERTS는 안 건드리고, expertise 있는 담당을 agent::{path} 도메인으로 얇게 잇는다.
 def collect_all() -> dict:
     """전 벤더 모델 동향을 순차 수집·갱신(정기 cron용). 갱신 벤더 수 반환."""
     updated = 0

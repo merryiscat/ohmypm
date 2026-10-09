@@ -1,4 +1,4 @@
-"""APScheduler — 정시 cron(전문가수집만). odin 싱글톤·중복가드 패턴.
+"""APScheduler — 정시 cron(랩실 정기 조사 하나). odin 싱글톤·중복가드 패턴.
 
 2026-10-07 사용자 결정: 자동 스캔(8시)·일간보고(새벽 3시)·아침 텔레그램 발송(7시, 일간보고
 요약 전송)을 정시 배치에서 제거. 스캔·일간보고는 대시보드에서 수동 실행만 한다.
@@ -32,38 +32,39 @@ _running: set[str] = set()  # 중복 실행 가드 (odin _generating 패턴)
 # 그 주 잡이 통째로 사라진다(2026-09-23 실측: "missed by 0:00:01.796"). 주 1회 잡에서는
 # 1초 지각이 한 주 결손이므로 30분을 둔다.
 MISFIRE_GRACE = 1800
+_WEEKDAY_NAMES = ["월", "화", "수", "목", "금", "토", "일"]   # 로그를 사람이 읽게
 
 
-async def _run_expert_collect_job() -> None:
-    """매주 — 전 도메인 전문가 위키를 웹으로 최신화(정기 수집). headless라 to_thread."""
-    if "expert_collect" in _running:
+async def _run_lab_job() -> None:
+    """매주 — 랩실 연구원 3명(모델·디자인·스킬)이 순차 조사해 위키·제안서를 갱신. headless라 to_thread."""
+    if "lab_research" in _running:
         return
-    _running.add("expert_collect")
+    _running.add("lab_research")
     try:
         import asyncio
 
-        from src.cc.expert import collect_all
+        from src.cc.lab import research_all
 
-        await asyncio.to_thread(collect_all)
+        await asyncio.to_thread(research_all)
     except Exception as e:
-        logger.error(f"[스케줄러] 전문가 정기수집 실패: {e}")
+        logger.error(f"[스케줄러] 랩실 정기 조사 실패: {e}")
     finally:
-        _running.discard("expert_collect")
+        _running.discard("lab_research")
 
 
 def start_scheduler() -> None:
     """서버 startup(lifespan)에서 호출."""
     scheduler.add_job(
-        _run_expert_collect_job,
+        _run_lab_job,
         CronTrigger(day_of_week=settings.expert_collect_weekday, hour=settings.expert_collect_hour, minute=0),
-        id="expert_collect",
+        id="lab_research",
         replace_existing=True,
         misfire_grace_time=MISFIRE_GRACE,
     )
     scheduler.start()
     logger.info(
-        f"[스케줄러] 시작 — 전문가수집 매주 {settings.expert_collect_weekday}요일 "
-        f"{settings.expert_collect_hour}:00 (스캔·일간보고는 수동 실행만, 2026-10-07 사용자 결정)"
+        f"[스케줄러] 시작 — 랩실 정기 조사 매주 {_WEEKDAY_NAMES[settings.expert_collect_weekday]}요일 "
+        f"{settings.expert_collect_hour}:00 (그 밖의 일은 화면에서 수동 실행) · 지각 유예 {MISFIRE_GRACE // 60}분"
     )
 
 
