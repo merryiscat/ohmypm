@@ -7,7 +7,7 @@ from pathlib import Path
 from src.config.settings import settings
 
 # ★ 커넥션은 **스레드마다 하나**(2026-09-09). 예전엔 싱글톤 하나를 스레드가 공유했는데,
-#   일간보고가 ThreadPoolExecutor로 여러 프로젝트를 동시에 돌리면서 두 스레드가 같은
+#   게시판 토론이 ThreadPoolExecutor로 여러 담당을 동시에 돌리면서 두 스레드가 같은
 #   커넥션에 commit을 걸어 "cannot commit - no transaction is active"로 배치가 죽었다.
 #   sqlite 파일 잠금이 동시 쓰기를 조정하므로, WAL + busy_timeout으로 대기시킨다.
 _local = threading.local()
@@ -39,18 +39,7 @@ def init_db() -> None:
 def _migrate(db: sqlite3.Connection) -> None:
     """구버전 DB 보정 — CREATE TABLE IF NOT EXISTS는 기존 테이블에 열을 못 넣으므로
     누락된 열만 ALTER TABLE ADD COLUMN 한다(멱등: 이미 있으면 건너뜀)."""
-    # issues에 판정 에이전트 열이 없으면 추가
-    have = {row["name"] for row in db.execute("PRAGMA table_info(issues)")}
-    for col, ddl in (
-        ("verdict", "verdict TEXT"),
-        ("review_reason", "review_reason TEXT"),
-        ("reviewed_at", "reviewed_at TEXT"),
-        ("easy_title", "easy_title TEXT"),   # 쉬운 제목(완결 검증이 부여) — 화면 표시 우선
-    ):
-        if col not in have:
-            db.execute(f"ALTER TABLE issues ADD COLUMN {ddl}")
-
-    # 게시판 인센티브 열(조회수·좋아요·댓글 반응·대댓글) — 기존 DB 보정
+    # 기존 DB에 없는 열만 보정한다(표가 아직 없으면 schema가 곧 만드니 건너뜀)
     def _ensure(table: str, cols: tuple[tuple[str, str], ...]) -> None:
         # posts/comments 테이블이 아직 없으면 schema가 곧 만드니 건너뜀
         if not db.execute("SELECT name FROM sqlite_master WHERE type='table' AND name=?", (table,)).fetchone():
@@ -60,12 +49,15 @@ def _migrate(db: sqlite3.Connection) -> None:
             if col not in present:
                 db.execute(f"ALTER TABLE {table} ADD COLUMN {ddl}")
 
+    _ensure("projects", (("installed", "installed INTEGER DEFAULT 0"),))   # ohmypm/ 설치 여부(2026-10-09)
     _ensure("posts", (("views", "views INTEGER DEFAULT 0"), ("likes", "likes INTEGER DEFAULT 0"),
-                      ("dislikes", "dislikes INTEGER DEFAULT 0")))
+                      ("dislikes", "dislikes INTEGER DEFAULT 0"),
+                      ("session_id", "session_id INTEGER")))              # 토론 회차(2026-10-09)
     _ensure("comments", (
         ("parent_id", "parent_id INTEGER"),
         ("likes", "likes INTEGER DEFAULT 0"),
         ("dislikes", "dislikes INTEGER DEFAULT 0"),
+        ("session_id", "session_id INTEGER"),
     ))
     _ensure("agent_profiles", (
         ("baseline", "baseline INTEGER DEFAULT 0"),
@@ -74,11 +66,11 @@ def _migrate(db: sqlite3.Connection) -> None:
         ("persona", "persona TEXT"),
         ("wish", "wish TEXT"),
         ("model", "model TEXT"),
-        # 성장 엔진(2026-09-07) — 죽어 있던 note를 살리고 보상 실효과용 3열 추가
-        ("note", "note TEXT"),               # 누적 학습 로그(성장 기록)
-        ("expertise", "expertise TEXT"),     # 전문 분야(전문가개업)
-        ("mentor_of", "mentor_of TEXT"),     # 멘토 프로젝트 path(후배지명)
-        ("rest_until", "rest_until TEXT"),   # 1일안식 만료일
+        ("note", "note TEXT"),               # 누적 학습 로그(배운 것) — 복기가 쌓는다
+        # 아래 셋은 폐지된 보상 체계의 열 — 옛 DB와 schema를 맞추려고만 남긴다
+        ("expertise", "expertise TEXT"),
+        ("mentor_of", "mentor_of TEXT"),
+        ("rest_until", "rest_until TEXT"),
     ))
 
     _migrate_timestamps_to_localtime(db)
@@ -92,14 +84,17 @@ _TZ_MIGRATION_KEY = "migration.tz_localtime_v1"
 # (테이블, 시각 열) — schema.sql의 TEXT 시각 열 전부. 새 시각 열을 만들면 여기에도 넣는다.
 _TS_COLUMNS = (
     ("projects", "last_scan"),
-    ("issues", "created_at"),
-    ("issues", "reviewed_at"),
-    ("autolog", "created_at"),
     ("messages", "created_at"),
     ("posts", "created_at"),
     ("comments", "created_at"),
     ("agent_profiles", "updated_at"),
     ("ports", "created_at"),
+    ("board_sessions", "started_at"),
+    ("board_sessions", "deadline_at"),
+    ("board_sessions", "finished_at"),
+    ("board_reactions", "created_at"),
+    ("discussion_scores", "created_at"),
+    ("lab_proposals", "created_at"),
 )
 
 

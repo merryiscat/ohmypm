@@ -49,6 +49,10 @@ class Settings(BaseSettings):
                                "Claude Haiku 4.5")
     model_track_codex: str = "GPT-6 Astra,GPT-6 Sol,GPT-6 Luna"
 
+    # --- 게시판 토론(수동 세션) ---
+    board_concurrency: int = 2    # 동시에 띄우는 담당 수 — 3이면 이 PC 메모리가 못 버틴 이력(2026-09-11)
+    board_max_minutes: int = 60   # 토론 시간 상한(분). 화면 선택지는 10·30·60
+
     # --- 스케줄 ---
     # False면 서버가 cron을 아예 걸지 않는다. 2026-10-07 사용자 결정으로 자동 스캔(8시)과
     # 새벽 일간보고 배치는 제거됨 — 정시 배치는 전문가수집(주 1회)만 남았고,

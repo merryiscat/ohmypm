@@ -15,9 +15,8 @@ from datetime import datetime
 from loguru import logger
 
 from src.cc.client import run_headless_ex
-from src.cc.daily_report import _tool_commit  # 도구 커밋(ohmypm 등) 판정을 일간보고와 공유
+from src.cc.common import neutral_cwd, tool_commit
 from src.cc.permissions import tools_for
-from src.cc.room_agent import _neutral_cwd
 from src.config.settings import ensure_env
 from src.db import messages as messages_db
 from src.proc import NO_WINDOW
@@ -60,7 +59,7 @@ def collect_weekly_commits(days: int = DAYS) -> list[dict]:
                     line = line.strip()
                     # "MM-DD 제목" 꼴 — 제목 부분만 도구 커밋 판정에 넘긴다
                     subject = line.split(" ", 1)[1] if " " in line else line
-                    if line and not _tool_commit(subject):
+                    if line and not tool_commit(subject):
                         commits.append(line)
         except Exception as e:
             logger.warning(f"[주간보고] {p['name']} 커밋 수집 실패: {e}")
@@ -107,7 +106,7 @@ def run_weekly_report(model: str | None = None, days: int = DAYS) -> dict:
     allowed, disallowed = tools_for("weekly_report")  # 미등록 태스크 기본 = 읽기 전용
     meta = run_headless_ex(
         prompt,
-        cwd=_neutral_cwd(),  # 중립 폴더 — 어느 프로젝트의 훅·지침도 끌려오지 않게
+        cwd=neutral_cwd(),  # 중립 폴더 — 어느 프로젝트의 훅·지침도 끌려오지 않게
         allowed_tools=allowed,
         disallowed_tools=disallowed,
         timeout=LLM_TIMEOUT,

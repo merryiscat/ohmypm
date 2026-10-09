@@ -21,50 +21,24 @@ def load(name: str) -> str:
 
 
 def render(template_id: str, /, **vars: str) -> str:
-    """프롬프트 파일의 ${변수}를 채워 완성한다. 모르는 ${}는 그대로 둔다(안전).
-
-    첫 인자는 위치 전용 — 템플릿 변수 이름(name 등)과 충돌하지 않게.
-    """
+    """프롬프트 파일의 ${변수}를 채워 완성한다. 모르는 ${}는 그대로 둔다(안전)."""
     return Template(load(template_id)).safe_substitute(**vars)
 
 
 # ── 시스템 프롬프트 (서버 시작 시 로딩 — 수정하면 재시작 필요) ──────────────
 GATE = "\n\n" + load("gate")
 ROOM_SYSTEM = load("room_system")
-PM_SYSTEM = load("pm_system")
-MANAGE_SYSTEM = load("manage_system")
 FEEDBACK_SYSTEM = load("feedback_system")
 FOLLOWUP_SYSTEM = load("followup_system")
 BOARD_WRITE_SYSTEM = load("board_write_system")
 BOARD_SYSTEM = load("board_system")
-REWARD_SYSTEM = load("reward_system")
-REPROCESS_SYSTEM = load("reprocess_system")
 EXPERT_SYSTEM = load("expert_system")
-
-# 1000점 보상 메뉴 (에이전트가 택1) — 데이터라 코드에 남긴다.
-# 맨 앞 '모델승급'이 기본 보상(2026-09-07) — 특별한 이유가 없으면 이걸 받는다.
-REWARD_MENU = [
-    "모델승급",
-    "이름", "페르소나", "멘토", "전문가개업", "후배지명", "1일안식", "명예졸업", "대문표창",
-]
-DEFAULT_REWARD = "모델승급"
 
 
 # ── 본문 템플릿 (매 호출 파일 재로딩 — 수정 즉시 반영) ─────────────────────
 def room_chat(project_name: str, project_path: str, history: str) -> str:
     return render("room_chat", project_name=project_name, project_path=project_path,
                   history=history)
-
-
-def pm_turn(project_name: str, facts: str, history: str, issues: str = "") -> str:
-    return render("pm_turn", project_name=project_name, facts=facts,
-                  issues=issues or "(이슈 없음)",
-                  history=history or "(아직 없음 — 첫 턴)")
-
-
-def pm_manage(project_name: str, issue_list: str, transcript: str) -> str:
-    return render("pm_manage", project_name=project_name,
-                  issue_list=issue_list or "(없음)", transcript=transcript or "(대화 없음)")
 
 
 def post_feedback(author: str, project_path: str, title: str, body: str, comments: str) -> str:
@@ -75,11 +49,6 @@ def post_feedback(author: str, project_path: str, title: str, body: str, comment
 def comment_followup(project_name: str, project_path: str, threads: str) -> str:
     return render("comment_followup", project_name=project_name,
                   project_path=project_path, threads=threads)
-
-
-def daily_agent_answer(project_name: str, project_path: str, question: str, history: str) -> str:
-    return render("daily_agent_answer", project_name=project_name, project_path=project_path,
-                  question=question, history=history or "(첫 질문)")
 
 
 def board_write(project_name: str, project_path: str, past_posts: str = "") -> str:
@@ -93,29 +62,6 @@ def board_comment(project_name: str, project_path: str, board_text: str) -> str:
                   board_text=board_text)
 
 
-def reward_choice(name: str, model: str = "", next_model: str = "") -> str:
-    """1000점 보상 선택 프롬프트. 모델승급이 기본 보상이라 현재/다음 모델을 같이 알려준다.
-
-    최상위(opus)라 올릴 곳이 없으면 승급 줄을 '이번엔 불가'로 바꿔 다른 보상을 고르게 한다.
-    """
-    if next_model:
-        line = (f"- 모델승급 (기본 보상 — 특별한 이유가 없으면 이걸 골라라): "
-                f"네 두뇌를 {model} → {next_model} 로 영구 승급. 앞으로 모든 네 작업이 더 좋은 모델로 돈다")
-    else:
-        line = (f"- 모델승급: 너는 이미 최상위 모델({model})이라 이번엔 고를 수 없다 "
-                f"— 아래 중에서 골라라")
-    return render("reward_choice", name=name, model_line=line)
-
-
-def wish_prompt(name: str) -> str:
-    return render("wish_prompt", name=name)
-
-
-def reprocess_docs(project_name: str, project_path: str, material: str) -> str:
-    return render("reprocess_docs", project_name=project_name, project_path=project_path,
-                  material=material)
-
-
 def expert_consult(topic: str, wiki: str, question: str) -> str:
     return render("expert_consult", topic=topic,
                   wiki=wiki or "(비어 있음 — 웹으로 조사해 답하라)", question=question)
@@ -123,7 +69,7 @@ def expert_consult(topic: str, wiki: str, question: str) -> str:
 
 def model_catalog_update(vendor_name: str, source_key: str, source_url: str, window_note: str,
                          diff_text: str, tracked_models: list[str]) -> str:
-    """모델 동향 소스의 달라진 절 → 추적 모델별 변경 JSON 생성 프롬프트(2026-09-28 T-007·R-010).
+    """모델 동향 소스의 달라진 절 → 추적 모델별 변경 JSON 생성 프롬프트.
 
     LLM은 텍스트만 반환(도구 없음) — 코드가 JSON 구조·필수 필드·모델 이름·출처 링크를 검증한다.
     """
@@ -133,7 +79,7 @@ def model_catalog_update(vendor_name: str, source_key: str, source_url: str, win
 
 
 def model_profile(vendor_name: str, model: str, entries_text: str, overview_text: str) -> str:
-    """모델 하나의 상세 프로필(개요·스펙·잘 쓰는 법·하네스 조정·주의) JSON 생성 프롬프트(R-010)."""
+    """모델 하나의 상세 프로필(개요·스펙·잘 쓰는 법·하네스 조정·주의) JSON 생성 프롬프트."""
     return render("model_profile", vendor_name=vendor_name, model=model,
                   entries_text=entries_text or "(기록 없음)",
                   overview_text=overview_text or "(공식 문서 발췌 없음)") + GATE

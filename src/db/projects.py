@@ -1,17 +1,17 @@
-"""관리 대상 프로젝트 CRUD (케이스 12)."""
+"""관리 대상 프로젝트 CRUD."""
 
 from src.db.client import get_db
 
 
-def upsert_project(path: str, name: str, has_wiki: bool) -> None:
-    """프로젝트 등록/갱신. 이미 있으면 이름·위키유무·스캔시각만 업데이트."""
+def upsert_project(path: str, name: str, installed: bool) -> None:
+    """프로젝트 등록/갱신. 이미 있으면 이름·설치여부·스캔시각만 업데이트."""
     db = get_db()
     db.execute(
-        "INSERT INTO projects (path, name, has_wiki, last_scan) "
+        "INSERT INTO projects (path, name, installed, last_scan) "
         "VALUES (?, ?, ?, datetime('now','localtime')) "
         "ON CONFLICT(path) DO UPDATE SET "
-        "  name=excluded.name, has_wiki=excluded.has_wiki, last_scan=excluded.last_scan",
-        (path, name, int(has_wiki)),
+        "  name=excluded.name, installed=excluded.installed, last_scan=excluded.last_scan",
+        (path, name, int(installed)),
     )
     db.commit()
 

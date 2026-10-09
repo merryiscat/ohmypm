@@ -1,97 +1,22 @@
-"""대시보드 데이터 API (JSON). 화면 JS가 이걸 fetch해 카드를 그린다."""
+"""대시보드 데이터 API (JSON). 화면 JS가 이걸 fetch해 그린다."""
 
 from fastapi import APIRouter, BackgroundTasks
 from pydantic import BaseModel
 
-from src.db import alerts as alerts_db
 from src.db import board as board_db
-from src.db import issues as issues_db
 from src.db import messages as messages_db
 from src.db import ports as ports_db
 from src.db import projects as projects_db
+from src.db import sessions as sessions_db
 
 router = APIRouter(prefix="/api")
 
 
+# ── 프로젝트 ──────────────────────────────────────────────────────────────────
 @router.get("/projects")
 def get_projects() -> list[dict]:
-    """관리 대상 프로젝트 목록(+ 프로젝트별 '기록 자동 반영' 스위치)."""
-    from src.db import alerts as alerts_db
-
-    out = projects_db.list_projects()
-    for p in out:
-        p["docs_autowrite"] = alerts_db.docs_autowrite(p["path"])
-    return out
-
-
-class AutowriteReq(BaseModel):
-    path: str
-    on: bool
-
-
-@router.post("/projects/autowrite")
-def set_autowrite(req: AutowriteReq) -> dict:
-    """프로젝트별 '기록 자동 반영' 켜기/끄기(2026-09-17). 켜진 프로젝트만 담당이 docs를 고치고
-    코드가 커밋한다(기록 정리·일간보고 반영·조언 반영). 기본은 끔."""
-    from src.db import alerts as alerts_db
-
-    alerts_db.set_docs_autowrite(req.path, req.on)
-    return {"ok": True, "path": req.path, "on": req.on}
-
-
-@router.get("/agents")
-def get_agents() -> list[dict]:
-    """담당 에이전트 리더보드 — 게시판 점수 재계산 + 프로필(이름·페르소나·보상). 점수 높은 순."""
-    from src.db import agents as agents_db
-
-    projs = projects_db.list_projects(enabled_only=True)
-    agents_db.refresh_scores({p["path"]: p["name"] for p in projs})
-    out = []
-    for p in projs:
-        prof = agents_db.get_profile(p["path"]) or {}
-        pts = prof.get("points", 0) or 0
-        out.append({
-            "project": p["path"],
-            "name": prof.get("name") or p["name"],
-            "points": pts,
-            "persona": prof.get("persona"),
-            "reward": prof.get("reward"),
-            "wish": prof.get("wish"),
-            "model": prof.get("model") or "",   # ''=기본(=DEFAULT_MODEL sonnet)
-            "tier": 2 if pts >= agents_db.MILESTONE_WISH else (1 if pts >= agents_db.MILESTONE_MENU else 0),
-        })
-    out.sort(key=lambda x: x["points"], reverse=True)
-    return out
-
-
-class AgentModel(BaseModel):
-    project: str   # 프로젝트 path
-    model: str     # ''(기본=sonnet) | opus | sonnet | haiku
-
-
-@router.post("/agents/model")
-def set_agent_model(req: AgentModel) -> dict:
-    """담당 에이전트의 headless 모델 교체. 빈 값이면 기본(sonnet)으로 되돌린다."""
-    from src.db import agents as agents_db
-
-    m = req.model.strip()
-    if m not in agents_db.ALLOWED_MODELS:
-        return {"ok": False, "error": f"모델은 {'/'.join(x or '기본' for x in agents_db.ALLOWED_MODELS)} 중 하나"}
-    proj = next((p for p in projects_db.list_projects() if p["path"] == req.project), None)
-    if not proj:
-        return {"ok": False, "error": "unknown project"}
-    agents_db.upsert_profile(req.project, proj["name"])   # 프로필 없으면 생성
-    agents_db.set_model(req.project, m)
-    return {"ok": True, "project": req.project, "model": m}
-
-
-@router.post("/rewards")
-def trigger_rewards(background: BackgroundTasks) -> dict:
-    """보상 처리 수동 트리거 — 1000점↑ 담당에게 보상 선택, 2000점↑ 소원권."""
-    from src.cc.rewards import run_rewards
-
-    background.add_task(run_rewards)
-    return {"ok": True, "started": True}
+    """관리 대상 프로젝트 목록(installed = ohmypm/ 폴더 설치 여부)."""
+    return projects_db.list_projects()
 
 
 class ProjectPath(BaseModel):
@@ -101,47 +26,77 @@ class ProjectPath(BaseModel):
 @router.post("/projects/remove")
 def remove_project(p: ProjectPath) -> dict:
     """프로젝트를 관리에서 제외 — 비활성(enabled=0, 재스캔 재등장 방지) + 관련 데이터 정리
-    (이슈·게시판 글/댓글·대화 방). 폴더 자체는 건드리지 않는다."""
+    (게시판 글/댓글·대화 방). 폴더 자체는 건드리지 않는다."""
     projects_db.set_enabled(p.path, False)
-    issues = issues_db.delete_by_project(p.path)
     posts = board_db.delete_by_project(p.path)
     messages_db.delete_for_project(p.path)
-    return {"ok": True, "disabled": p.path, "issues_deleted": issues, "posts_deleted": posts}
-
-
-@router.get("/issues")
-def get_issues(status: str | None = None) -> list[dict]:
-    """이슈 목록(선택: 상태 필터). 기한 임박순."""
-    return issues_db.list_issues(status)
-
-
-class StatusUpdate(BaseModel):
-    status: str
-
-
-@router.post("/issues/{issue_id}/status")
-def update_issue_status(issue_id: int, upd: StatusUpdate) -> dict:
-    """칸반 열 이동 = 이슈 status 변경. open/consulting/resolved/deferred만 허용."""
-    if upd.status not in ("open", "consulting", "resolved", "deferred"):
-        return {"ok": False, "error": f"알 수 없는 상태: {upd.status}"}
-    issues_db.set_status(issue_id, upd.status)
-    return {"ok": True}
+    return {"ok": True, "disabled": p.path, "posts_deleted": posts}
 
 
 @router.post("/scan")
 def trigger_scan() -> dict:
-    """수동 스캔 트리거(대시보드 '스캔' 버튼). 빠른 결정론 수집만 — 판정은 별도."""
+    """스캔 = 프로젝트 발견 + 각 프로젝트에 ohmypm/ 설치(대시보드 '스캔' 버튼). 파일 작업뿐이라 동기."""
     from src.scan import run_scan
 
     return run_scan()
 
 
-# ── 메시지 보드 (에이전트 채팅방 + 프로젝트 룸) ───────────────────────────
+# ── 담당 에이전트 ───────────────────────────────────────────────────────────
+@router.get("/agents")
+def get_agents() -> list[dict]:
+    """담당 에이전트 목록 — 누적 점수·최근 회차 변화·배운 것 첫 줄·모델. 점수 높은 순."""
+    from src.db import agents as agents_db
+
+    projs = projects_db.list_projects(enabled_only=True)
+    agents_db.refresh_scores({p["path"]: p["name"] for p in projs})
+    out = []
+    for p in projs:
+        prof = agents_db.get_profile(p["path"]) or {}
+        note = (prof.get("note") or "").strip()
+        out.append({
+            "project": p["path"],
+            "name": prof.get("name") or p["name"],
+            "points": prof.get("points", 0) or 0,
+            "persona": prof.get("persona"),
+            "model": prof.get("model") or "",   # ''=기본
+            "last_delta": sessions_db.last_delta(p["path"]),
+            "note_head": note.split("\n", 1)[0] if note else "",
+        })
+    out.sort(key=lambda x: x["points"], reverse=True)
+    return out
 
 
+class AgentModel(BaseModel):
+    project: str   # 프로젝트 path
+    model: str     # ''(기본) | opus | sonnet | haiku
+
+
+@router.post("/agents/model")
+def set_agent_model(req: AgentModel) -> dict:
+    """담당 에이전트의 headless 모델 교체. 빈 값이면 기본으로 되돌린다."""
+    from src.db import agents as agents_db
+
+    m = req.model.strip()
+    if m not in agents_db.ALLOWED_MODELS:
+        return {"ok": False, "error": f"모델은 {'/'.join(x or '기본' for x in agents_db.ALLOWED_MODELS)} 중 하나"}
+    proj = next((p for p in projects_db.list_projects() if p["path"] == req.project), None)
+    if not proj:
+        return {"ok": False, "error": "unknown project"}
+    agents_db.upsert_profile(req.project, proj["name"])
+    agents_db.set_model(req.project, m)
+    return {"ok": True, "project": req.project, "model": m}
+
+
+@router.get("/scores")
+def get_scores(project: str | None = None, limit: int = 50) -> list[dict]:
+    """토론 회차별 점수 이력(최신 먼저). project를 주면 그 담당 것만."""
+    return sessions_db.list_scores(project, limit)
+
+
+# ── 메시지 (프로젝트 룸) ───────────────────────────────────────────────────
 @router.get("/messages")
 def get_messages(room: str = messages_db.GLOBAL_ROOM) -> list[dict]:
-    """방의 대화 목록. room 미지정이면 전체 채팅방('global')."""
+    """방의 대화 목록."""
     return messages_db.list_messages(room)
 
 
@@ -162,7 +117,6 @@ def post_message(msg: PostMessage, background: BackgroundTasks) -> dict:
     if not body:
         return {"ok": False, "error": "빈 메시지"}
     row = messages_db.add_message(msg.room, msg.author, body)
-    # 프로젝트 룸(room=프로젝트 path)에서 사용자 발화면 → 담당 에이전트 응답 예약
     if msg.author == "user" and msg.room != messages_db.GLOBAL_ROOM:
         proj = next((p for p in projects_db.list_projects() if p["path"] == msg.room), None)
         if proj:
@@ -178,12 +132,7 @@ class RoomRetry(BaseModel):
 
 @router.post("/room-retry")
 def retry_room_reply(r: RoomRetry, background: BackgroundTasks) -> dict:
-    """끊긴 담당 답변을 다시 부른다 — 질문을 새로 쓰지 않고 마지막 질문에 답하게 한다.
-
-    서버 재시작·예외로 답변 작업이 죽으면 방에는 질문만 남고 화면은 계속 "답하는 중"이다.
-    기동 때 자동 재개(room_agent.resume_dangling_replies)가 기본이고, 이건 사용자가
-    화면에서 직접 누르는 손잡이다(2026-09-13).
-    """
+    """끊긴 담당 답변을 다시 부른다 — 질문을 새로 쓰지 않고 마지막 질문에 답하게 한다."""
     proj = next((p for p in projects_db.list_projects() if p["path"] == r.room), None)
     if not proj:
         return {"ok": False, "error": "프로젝트 방이 아닙니다"}
@@ -196,138 +145,10 @@ def retry_room_reply(r: RoomRetry, background: BackgroundTasks) -> dict:
     return {"ok": True}
 
 
-@router.get("/daily")
-def get_daily() -> list[dict]:
-    """일간보고 트리 — [{date, projects:[{project, name, room}]}], 최신 날짜 먼저.
-
-    방 키 daily::{date}::{path} 를 날짜·프로젝트로 묶는다. 대화는 /api/messages?room=<room>로.
-    """
-    names = {p["path"]: p["name"] for p in projects_db.list_projects(enabled_only=False)}
-
-    by_date: dict[str, list[dict]] = {}
-    for room in messages_db.list_rooms_like("daily::"):
-        try:
-            _, date, path = room.split("::", 2)
-        except ValueError:
-            continue
-        msgs = messages_db.list_messages(room)
-        # 실제 인터뷰가 돈 방인가 — 한 줄 통지("(...)", "작업 내용 없음")만 있으면 생략으로 분류
-        active = any(
-            not (m["body"] or "").startswith("(") and "작업 내용 없음" not in (m["body"] or "")
-            for m in msgs
-        )
-        by_date.setdefault(date, []).append(
-            {"project": path, "name": names.get(path, path), "room": room,
-             "msgs": len(msgs), "active": active,
-             "checked": alerts_db.get_setting(_daily_check_key(date, path)) == "1",
-             "last": (msgs[-1]["created_at"] if msgs else "")}
-        )
-    # 정렬: **보고가 실제로 있는 프로젝트가 먼저**(2026-09-13 사용자 확정 — 읽을 게 있는 것부터
-    # 위에 와야 한다). 같은 무리 안에서는 최근 대화가 위. 생략된 방(변화 없음·한도 스킵)은 뒤로 깔린다.
-    return [
-        {"date": d,
-         "projects": sorted(by_date[d], key=lambda x: (x["active"], x["last"]), reverse=True)}
-        for d in sorted(by_date, reverse=True)
-    ]
-
-
-def _daily_check_key(date: str, path: str) -> str:
-    """'이 날짜의 이 프로젝트 보고를 내가 봤다' 표시를 담는 설정 키."""
-    return f"daily_checked:{date}:{path}"
-
-
-class DailyCheck(BaseModel):
-    date: str
-    project: str
-    checked: bool
-
-
-@router.post("/daily/check")
-def set_daily_check(c: DailyCheck) -> dict:
-    """일간보고를 사용자가 확인했는지 표시한다(날짜+프로젝트 단위).
-
-    보고가 27개씩 쌓이면 "어디까지 읽었더라"가 매일 반복되는 질문이 된다(2026-09-13 사용자 요청).
-    체크는 날짜마다 따로 — 어제 확인했다고 오늘 보고가 확인된 것은 아니다.
-    별도 테이블 없이 alerts 키/값에 얹는다(파생 정보라 지워져도 보고 자체는 안 다친다).
-    """
-    alerts_db.set_setting(_daily_check_key(c.date, c.project), "1" if c.checked else "0")
-    return {"ok": True}
-
-
-# ── PM 대화 패널 (사용자 ↔ 총괄 PM, 일간보고 화면 오른쪽) ─────────────────────
-# ── 전문가 에이전트 (ohmyPM 상주, 웹 지식수집 + PM 자문) ────────────────────
-@router.get("/experts")
-def get_experts() -> list[dict]:
-    """사내 전문가 명부 + 위키 상태. 고정 전문가 + 전문가개업 보상으로 승격된 담당 전문가."""
-    from src.cc import expert as ex
-
-    out = []
-    for domain, meta in ex.EXPERTS.items():
-        wiki = ex.read_wiki(domain)
-        out.append({"domain": domain, "name": meta["name"], "topic": meta["topic"],
-                    "wiki_chars": len(wiki)})
-    # 담당 전문가(전문가개업 보상) — 위키 대신 성장 기록에 기반해 자문
-    for a in ex.list_agent_experts():
-        out.append({"domain": a["domain"], "name": a["name"] + " (담당 전문가)",
-                    "topic": a["topic"], "wiki_chars": 0})
-    return out
-
-
-@router.get("/experts/{domain}/wiki")
-def get_expert_wiki(domain: str) -> dict:
-    """전문가 지식 위키 본문."""
-    from src.cc import expert as ex
-
-    return {"domain": domain, "wiki": ex.read_wiki(domain)}
-
-
-@router.post("/experts/{domain}/collect")
-def collect_expert(domain: str, background: BackgroundTasks) -> dict:
-    """전문가 수집(백그라운드). 모델 동향 탭은 그 벤더의 공식 출처를 코드 수집기가 받는다(T-007·R-010)."""
-    from src.cc.expert import EXPERTS, collect_knowledge
-
-    if domain not in EXPERTS:
-        return {"ok": False, "error": "unknown expert"}
-    background.add_task(collect_knowledge, domain)
-    return {"ok": True, "started": True}
-
-
-class ExpertQ(BaseModel):
-    question: str
-
-
-@router.post("/experts/{domain}/ask")
-def ask_expert_api(domain: str, q: ExpertQ, background: BackgroundTasks) -> dict:
-    """전문가에게 질문 — 질문은 즉시 방에 기록, 답변은 백그라운드. 담당 전문가(agent::)도 라우팅."""
-    from src.cc.expert import EXPERTS, ask_expert, expert_room
-
-    body = q.question.strip()
-    if not body:
-        return {"ok": False, "error": "빈 질문"}
-    # 담당 전문가(전문가개업) — agent::{path} 도메인은 그 담당을 열어 자문
-    if domain.startswith("agent::"):
-        path = domain[len("agent::"):]
-
-        def _ask_agent() -> None:
-            from src.cc.expert import consult_agent_expert
-
-            ans = consult_agent_expert(path, body)
-            messages_db.add_message(expert_room(domain), domain, ans or "(답변을 만들지 못했어)")
-
-        messages_db.add_message(expert_room(domain), "user", body)
-        background.add_task(_ask_agent)
-        return {"ok": True, "started": True}
-    if domain not in EXPERTS:
-        return {"ok": False, "error": "unknown expert"}
-    messages_db.add_message(expert_room(domain), "user", body)
-    background.add_task(ask_expert, domain, body)
-    return {"ok": True, "started": True}
-
-
-# ── 포트 레지스트리 (1단계: 표시·충돌 감지, 읽기 전용) ──────────────────────
+# ── 포트 레지스트리 ─────────────────────────────────────────────────────────
 @router.get("/ports")
 def get_ports() -> dict:
-    """등록 포트 + 실시간 점유 상태(UP/PID) + 충돌(같은 포트 여러 프로젝트)."""
+    """등록 포트 + 실시간 점유 상태(UP/PID) + 충돌(같은 포트 여러 프로젝트) + 감지 포트."""
     from src.portscan import listening_ports
 
     regs = ports_db.list_ports()
@@ -344,7 +165,6 @@ def get_ports() -> dict:
         })
         by_port.setdefault(r["port"], []).append(names.get(r["project"], r["project"]))
     conflicts = [{"port": p, "projects": ns} for p, ns in by_port.items() if len(ns) > 1]
-    # 등록 안 됐지만 지금 떠 있는 개발 서버(python·node 등)를 자동 감지해 보여준다
     dev_procs = {"python", "pythonw", "node", "deno", "bun", "ruby", "java",
                  "dotnet", "go", "php", "uvicorn", "gunicorn", "caddy", "nginx"}
     registered_ports = set(by_port.keys())
@@ -395,9 +215,10 @@ def stop_port_api(port_id: int) -> dict:
     return stop_port(port_id)
 
 
+# ── 게시판 (글·댓글·사용자 반응) ─────────────────────────────────────────────
 @router.get("/posts")
 def get_posts(board: str = board_db.DAILY_BOARD) -> list[dict]:
-    """게시판 글 목록(각 글에 comments 배열 포함). 화면 '게시판'이 이걸 그린다."""
+    """게시판 글 목록(각 글에 comments 배열 포함)."""
     return board_db.list_posts(board)
 
 
@@ -426,14 +247,12 @@ def add_post_comment(post_id: int, c: PostComment) -> dict:
 
 @router.post("/posts/{post_id}/like")
 def like_post(post_id: int) -> dict:
-    """글 좋아요 +1."""
     board_db.like_post(post_id)
     return {"ok": True}
 
 
 @router.post("/posts/{post_id}/dislike")
 def dislike_post(post_id: int) -> dict:
-    """글 싫어요 +1 — 재탕·근거 부족에 대한 반대표(점수에서 차감된다)."""
     board_db.dislike_post(post_id)
     return {"ok": True}
 
@@ -444,32 +263,7 @@ class Reaction(BaseModel):
 
 @router.post("/comments/{comment_id}/react")
 def react_comment(comment_id: int, r: Reaction) -> dict:
-    """댓글 좋아요/싫어요."""
     if r.reaction not in ("like", "dislike"):
         return {"ok": False, "error": "reaction은 like/dislike"}
     board_db.react_comment(comment_id, r.reaction)
     return {"ok": True}
-
-
-class BoardDiscussionReq(BaseModel):
-    paths: list[str] | None = None
-
-
-@router.post("/board-discussion")
-def trigger_board_discussion(background: BackgroundTasks, cfg: BoardDiscussionReq | None = None) -> dict:
-    """게시판 토론(4단계) 수동 트리거 — 담당들이 관심 있는 글에 댓글. posts/comments에 쌓인다."""
-    cfg = cfg or BoardDiscussionReq()
-    from src.cc.daily_report import run_board_discussion
-
-    background.add_task(run_board_discussion, paths=cfg.paths)
-    return {"ok": True, "started": True}
-
-
-@router.post("/post-feedback")
-def trigger_post_feedback(background: BackgroundTasks, cfg: BoardDiscussionReq | None = None) -> dict:
-    """글쓴이 자동 반응(1b) 수동 트리거 — 글쓴이가 자기 글 댓글에 좋아요/싫어요/대댓글."""
-    cfg = cfg or BoardDiscussionReq()
-    from src.cc.daily_report import run_post_feedback
-
-    background.add_task(run_post_feedback, paths=cfg.paths)
-    return {"ok": True, "started": True}

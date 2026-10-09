@@ -1,15 +1,12 @@
 """프로젝트 담당 에이전트 — 그 프로젝트의 CLAUDE.md·docs를 읽고 룸에서 대화한다.
 
 headless 통로(`claude -p`)를 재사용한다. 추가 구독·API 불필요.
-지금은 '사용자 ↔ 담당 에이전트' 대화용이지만, 계약(방의 최근 대화 → 답 한 줄 추가)을
-그대로 두면 나중 'PM ↔ 담당 일간보고'·'담당들끼리 자유채팅'에도 재사용할 수 있다.
 """
 
-import tempfile
 import threading
-from pathlib import Path
 
 from src.cc.client import run_headless
+from src.cc.common import neutral_cwd
 from src.cc.permissions import tools_for
 from src.cc.prompts import ROOM_SYSTEM, room_chat
 from src.db import agents as agents_db
@@ -19,33 +16,20 @@ AGENT_AUTHOR = "agent"      # 담당 에이전트 발화의 author (화면에서
 CHAT_TIMEOUT = 180          # 콜드스타트 + 파일 탐색 여유
 HISTORY_LIMIT = 20          # 프롬프트에 넣을 최근 대화 줄 수
 
-# 담당 에이전트는 중립 cwd에서 돈다(대상 SessionStart 훅·CLAUDE.md 대화체 격리).
-# 대상 폴더는 --add-dir로 '읽기만' 열어준다. 프로세스당 한 번 만들어 재사용.
-_NEUTRAL_CWD: str | None = None
-
-
-def _neutral_cwd() -> str:
-    global _NEUTRAL_CWD
-    if _NEUTRAL_CWD is None or not Path(_NEUTRAL_CWD).exists():
-        _NEUTRAL_CWD = tempfile.mkdtemp(prefix="ohmypm_room_")
-    return _NEUTRAL_CWD
-
-
 def reply_in_room(project_path: str, name: str) -> None:
     """방(room=project_path)의 최근 대화를 담당 에이전트가 읽고, 답 한 줄을 방에 남긴다.
 
-    일간보고 대화는 daily_report가 룸 피드에도 그대로 기록하므로(2026-09-04),
-    최근 대화(history)만 줘도 담당이 밤의 보고 맥락을 이어받는다.
     실패해도 방에 안내 메시지를 남겨 '조용한 실패'를 피한다(놓침0 원칙).
     백그라운드에서 호출된다 — HTTP 응답을 막지 않는다.
     """
     history = messages_db.list_messages(project_path, limit=HISTORY_LIMIT)
     hist_txt = "\n".join(f"{m['author']}: {m['body']}" for m in history)
-    prompt = room_chat(name, project_path, hist_txt)
+    # 정체성 + 배운 것(토론 복기가 쌓은 note)을 앞에 붙인다 — 룸에서도 같은 담당이 이어진다
+    prompt = agents_db.persona_prefix(project_path) + room_chat(name, project_path, hist_txt)
     allowed, disallowed = tools_for("room_chat")
     result = run_headless(task="room_chat",
         prompt=prompt,
-        cwd=_neutral_cwd(),           # 중립 cwd — 대상 훅·CLAUDE.md 격리
+        cwd=neutral_cwd(),            # 중립 cwd — 대상 훅·CLAUDE.md 격리
         allowed_tools=allowed,
         disallowed_tools=disallowed,
         # 사용자가 시키면 그 자리에서 고친다(2026-09-09 확정) — 저장 자동 승인.

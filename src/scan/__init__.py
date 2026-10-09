@@ -1,51 +1,35 @@
-"""관리 대상 스캔 — 프로젝트 발견(discover) + llmwiki 파싱(llmwiki)을 묶는 파이프라인.
+"""스캔 — 프로젝트 발견(discover) + 각 프로젝트에 ohmypm/ 설치(install).
 
-★ headless·LLM 없이 순수 결정론적 파싱. "수집=스크립트, 요약만 LLM" 원칙(08-22).
-   status 341KB 같은 비대 문서도 통째로 LLM에 안 던지고 여기서 미해결 목록만 추출한다.
+★ 모델 호출 없이 파일 작업만. 한 프로젝트 실패가 전체를 멈추지 않게 프로젝트별 try/except.
+(2026-10-09: 옛 llmwiki 파서·이슈 적재는 제거 — 각 프로젝트의 docs 위키가 폐기됐다.)
 """
 
 from loguru import logger
 
 from src.config.settings import ensure_env
-from src.db import issues as issues_db
 from src.scan.discover import discover_projects
-from src.scan.llmwiki import parse_wiki
 
 
 def run_scan() -> dict:
-    """전체 스캔: .env 확인 → 프로젝트 발견 → 각 위키 파싱 → 이슈 적재. 요약 통계 반환.
+    """전체 스캔: .env 확인 → 프로젝트 발견 → 각 프로젝트에 ohmypm/ 설치. 요약 통계 반환."""
+    from src.install import install_project
 
-    한 프로젝트 실패가 배치 전체를 멈추지 않게 per-project try/except.
-    """
-    # .env가 없으면 ohmyPM 위치 기준 기본값으로 만들고 진행한다(2026-10-07 사용자 결정 —
-    # .env 부재로 스캔이 조용히 0건으로 끝났던 사고의 항체)
     ensure_env()
     projects = discover_projects()
-    total_issues = 0
-    total_stale = 0
+    out = {"projects": len(projects), "installed": 0, "already": 0, "self_skipped": 0, "errors": []}
     for p in projects:
         try:
-            seen: set[int] = set()   # 이번 스캔에서 소스에 실제로 있던 이슈 id
-            for issue in parse_wiki(p["path"]):
-                seen.add(issues_db.upsert_issue(
-                    project=p["path"],
-                    kind=issue["kind"],
-                    title=issue["title"],
-                    due=issue.get("due"),
-                    source=issue.get("source"),
-                    status=issue.get("status", "open"),
-                ))
-                total_issues += 1
-            # ★ 유령 이슈 reconciliation(2026-09-17) — 소스에서 사라진 활성 이슈는 삭제 대신
-            #   stale 표시. 그전엔 upsert만 있고 지우는 쪽이 없어, 기록 정리 뒤 재스캔을 돌려도
-            #   화면이 안 맞았다(09-08 지적, 09-10 착수 확정, 09-17 구현).
-            total_stale += issues_db.mark_stale(p["path"], seen)
-        except Exception as e:  # 한 프로젝트 파싱 실패 → 로그만, 다음 계속
-            logger.warning(f"[스캔] {p['name']} 파싱 실패: {e}")
-    # ★ 날짜 없는 활성 이슈에 기본 재확인일(+14일)을 채운다(2026-09-06 사용자 확정:
-    #   "날짜 없으면 묻힌다"). PM이 일간보고에서 더 좋은 날짜를 잡으면 그걸로 덮인다.
-    filled = issues_db.fill_default_due(days=14)
-    logger.info(f"[스캔] 프로젝트 {len(projects)}개, 이슈 {total_issues}건 적재, "
-                f"재확인일 부여 {filled}건, 소스에서 사라져 stale 처리 {total_stale}건")
-    return {"projects": len(projects), "issues": total_issues, "due_filled": filled,
-            "stale": total_stale}
+            r = install_project(p["path"])
+        except Exception as e:  # 한 프로젝트 실패 → 로그만, 다음 계속
+            logger.warning(f"[스캔] {p['name']} 설치 실패: {e}")
+            out["errors"].append({"name": p["name"], "error": str(e)[:200]})
+            continue
+        if r.get("self"):
+            out["self_skipped"] += 1
+        elif r.get("created"):
+            out["installed"] += 1
+        else:
+            out["already"] += 1
+    logger.info(f"[스캔] 프로젝트 {out['projects']}개 — 새로 설치 {out['installed']}, "
+                f"이미 설치 {out['already']}, 자기 자신 제외 {out['self_skipped']}, 실패 {len(out['errors'])}")
+    return out

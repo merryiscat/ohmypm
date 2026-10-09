@@ -13,7 +13,7 @@ from pathlib import Path
 from loguru import logger
 
 from src.cc.client import run_headless
-from src.cc.model_catalog import MODEL_DOMAINS, VENDORS, collect_vendor, trend_brief
+from src.cc.model_catalog import MODEL_DOMAINS, VENDORS, collect_vendor
 from src.cc.permissions import tools_for
 from src.cc.prompts import EXPERT_SYSTEM, expert_consult
 from src.db import messages as messages_db
@@ -48,15 +48,6 @@ def read_wiki(domain: str) -> str:
 
 def expert_room(domain: str) -> str:
     return f"expert::{domain}"
-
-
-def _model_trend_brief() -> str:
-    """모델 동향 요약 — 담당 전문가(전문가개업) 자문 입력에 주입. 상태 없으면 빈 문자열."""
-    try:
-        return trend_brief()
-    except Exception as e:  # 모델동향 쪽 오류가 다른 자문을 막지 않는다
-        logger.warning(f"[전문가] 모델동향 요약 주입 실패(무시): {e}")
-        return ""
 
 
 def collect_knowledge(domain: str) -> dict:
@@ -94,45 +85,6 @@ def ask_expert(domain: str, question: str) -> None:
 
 # ── 담당 전문가(전문가개업 보상으로 승격) — 사내 명부에 가상 도메인으로 노출 ──
 # 고정 명부 EXPERTS는 안 건드리고, expertise 있는 담당을 agent::{path} 도메인으로 얇게 잇는다.
-def list_agent_experts() -> list[dict]:
-    """전문가개업 보상을 받은 담당들 — {domain: 'agent::{path}', name, topic:expertise}."""
-    from src.db import agents as agents_db
-
-    out = []
-    for prof in agents_db.list_profiles():
-        if prof.get("expertise"):
-            out.append({
-                "domain": f"agent::{prof['project']}",
-                "name": prof.get("name") or prof["project"],
-                "topic": prof["expertise"],
-            })
-    return out
-
-
-def consult_agent_expert(project_path: str, question: str) -> str:
-    """담당 전문가에게 자문 — 그 프로젝트를 열고 expertise+성장기록(+모델 동향)을 근거로 답한다."""
-    from src.cc.room_agent import _neutral_cwd
-    from src.db import agents as agents_db
-
-    prof = agents_db.get_profile(project_path) or {}
-    topic = prof.get("expertise") or ""
-    if not topic:
-        return ""
-    allowed, disallowed = tools_for("expert")
-    note = f"쌓아온 배움:\n{prof.get('note')}" if prof.get("note") else ""
-    wiki = f"전문 분야: {topic}\n" + note
-    brief = _model_trend_brief()
-    if brief:
-        wiki = f"[최신 모델 동향 요약]\n{brief}\n\n{wiki}"
-    return (run_headless(task="agent_expert",
-        prompt=expert_consult(topic, wiki, question),
-        cwd=_neutral_cwd(),
-        allowed_tools=allowed, disallowed_tools=disallowed,
-        timeout=EXPERT_TIMEOUT, append_system_prompt=EXPERT_SYSTEM,
-        add_dirs=[project_path], model=agents_db.model_for(project_path),
-    ) or "").strip()
-
-
 def collect_all() -> dict:
     """전 벤더 모델 동향을 순차 수집·갱신(정기 cron용). 갱신 벤더 수 반환."""
     updated = 0

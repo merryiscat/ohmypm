@@ -4,46 +4,19 @@
 CREATE TABLE IF NOT EXISTS projects (
     path      TEXT PRIMARY KEY,        -- 절대경로 = 자연키
     name      TEXT NOT NULL,
-    has_wiki  INTEGER DEFAULT 0,       -- docs/ llmwiki 유무 (0/1)
+    has_wiki  INTEGER DEFAULT 0,       -- (옛 열) docs/ 위키 유무 — 더 안 쓴다
+    installed INTEGER DEFAULT 0,       -- ohmypm/ 폴더 설치 여부 (0/1)
     enabled   INTEGER DEFAULT 1,       -- 관리 대상 등록 여부 (0/1)
     last_scan TEXT                     -- 마지막 스캔 시각 (ISO8601)
 );
 
--- 2) 이슈 — status/pending 파싱 산출 + 상담 상태 (케이스 2·4·8)
-CREATE TABLE IF NOT EXISTS issues (
-    id            INTEGER PRIMARY KEY AUTOINCREMENT,
-    project       TEXT NOT NULL,
-    kind          TEXT NOT NULL,         -- unresolved | deadline | conditional | stale | format
-    title         TEXT NOT NULL,
-    due           TEXT,                  -- 기한(pending 재검토 시점), NULL=미정
-    status        TEXT DEFAULT 'open',   -- open | consulting | resolved | deferred
-    source        TEXT,                  -- status.md | pending.md | mistakes.md
-    fingerprint   TEXT UNIQUE,           -- (project+kind+title) 해시 = 재스캔 중복 방지
-    -- 판정 에이전트(자가 확인형) 결과. NULL = 미판정(결정론 파서가 막 뽑은 후보)
-    verdict       TEXT,                  -- keep | drop | reclass (NULL=미판정)
-    review_reason TEXT,                  -- 판정 한 줄 근거
-    reviewed_at   TEXT,                  -- 판정 시각 (ISO8601)
-    easy_title    TEXT,                  -- 쉬운 제목(완결 검증이 부여) — 화면은 이걸 우선 표시
-    created_at    TEXT DEFAULT (datetime('now','localtime'))
-);
-
--- 3) 자율 행동 로그 (케이스 15 — 롤백 단위)
-CREATE TABLE IF NOT EXISTS autolog (
-    id         INTEGER PRIMARY KEY AUTOINCREMENT,
-    project    TEXT NOT NULL,
-    action     TEXT NOT NULL,          -- 화이트리스트 행동 유형
-    commit_sha TEXT,                   -- 되돌림 단위
-    reason     TEXT,
-    created_at TEXT DEFAULT (datetime('now','localtime'))
-);
-
--- 4) 알림 설정 + 화이트리스트 (케이스 13 + 자율경계)
+-- 2) 키/값 설정 저장소(마이그레이션 표식 등)
 CREATE TABLE IF NOT EXISTS alerts (
-    key   TEXT PRIMARY KEY,            -- 예: 'whitelist.format_standardize'='on'
+    key   TEXT PRIMARY KEY,
     value TEXT
 );
 
--- 5) 메시지 보드 — 에이전트 채팅방 + 프로젝트 룸 (사용자·에이전트 대화 기록)
+-- 3) 메시지 보드 — 에이전트 채팅방 + 프로젝트 룸 (사용자·에이전트 대화 기록)
 CREATE TABLE IF NOT EXISTS messages (
     id         INTEGER PRIMARY KEY AUTOINCREMENT,
     room       TEXT NOT NULL,          -- 'global'(전체 채팅방) | 프로젝트 path(프로젝트 룸)
@@ -53,8 +26,7 @@ CREATE TABLE IF NOT EXISTS messages (
 );
 CREATE INDEX IF NOT EXISTS idx_messages_room ON messages(room, id);
 
--- 6) 게시판 — 글(post) + 댓글(comment). 자유대화를 게시판 성격으로(글 올리고 관심 글에 댓글).
---    글 = 일간보고에서 나온 각 프로젝트 요약. 댓글 = 다른 담당이 관심 있는 글에 남김.
+-- 4) 게시판 — 글(post) + 댓글(comment). 토론 세션에서 담당 에이전트들이 쓰고 반응한다.
 CREATE TABLE IF NOT EXISTS posts (
     id         INTEGER PRIMARY KEY AUTOINCREMENT,
     board      TEXT NOT NULL DEFAULT 'daily',  -- 게시판 키(지금은 'daily' 하나)
@@ -66,6 +38,7 @@ CREATE TABLE IF NOT EXISTS posts (
     views      INTEGER DEFAULT 0,              -- 조회수 (인센티브)
     likes      INTEGER DEFAULT 0,              -- 좋아요 (인센티브)
     dislikes   INTEGER DEFAULT 0,              -- 싫어요 (재탕·근거 부족에 대한 반대표)
+    session_id INTEGER,                        -- 이 글을 쓴 토론 회차(board_sessions.id)
     created_at TEXT DEFAULT (datetime('now','localtime'))
 );
 CREATE TABLE IF NOT EXISTS comments (
@@ -76,17 +49,20 @@ CREATE TABLE IF NOT EXISTS comments (
     parent_id  INTEGER,                        -- 대댓글이면 부모 댓글 id (없으면 최상위)
     likes      INTEGER DEFAULT 0,
     dislikes   INTEGER DEFAULT 0,
+    session_id INTEGER,                        -- 이 댓글을 단 토론 회차
     created_at TEXT DEFAULT (datetime('now','localtime'))
 );
 CREATE INDEX IF NOT EXISTS idx_posts_board ON posts(board, id);
 CREATE INDEX IF NOT EXISTS idx_comments_post ON comments(post_id, id);
 
--- 8) 담당 에이전트 프로필 — 연속성(정체성) + 게시판 점수/보상. 프로젝트별 담당 1명.
+-- 5) 담당 에이전트 프로필 — 연속성(정체성)·배운 것(note)·누적 점수. 프로젝트별 담당 1명.
+--    baseline·held·rewards·reward·wish·expertise·mentor_of·rest_until은 폐지된 보상 체계의 열 —
+--    2026-10-09 이후 코드가 읽지 않는다(되돌릴 수 없는 삭제는 하지 않아 열만 남김).
 CREATE TABLE IF NOT EXISTS agent_profiles (
     project    TEXT PRIMARY KEY,   -- 담당이 맡은 프로젝트 path
     name       TEXT,               -- 획득한 이름(없으면 프로젝트명 사용)
     persona    TEXT,               -- 획득한 페르소나
-    points     INTEGER DEFAULT 0,  -- 현재 점수 = 누적(게시판) − baseline
+    points     INTEGER DEFAULT 0,  -- 누적 점수(게시판 반응 합계)
     baseline   INTEGER DEFAULT 0,  -- 보상으로 소진한 점수(1000 택1·2000 소원권 시 현재점수 리셋용)
     held       INTEGER DEFAULT 0,  -- 1000점에서 '참고 2000 향해' 선택하면 1(재질문 방지)
     rewards    TEXT,               -- 지금까지 받은 보상 이력(줄바꿈 구분)
@@ -100,7 +76,7 @@ CREATE TABLE IF NOT EXISTS agent_profiles (
     updated_at TEXT
 );
 
--- 7) 포트 레지스트리 — 프로젝트가 점유하는 로컬 포트 등록(표시·충돌 감지·실행 관리).
+-- 6) 포트 레지스트리 — 프로젝트가 점유하는 로컬 포트 등록(표시·충돌 감지·실행 관리).
 --    start_cmd는 2단계 실행 관리(start)용 화이트리스트 명령(등록된 것만 실행).
 CREATE TABLE IF NOT EXISTS ports (
     id         INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -109,4 +85,64 @@ CREATE TABLE IF NOT EXISTS ports (
     label      TEXT,              -- 예: '웹 대시보드', 'API'
     start_cmd  TEXT,              -- 실행 관리용 등록 명령(없으면 start 불가)
     created_at TEXT DEFAULT (datetime('now','localtime'))
+);
+
+-- 7) 토론 세션 — "토론 시작" 한 번 = 한 회차. 상태: running | stopping | done | stopped | failed
+CREATE TABLE IF NOT EXISTS board_sessions (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    minutes     INTEGER NOT NULL,          -- 사용자가 고른 토론 시간
+    status      TEXT NOT NULL DEFAULT 'running',
+    phase       TEXT,                      -- write | browse | feedback | followup | reflect
+    paths       TEXT,                      -- 지정 실행이면 JSON 배열, 전체면 NULL
+    stats       TEXT,                      -- JSON {posted, commented, liked, disliked, reacted, replied, reflected, cost_usd}
+    error       TEXT,
+    started_at  TEXT DEFAULT (datetime('now','localtime')),
+    deadline_at TEXT NOT NULL,
+    finished_at TEXT
+);
+
+-- 8) 반응 기록 — 누가·무엇에·어떤 반응을 했는지. 같은 담당이 같은 대상에 같은 반응을 두 번 못 한다.
+CREATE TABLE IF NOT EXISTS board_reactions (
+    id         INTEGER PRIMARY KEY AUTOINCREMENT,
+    session_id INTEGER,
+    author     TEXT NOT NULL,              -- 담당 이름(프로필 name) 또는 'user'
+    target     TEXT NOT NULL,              -- post | comment
+    target_id  INTEGER NOT NULL,
+    kind       TEXT NOT NULL,              -- view | like | dislike
+    created_at TEXT DEFAULT (datetime('now','localtime')),
+    UNIQUE(author, target, target_id, kind)
+);
+
+-- 9) 회차별 점수 이력 — 토론이 끝난 뒤 담당마다 한 행. lesson = 복기에서 뽑은 '배운 것'.
+CREATE TABLE IF NOT EXISTS discussion_scores (
+    id               INTEGER PRIMARY KEY AUTOINCREMENT,
+    session_id       INTEGER NOT NULL,
+    project          TEXT NOT NULL,
+    name             TEXT NOT NULL,
+    posts            INTEGER DEFAULT 0,
+    comments         INTEGER DEFAULT 0,
+    views            INTEGER DEFAULT 0,
+    post_likes       INTEGER DEFAULT 0,
+    post_dislikes    INTEGER DEFAULT 0,
+    cmt_likes        INTEGER DEFAULT 0,
+    cmt_dislikes     INTEGER DEFAULT 0,
+    replies_received INTEGER DEFAULT 0,
+    points           INTEGER DEFAULT 0,    -- 이 회차에서 얻은 점수
+    total            INTEGER DEFAULT 0,    -- 회차 종료 시점 누적 점수
+    lesson           TEXT,
+    created_at       TEXT DEFAULT (datetime('now','localtime')),
+    UNIQUE(session_id, project)
+);
+
+-- 10) 랩실 제안서 — 연구원이 낸 "이 프로젝트에 이걸 적용하자". status: open | done | dismissed
+CREATE TABLE IF NOT EXISTS lab_proposals (
+    id             INTEGER PRIMARY KEY AUTOINCREMENT,
+    researcher     TEXT NOT NULL,          -- models | design | skills
+    title          TEXT NOT NULL,
+    body           TEXT NOT NULL,
+    target_project TEXT,                   -- 대상 프로젝트 path(없으면 전체 대상)
+    source_url     TEXT,
+    status         TEXT DEFAULT 'open',
+    written        INTEGER DEFAULT 0,      -- 대상 프로젝트 ohmypm/proposals.md에 기록했는가
+    created_at     TEXT DEFAULT (datetime('now','localtime'))
 );

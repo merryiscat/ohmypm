@@ -1,7 +1,6 @@
-"""메시지 보드 CRUD — 에이전트 채팅방(room='global')과 프로젝트 룸(room=프로젝트 path).
+"""메시지 CRUD — 프로젝트 룸(room=프로젝트 path), 주간보고 방(weekly::날짜[::path]), 랩실 방(lab::id).
 
-사람과 에이전트가 같은 방에 글을 쌓는다. 에이전트 자동 포스팅은 다음 단계에서 author를
-에이전트 이름으로 넣어 이 add_message를 그대로 호출하면 된다.
+옛 일간보고 방(daily::날짜::path)은 2026-10-09 폐기됐지만 기록은 지우지 않고 둔다.
 """
 
 from src.db.client import get_db
@@ -32,31 +31,14 @@ def list_rooms_like(prefix: str) -> list[str]:
 
 
 def delete_for_project(path: str) -> None:
-    """프로젝트의 대화 방 삭제 — 룸 채팅(room=path)과 일간보고 방(daily::*::path)."""
+    """프로젝트의 대화 방 삭제 — 룸 채팅(room=path), 옛 일간보고 방, 주간보고 몫 방."""
     db = get_db()
-    db.execute("DELETE FROM messages WHERE room = ? OR room LIKE ?", (path, f"daily::%::{path}"))
+    db.execute("DELETE FROM messages WHERE room = ? OR room LIKE ? OR room LIKE ?",
+               (path, f"daily::%::{path}", f"weekly::%::{path}"))
     db.commit()
 
 
-def user_says_for_project(path: str, after_id: int = 0, limit: int = 50) -> list[dict]:
-    """이 프로젝트에 **사용자가 직접 남긴** 글(오래된→최신) — 담당 방과 일간보고 방 둘 다.
-
-    ★ 사용자가 화면에서 쓴 글은 담당 방(room=프로젝트 path)에 들어가고, PM↔담당 대화는
-      날짜별 방(daily::{날짜}::{path})에 들어간다. 반영 단계는 날짜별 방만 읽고 있어서
-      **사용자가 한 말은 파이프라인에 아예 들어오지 못했다**(2026-09-12 확인).
-      게다가 날짜별 방이라 어제 방에 적힌 답은 오늘 배치가 보지도 못한다.
-      두 갈래를 함께, 날짜를 가로질러 모은다.
-    """
-    db = get_db()
-    rows = db.execute(
-        "SELECT * FROM messages WHERE (room = ? OR room LIKE ?) AND author = 'user' AND id > ? "
-        "ORDER BY id ASC LIMIT ?",
-        (path, f"daily::%::{path}", after_id, limit),
-    )
-    return [dict(r) for r in rows]
-
-
-DAILY_PREFIX = "daily::"   # 일간보고 방 키 접두사 — daily::{날짜}::{프로젝트 path}
+DAILY_PREFIX = "daily::"   # 옛 일간보고 방 키 접두사 — 조회 숨김 조건(DAILY_DUP_HIDDEN)이 아직 참조
 
 # 프로젝트 방(room=프로젝트 path)에서 **일간보고 방과 겹치는 PM·담당 발화만** 조회에서 숨기는 조건.
 #

@@ -15,23 +15,20 @@ from src.config.settings import settings
 
 # 작업 → 등급. 새 헤드리스 호출부는 여기 한 줄 추가가 먼저다.
 TASK_TIER: dict[str, str] = {
-    # 일간보고·게시판
-    "daily_pm": "standard",
-    "daily_manage": "standard",
-    "daily_agent": "standard",        # 담당 답변(담당별 지정 모델이 우선)
+    # 게시판 토론 — 담당별 지정 모델이 있으면 그것이 우선한다
     "board_write": "standard",
     "board_comment": "light",
     "board_feedback": "light",
     "board_followup": "light",
-    "reward": "light",                # 보상 택1
-    # 관리·대화
-    "room_chat": "standard",          # 담당별 지정 모델이 우선
-    "reprocess": "standard",
+    "board_reflect": "light",         # 토론 끝 복기 — 받은 반응에서 배운 것 한두 줄
+    # 담당 룸 대화
+    "room_chat": "standard",
     # 주간보고 — 커밋 팩트를 종합해 한 장 보고(종합 글쓰기라 heavy)
     "weekly_report": "heavy",
-    # 전문가
-    "expert_consult": "standard",
-    "agent_expert": "standard",
+    # 랩실(연구소)
+    "expert_consult": "standard",     # 연구원 자문
+    "lab_research": "standard",       # 웹 조사형 연구원(디자인·스킬)의 수집·제안
+    "lab_proposal": "standard",       # 모델 연구원의 제안서
     "model_catalog_extract": "standard",   # 공식 문서 diff → 정형 JSON 추출
     "model_catalog_profile": "heavy",      # 모델별 상세 프로필 종합
 }

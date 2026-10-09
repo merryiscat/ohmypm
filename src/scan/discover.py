@@ -1,4 +1,4 @@
-"""프로젝트 발견 — projects_root 하위 폴더를 순회해 docs 위키가 있는 프로젝트를 등록."""
+"""프로젝트 발견 — projects_root 하위 1차 폴더를 전부 관리 대상으로 등록."""
 
 from pathlib import Path
 
@@ -13,7 +13,7 @@ def discover_projects() -> list[dict]:
 
     발견 조건은 폴더 존재뿐 — 관리 여부는 사용자가 x(제외)로 정한다(2026-09-05 사용자 확정,
     docs 없는 프로젝트야말로 세팅 대상이라 docs 조건을 없앰). 숨김 폴더(.venv 등)와
-    사용자 제외 폴더만 건너뛴다. docs 유무는 has_wiki로 기록해 후속 단계가 참고한다.
+    사용자 제외 폴더만 건너뛴다. ohmypm/ 폴더 유무는 installed로 기록한다.
     """
     found: list[dict] = []
     if not settings.projects_root:
@@ -32,9 +32,9 @@ def discover_projects() -> list[dict]:
             continue
         if str(child) in excluded:
             continue  # 관리 제외됨 (예: 안 쓰는 프로젝트)
-        has_wiki = (child / "docs").is_dir()
-        projects_db.upsert_project(str(child), child.name, has_wiki)
-        found.append({"path": str(child), "name": child.name, "has_wiki": has_wiki})
+        installed = (child / "ohmypm").is_dir()
+        projects_db.upsert_project(str(child), child.name, installed)
+        found.append({"path": str(child), "name": child.name, "installed": installed})
 
-    logger.info(f"[발견] 프로젝트 {len(found)}개 (위키 있음 {sum(1 for f in found if f['has_wiki'])}개)")
+    logger.info(f"[발견] 프로젝트 {len(found)}개 (설치됨 {sum(1 for f in found if f['installed'])}개)")
     return found

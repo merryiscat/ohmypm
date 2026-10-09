@@ -22,7 +22,7 @@ def test_every_tier_maps_to_configured_model(monkeypatch):
     monkeypatch.setattr(settings, "model_light", "haiku")
     monkeypatch.setattr(settings, "model_standard", "sonnet")
     monkeypatch.setattr(settings, "model_heavy", "opus")
-    assert models.resolve_model("reward") == "haiku"
+    assert models.resolve_model("board_comment") == "haiku"
     assert models.resolve_model("model_catalog_extract") == "sonnet"
     assert models.resolve_model("model_catalog_profile") == "opus"
 

@@ -1,6 +1,6 @@
-"""화이트리스트 → allowedTools/disallowedTools 조립 (자율경계 강제, L1·L2).
+"""화이트리스트 → allowedTools/disallowedTools 조립 (자율경계 강제).
 
-★ 되돌리기 불가능한 행동은 화이트리스트를 아무리 넓혀도 항상 deny (plan 안전장치).
+★ 되돌리기 불가능한 행동은 화이트리스트를 아무리 넓혀도 항상 deny.
    에이전트가 "안전한가"를 판단하지 않는다 — 여기 목록이 결정론적으로 정한다.
 """
 
@@ -12,22 +12,15 @@ NEVER_ALLOW = [
     "WebFetch",
 ]
 
-# 태스크 유형별 허용 도구. 사용자 화이트리스트(alerts.whitelist.*)가 켜진 것만 실제 자율 실행.
+# 태스크 유형별 허용 도구.
 TASK_TOOLS = {
     # 프로젝트 담당 에이전트(사용자와의 룸 대화) — 2026-09-09 사용자 확정으로 편집 허용.
     #   사용자가 그 자리에서 지시하고 결과를 바로 보므로 승인이 곧 사용자 판단이다.
-    #   **코드까지 고칠 수 있다**(docs 한정 아님). Bash는 없어 임의 명령·푸시는 여전히 불가하고,
-    #   커밋도 하지 않는다 — 변경은 작업 폴더에 남아 사용자가 보고 되돌릴 수 있다.
+    #   Bash는 없어 임의 명령·푸시는 불가하고, 커밋도 하지 않는다 — 변경은 작업 폴더에 남는다.
     "room_chat": ["Read", "Grep", "Glob", "Edit", "Write"],
-    # 일간보고: PM은 팩트로 판단(읽기 전용), 담당은 답하면서 **자기 기록장을 그 자리에서 고친다**
-    #   (2026-09-09 사용자 확정: "대화를 했으면 기록장에도 작성을 하게 해줘야지").
-    #   커밋은 코드가 대화 종료 후 docs/ 범위로만 한다.
-    "daily_pm": ["Read", "Grep", "Glob"],
-    "daily_agent": ["Read", "Grep", "Glob", "Edit", "Write"],
-    # 문서 재가공(#4) = 담당이 자기 docs에만 쓴다. Bash 없음 — git 커밋은 코드가 docs/만 스코프해서
-    # 대신 한다(에이전트가 임의 명령·푸시를 못 돌리게). 되돌리기는 로컬 커밋(push 없음).
-    "reprocess": ["Read", "Grep", "Glob", "Edit", "Write"],
-    # 전문가 에이전트 — 웹으로 최신 지식 수집·자문(읽기 전용 + 웹). 파일 쓰기는 코드가 함.
+    # 게시판 토론(글쓰기·둘러보기·반응·대대댓글) — 자기 프로젝트를 읽고 쓸 뿐, 파일은 안 고친다.
+    "board": ["Read", "Grep", "Glob"],
+    # 랩실 연구원 — 웹으로 최신 지식 수집·자문(읽기 전용 + 웹). 파일 쓰기는 코드가 한다.
     "expert": ["Read", "Grep", "Glob", "WebSearch", "WebFetch"],
 }
 
@@ -35,7 +28,7 @@ TASK_TOOLS = {
 def tools_for(task: str) -> tuple[list[str], list[str]]:
     """(allowed_tools, disallowed_tools) 반환. 미등록 태스크는 읽기 전용 기본.
 
-    disallowed는 '허용 목록에 없는' NEVER_ALLOW만 — 예: 전문가는 WebFetch를 허용하므로
+    disallowed는 '허용 목록에 없는' NEVER_ALLOW만 — 예: 연구원은 WebFetch를 허용하므로
     그 태스크에선 WebFetch가 disallow에서 빠지되, rm·force push는 항상 막힌다(허용에 없음).
     """
     allowed = TASK_TOOLS.get(task, ["Read", "Grep", "Glob"])
