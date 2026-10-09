@@ -1,20 +1,15 @@
 # 인덱스
 
-## 기획
-- [../README.md](../README.md) — PM 역할·설치·사용 안내
-- [plan.md](plan.md) — 목적·형태·MVP·**스택·하네스 확정(2·3부)**·미확정 질문
-- [references.md](references.md) — 레퍼런스: 기능별 keep 표 23 + 드랍 18(사유) + 미검증 83 (재검수 종결)
-- [usecases.md](usecases.md) — 킥오프 2부: 18케이스(해피/배드/필요기술) + 공통전제 + 선결 과제
-- [design.md](design.md) — 아키텍처 그림 한 장 v2(2026-09-23, mermaid): 전체 구성·주간 배치·데이터 지도·경계. 그 안의 작업 구조(main/pl/work) 절은 2026-10-07 기각으로 효력 없음
-- [interfaces.md](interfaces.md) — 인터페이스 명세 v1: 내놓는 API 38개(용도·입력·동작 방식) + 쓰는 외부 서비스·키·한도. `/openapi.json`으로 기계 대조
-- [deliverables.md](deliverables.md) — 산출물 대장: 단계(기획·설계·구축·검증·운영)별 산출물 기준표, PM이 단계 판단·요구에 쓴다
-- [setup.md](setup.md) — 다른 PC 재현 절차 (PC마다 **독립 인스턴스** 전제, wizard 5단계, 하드코딩 금지 규칙)
+## 현행 (2026-10-10 2차 리뉴얼 기준)
+- [../README.md](../README.md) — 무엇을 하나·설치·각 프로젝트에 남는 것
+- [design.md](design.md) — 설계 한 장 v3: 전체 구성·주 흐름 넷(스캔=설치·토론·주간보고·랩실)·데이터 지도·경계·보류
+- [interfaces.md](interfaces.md) — API 목록·외부 의존·설정
+- [setup.md](setup.md) — 다른 PC 재현 절차(2단계 wizard, 자동 .env, 훅, 제거)
+- [deliverables.md](deliverables.md) — 산출물 대장(규약, 상시). 주간보고 요구 배선은 보류
 
-## 위키 운영
-- [conventions-wiki.md](conventions-wiki.md) — 위키 상세 규약 (raw 보존, asserted/inferred, 다이어트 기준)
-- [status.md](status.md) — 작업 보드 (착수 전 읽기) *(로컬 전용 — git 미추적)*
-- [log.md](log.md) — append-only 작업 기록 *(로컬 전용)*
-- [mistakes.md](mistakes.md) — 실수 연대기 *(로컬 전용)*
-- [pending.md](pending.md) — 보류 안건 대장 *(로컬 전용)*
+## 이력 (2026-10-09 이전 기획 — 현행은 design.md)
+- [plan.md](plan.md) — 목적·형태·MVP·스택 확정·작업 구조 기각 기록
+- [usecases.md](usecases.md) — 킥오프 유즈케이스 18
+- [references.md](references.md) — 레퍼런스 keep/drop 표
 
-> 운영 파일 4종과 `raw/`는 2026-08-21 검토로 git에서 제외 — 공개 저장소에는 기획·레퍼런스·규약만 올린다.
+로컬 전용(git 미추적): `lab/`(연구 위키), `archive-wiki-2026-10-09.md`(옛 status·log·mistakes·pending·PM 저널 묶음)

@@ -1,13 +1,12 @@
 # ohmyPM
 
-모든 로컬 프로젝트를 매일 돌보는 메타 PM 에이전트 (Claude Code 기반). 기획은 `docs/plan.md`.
+로컬 프로젝트들을 돌보는 프로젝트 관리 도구(FastAPI + SQLite + Claude Code 헤드리스). 구조는 `docs/design.md`,
+API는 `docs/interfaces.md`, 설치는 `docs/setup.md`. 기획 이력은 `docs/plan.md`.
 
-## docs/ — LLM 위키
+## 작업 규칙
 
-docs/는 LLM이 쓰고 사람이 읽는 위키다. git이 못 담는 것만 담는다: 결정과 근거, 실수와 항체, 기각된 대안.
-
-- **착수 전 `docs/status.md`(보드)를 읽는다.** 끝나면 결과를 한 줄이라도 남긴다
-- **기록은 작업의 매듭에서** (커밋 직전, 갈래를 매듭지을 때) — 관련 페이지 갱신 + `docs/log.md`에 `## [YYYY-MM-DD] <작업> | <제목>`
-- **버려지는 안건은 `docs/pending.md`에 재검토 시점(날짜/조건)과 함께** — 시점 없이 "나중에"로 넘기지 않는다
-- 새 페이지는 `index.md`에 한 줄 등재. **반영이 끝난 페이지는 삭제한다** — 살아있는 건 status·pending·항체뿐
-- 상세 규약(raw 보존, asserted/inferred, 실수 연대기, 정리 기준)은 `docs/conventions-wiki.md`
+- 모델 호출은 `run_headless(_ex)`에 **task 이름을 글자 그대로** 넘긴다 — `src/cc/models.py` TASK_TIER에 먼저 등록.
+  권한은 `src/cc/permissions.py`. 라우트에서 직접 부르지 않고 `src/jobs.py`나 스레드로.
+- 지시문은 코드가 아니라 `prompts/*.md`(`${변수}`). 시스템 프롬프트(`*_system.md`)는 서버 재시작 때 읽힌다.
+- 다른 프로젝트의 파일은 `src/install.py`가 만드는 `ohmypm/` 폴더와 표식 블록만 건드린다. 커밋하지 않는다.
+- 확인은 `uv run pytest` + 서버 재기동(`scripts\stop_ohmypm.cmd` → `.venv\Scripts\pythonw.exe scripts\run_ohmypm_hidden.py`) + 화면.

@@ -1,156 +1,71 @@
 # ohmyPM 다른 PC 세팅 (재현 절차)
 
-> 이 저장소를 새 PC에서 세팅하는 절차. 셸은 **PowerShell** 기준(상위 CLAUDE.md).
+> 셸은 **PowerShell** 기준. 2026-10-10 2차 리뉴얼 뒤 기준으로 다시 썼다.
 
-## 전제 — PC마다 **독립 인스턴스**다 (2026-09-10 사용자 확정)
+## 전제 — PC마다 독립 인스턴스다
 
-각 PC의 ohmyPM은 **그 PC의 로컬 프로젝트만** 돌보는 별개의 PM이다. 코드·기획·규약은
-git으로 공유되지만 **기억은 공유되지 않는다**:
+각 PC의 ohmyPM은 그 PC의 로컬 프로젝트만 돌본다. 코드·기획·프롬프트는 git으로 공유되지만 기억은 공유되지 않는다.
 
 | 공유됨 (git) | PC 전용 (gitignore) |
 |---|---|
-| `src/` · `prompts/` · `docs/` 기획·규약 | `.env` (관리 대상 루트·토큰) |
-| `CLAUDE.md` · `skills-lock.json` | `data/ohmypm.db` (프로젝트·이슈·게시판·일간보고) |
-| `scripts/` (경로 무관하게 동작) | `logs/` · `docs/status.md` · `log.md` · `mistakes.md` · `pending.md` |
+| `src/` · `prompts/` · `docs/`(설계·인터페이스·설치·기획 이력) | `.env` (관리 대상 루트) |
+| `CLAUDE.md` · `AGENTS.md` · `skills-lock.json` · `scripts/` | `data/ohmypm.db` (프로젝트·게시판·세션·점수·제안) |
+| | `logs/` · `docs/lab/`(연구 위키) · `data/lab/`·`data/model_updates/`(연구 상태) |
 | | `.agents/` · `.claude/skills/` (lock으로 재설치) |
 
-따라서 새 PC는 **보드가 백지인 새 PM**으로 출발한다. 이전 PC의 이슈·게시판을 이어받고
-싶다면 그건 다른 설계(상태 공유)이고, 지금 구조가 아니다 — [plan.md](plan.md)의
-"SQLite 로컬 = 서버 없음" 결정 재검토가 선행돼야 한다.
+스크립트는 자기 위치에서 저장소 경로를 구한다. 절대경로를 커밋하지 않는다.
 
-**하드코딩 금지 규칙**: 스크립트는 자기 위치(`%~dp0` / `BASH_SOURCE`)에서 저장소 경로를
-구한다. `C:\Users\<누구>\...` 같은 절대경로를 커밋하지 않는다 — 2026-09-10에 정확히 이것
-때문에 두 번째 PC에서 아무것도 안 돌았다.
-
----
-
-## 1. 클론
+## 1. 클론·런타임
 
 ```powershell
 git clone https://github.com/merryiscat/ohmypm.git
 cd ohmypm
-```
-
-저장소는 어디에 둬도 된다(`D:\dev\project\ohmypm` 등). 스크립트가 경로를 가정하지 않는다.
-
-## 2. 런타임
-
-- **Python 3.11+ 및 uv** — 소스 실행 (상위 CLAUDE.md: `uv` 우선)
-- **Node.js 18+** — npx 스킬 설치용
-- **git** · **Claude Code CLI**(`claude`가 PATH에 있어야 함 — 판단·작업을 headless로 호출)
-
-```powershell
 uv sync
 ```
 
-> 하네스 플러그인(`plugin/`, 구 kickoff_pack 대체)은 2026-10-07 작업 구조(main/pl/work) 기각과
-> 함께 저장소에서 제거했다 — [plan.md](plan.md) 참조. screen-plan·grill 등 글로벌 스킬과
-> Orca 동봉 스킬(`~/.agents/skills` + junction)은 각 PC에서 따로 관리한다.
+- Python 3.11+ 및 uv, git, **Claude Code CLI**(`claude`가 PATH에) — 모든 모델 호출이 `claude -p`다
+- Node.js 18+ — 스킬 재설치용(`npx skills experimental_install` → fastapi 스킬)
 
-## 3. 프로젝트 로컬 스킬 재설치 (skills-lock.json 기반)
-
-```powershell
-npx skills experimental_install
-```
-
-→ `fastapi` 스킬이 `.agents/skills`에 재설치된다(스킬 코드는 gitignore, **lock으로 재현** = npm lock 패턴).
-
-> 명령 이름 주의: lock 복원은 `add`/`install`이 아니라 **`experimental_install`**이다
-> (2026-09-10 실측 — `npx skills install`은 `add`로 해석돼 "Missing required argument: source"로 죽는다).
-
-## 4. 세팅 wizard — `.env` + 부팅 자동실행
+## 2. 세팅 wizard — `.env` + 로그인 자동 실행 (2단계)
 
 ```powershell
 scripts\setup_wizard.cmd
 ```
 
-5단계로 묻는다:
+1. **관리 대상 루트**(`PROJECTS_ROOT`) — 이 PC가 돌볼 프로젝트들의 상위 폴더. 비워 두면 첫 스캔 때
+   저장소 위치 기준 기본값(저장소 부모 아래 `projects` 폴더가 있으면 그것, 없으면 부모 폴더)으로 `.env`가 자동 생성된다.
+2. 로그인 시 자동 실행 등록 — 시작프로그램 바로가기(`pythonw.exe` + `scripts\run_ohmypm_hidden.py`, 창 없음)
 
-1. **관리 대상 루트**(`PROJECTS_ROOT`) — 이 PC가 돌볼 프로젝트들의 상위 폴더. **PC마다 다르다.**
-   기본값이 없으므로 비워두면 프로젝트 발견이 경고 후 아무것도 안 잡는다
-2. 텔레그램 봇 토큰 (BotFather) — 비우면 알림만 조용히 건너뛰고 시스템은 정상 동작
-3. chat_id
-4. 발송 테스트
-5. 로그인 시 자동 실행 등록 (시작프로그램 바로가기 → 창 없이 기동)
+wizard는 대화형이라 터미널에서 사람이 직접 실행한다. 수동으로 하려면 `.env.example`을 `.env`로 복사해 채운다.
+`.env`에 모르는 변수가 남아 있어도 기동은 막히지 않는다(설정이 `extra="ignore"`).
 
-wizard는 대화형이라 **터미널에서 사람이 직접** 실행해야 한다.
-수동으로 할 거면 `.env.example`을 `.env`로 복사해 채우고, 자동 실행은 아래 §5.
-
-> `.env`에 **모델에 없는 키가 있으면 서버가 아예 안 뜬다**(pydantic-settings가
-> `extra_forbidden`으로 거부). `.env.example`은 항상 `src/config/settings.py`와 맞춰 둔다 —
-> 2026-09-10에 이미 제거된 `HEARTBEAT_SEC`가 남아 있어 새 PC가 그대로 밟았다.
-
-## 5. 기동 · 자동 실행 · 종료
+## 3. 기동·종료
 
 ```powershell
-scripts\run_ohmypm.cmd          # 창 + 실시간 로그로 기동 (http://127.0.0.1:8123)
-scripts\stop_ohmypm.cmd         # 종료 (8123 리스닝 프로세스를 잡아 끈다)
+scripts\run_ohmypm.cmd          # 창 + 실시간 로그 (http://127.0.0.1:8123)
+scripts\stop_ohmypm.cmd         # 8123 리스닝 프로세스 종료
 ```
 
-`data/ohmypm.db`는 첫 기동에 생성된다. 프로젝트 발견은 기동이 아니라 **스캔**에서 일어난다 —
-새 PC는 대시보드 '스캔' 버튼(`POST /api/scan`)을 한 번 눌러 목록이 보이면 성공.
+창 없이 띄우려면 `.venv\Scripts\pythonw.exe scripts\run_ohmypm_hidden.py` — 로그는 `logs\server_console.log`.
+Claude Code로 이 저장소를 열면 `.claude/hooks/ohmypm-server.ps1`(SessionStart 훅)이 포트가 비어 있을 때만 같은 방식으로 띄운다.
 
-**정시 배치를 안 쓰는 PC**: `.env`에 `SCHEDULER_ENABLED=false`. 폴더로만 관리하는 프로젝트가 많거나
-인터넷이 제한적인 PC용 — cron(스캔·일간보고·게시판·전문가수집)을 걸지 않고 대시보드/API로만 돌린다.
-일간보고를 즉시 한 번 돌려보려면 `scripts\run_report_once.cmd`.
+`data/ohmypm.db`는 첫 기동에 생성된다. 첫 화면에서 **스캔(설치)**을 누르면 `PROJECTS_ROOT` 아래 프로젝트가
+등록되고 각 프로젝트에 `ohmypm/` 폴더와 지침 블록이 설치된다(ohmyPM 자신은 제외). 두 번째 누르면 전부 '이미 설치'.
 
-**로그인 시 자동 실행**(창 없이):
+정시 배치는 랩실 정기 조사 하나다(`EXPERT_COLLECT_WEEKDAY`/`HOUR`, 기본 월요일 05:00). `SCHEDULER_ENABLED=false`면 그것도 끈다.
 
-```powershell
-powershell -NoProfile -ExecutionPolicy Bypass -File scripts\startup_shortcut.ps1
-powershell -NoProfile -ExecutionPolicy Bypass -File scripts\startup_shortcut.ps1 -Remove   # 해제
-```
+## 4. 제거
 
-시작프로그램 폴더에 `ohmyPM.lnk`를 만든다. 대상은 `.venv\Scripts\pythonw.exe`
-(GUI 서브시스템 = 콘솔 창이 아예 없음) + `scripts\run_ohmypm_hidden.py`.
-창이 없으니 로그는 `logs\server_console.log`로 간다.
+- 프로젝트에서 ohmyPM 흔적 빼기: 룸의 **설치 제거** — `ohmypm/` 폴더와 CLAUDE.md·AGENTS.md의 블록만 지운다
+- 프로젝트를 관리에서 빼기: 사이드바 이름 옆 `x` — DB의 글·대화만 지우고 폴더는 안 건드린다
+- 로그인 자동 실행 해제: `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\startup_shortcut.ps1 -Remove`
 
-**오르카에서 이 방을 열면 자동 기동**(2026-09-16 사용자 확정, 이 PC 기본):
-`.claude/hooks/ohmypm-server.ps1`을 SessionStart 훅으로 걸어 뒀다(`.claude/settings.json`).
-127.0.0.1:8123을 누가 듣고 있으면 아무것도 안 하고, 비어 있으면 위 자동 실행과 같은 방식
-(`pythonw` + `run_ohmypm_hidden.py`)으로 띄운 뒤 포트가 잡힐 때까지 최대 8초 기다렸다 보고한다.
-Orca 자동화(`orca automations`)는 스케줄 트리거뿐이라 '앱 실행 시'로는 못 건다.
-로그인 자동 실행과 같이 쓸 필요는 없다 — 둘 중 하나면 충분하다(중복 기동은 포트 확인으로 막힌다).
+## 5. MCP (각 PC)
 
-> **막다른 길 둘 (2026-09-10 실측, 되풀이 금지)**
-> - `schtasks /create /sc onlogon`은 **관리자 권한**을 요구한다(액세스 거부). 시작프로그램
->   폴더는 사용자 자기 것이라 승격이 필요 없다. `scripts\register_task.cmd`는 관리자로
->   돌릴 때를 위한 대안으로만 남겨 둔다.
-> - **VBS 런처는 쓰지 마라.** 최신 Windows 11(10.0.26200)에서 Windows Script Host가
->   `WScript.Echo` 한 줄에도 "메모리 리소스가 부족" 오류로 죽는다. VBScript가 기능 분리된
->   탓이다. 단 `WScript.Shell` **COM 객체**는 멀쩡해서 .lnk 생성에는 쓸 수 있다
->   (깨진 건 `wscript.exe` 실행기뿐).
+Playwright·context7 MCP는 이 저장소에 등록돼 있지 않다 — 쓰려면 각 PC의 Claude Code 설정에서 따로 등록한다.
 
-## 6. MCP 승인 (각 PC)
+## 막다른 길 (되풀이 금지)
 
-Playwright·context7 MCP는 프로젝트에 등록돼 있으나 각 PC에서 승인 필요:
-
-```powershell
-claude   # 실행 후 pending MCP(playwright·context7) 승인
-```
-
-## 7. 위키 운영 파일 (선택)
-
-`docs/status.md` · `log.md` · `mistakes.md` · `pending.md`는 git에 없다. 이 PC에서 처음
-작업할 때 새로 만든다(빈 파일이어도 됨) — 규약은 [conventions-wiki.md](conventions-wiki.md).
-
----
-
-## 검증 (2026-09-10, `D:\dev\project\ohmypm`)
-
-1~3·5번을 이 PC에서 실제로 돌려 확인했다 — `uv sync` → `.env` 작성 →
-`npx skills experimental_install`(fastapi 1개) → `scripts\run_ohmypm.cmd`.
-`data/ohmypm.db` 자동 생성, `PROJECTS_ROOT=D:\dev\project` 하위 **8개 프로젝트 발견**,
-`GET /api/projects` 200 확인.
-
-5번 자동 실행도 실측했다 — `startup_shortcut.ps1`로 등록 후 바로가기를 직접 실행해
-창 없이 기동(`pythonw`) + HTTP 200 확인.
-
-4번 wizard는 대화형(TTY 필요)이라 **텔레그램 3단계와 등록 실행은 미검증**이다. 다만
-wizard가 쓰는 경로 산출은 따로 확인했다 — cwd를 `C:\`로 두고도 `REPO_ROOT`가 저장소로
-잡히고, `ENV_FILE`이 저장소의 `.env`, `write_env` 2회에 1줄(멱등). `.env`는 손으로 썼다.
-
-## 아직 안 된 것
-
-- **lychee**(링크 점검) — 구현되면 `winget install lycheeverse.lychee` 추가
-- **SQLite 초기화 스크립트** — 현재는 첫 기동 시 `src/db/schema.sql`로 자동 생성. 별도 스크립트 불요
+- `schtasks /create /sc onlogon`은 관리자 권한을 요구한다. 시작프로그램 폴더가 답이다.
+- VBS 런처는 최신 Windows 11에서 죽는다. `pythonw.exe`로 창 없이 띄운다.
+- `npx skills install`은 `add`로 해석된다 — lock 복원은 `experimental_install`.

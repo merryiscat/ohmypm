@@ -1,3 +1,4 @@
 # AGENTS.md — Codex용 지시문 (Claude는 CLAUDE.md를 읽는다)
 
-ohmyPM: 모든 로컬 프로젝트를 매일 돌보는 메타 PM 에이전트. 기획은 `docs/plan.md`, 위키 규약은 `docs/conventions-wiki.md`, 작업 보드는 `docs/status.md`(착수 전 읽는다).
+ohmyPM: 로컬 프로젝트들을 돌보는 프로젝트 관리 도구. 구조는 `docs/design.md`, API는 `docs/interfaces.md`,
+설치는 `docs/setup.md`. 작업 규칙은 `CLAUDE.md`와 같다(모델 호출은 task 이름 등록, 지시문은 `prompts/`, 검증은 `uv run pytest`).

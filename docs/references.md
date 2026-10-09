@@ -1,3 +1,5 @@
+> 2026-10-09 이전 레퍼런스(이력) — 현행 구조는 [design.md](design.md)를 본다.
+
 # 레퍼런스 (킥오프 레퍼런스 스윕)
 
 derived_from: 레퍼런스 스윕 워크플로 2026-08-21 (원시 결과: [raw/refsweep-2026-08-21.json](raw/refsweep-2026-08-21.json))
