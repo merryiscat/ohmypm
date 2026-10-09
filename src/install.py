@@ -45,7 +45,11 @@ _BLOCK_RE = re.compile(
 
 
 def _read(p: Path) -> str:
-    return p.read_text(encoding="utf-8") if p.exists() else ""
+    """원문 그대로 읽는다 — newline=""라야 CRLF가 LF로 바뀌지 않는다(사용자 파일을 되돌릴 수 있게)."""
+    if not p.exists():
+        return ""
+    with p.open(encoding="utf-8", newline="") as f:
+        return f.read()
 
 
 def _write(p: Path, text: str) -> None:

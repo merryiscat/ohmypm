@@ -41,6 +41,75 @@ def trigger_scan() -> dict:
     return run_scan()
 
 
+@router.post("/projects/install")
+def install_one(p: ProjectPath) -> dict:
+    """프로젝트 하나에 ohmypm/ 폴더와 지침 블록을 설치(룸의 '설치' 버튼). 멱등."""
+    from src.install import install_project
+    from src.scan.discover import discover_projects
+
+    try:
+        r = install_project(p.path)
+    except FileNotFoundError as e:
+        return {"ok": False, "error": str(e)}
+    discover_projects()    # installed 표시 갱신
+    return {"ok": True, **r}
+
+
+@router.post("/projects/uninstall")
+def uninstall_one(p: ProjectPath) -> dict:
+    """프로젝트에서 ohmypm/ 폴더와 지침 블록만 제거(룸의 '설치 제거' 버튼)."""
+    from src.install import uninstall_project
+    from src.scan.discover import discover_projects
+
+    r = uninstall_project(p.path)
+    discover_projects()
+    return {"ok": True, **r}
+
+
+@router.get("/jobs/{name}")
+def job_status(name: str) -> dict:
+    """백그라운드 작업 상태(주간보고·랩실 조사). 화면이 폴링한다."""
+    from src import jobs
+
+    return jobs.status(name)
+
+
+# ── 게시판 토론 세션 ────────────────────────────────────────────────────────
+class SessionReq(BaseModel):
+    minutes: int = 30
+    paths: list[str] | None = None   # 지정하면 그 프로젝트들만(테스트용)
+
+
+@router.post("/board/session")
+def start_session(req: SessionReq) -> dict:
+    """토론 시작 — 담당들이 정한 시간 동안 글쓰기→둘러보기→반응→대대댓글→복기를 돈다(백그라운드 스레드)."""
+    from src.cc import board_session
+
+    return board_session.start(req.minutes, req.paths)
+
+
+@router.get("/board/session")
+def get_session() -> dict | None:
+    """최근 세션 상태(+남은 시간). 없으면 null."""
+    from src.cc import board_session
+
+    return board_session.current()
+
+
+@router.post("/board/session/stop")
+def stop_session() -> dict:
+    """진행 중인 토론에 중지 신호 — 도는 호출은 끝까지 가고 새 호출만 멈춘다."""
+    from src.cc import board_session
+
+    return board_session.stop()
+
+
+@router.get("/board/sessions")
+def list_sessions(limit: int = 20) -> list[dict]:
+    """토론 이력(최신 먼저)."""
+    return sessions_db.list_sessions(limit)
+
+
 # ── 담당 에이전트 ───────────────────────────────────────────────────────────
 @router.get("/agents")
 def get_agents() -> list[dict]:

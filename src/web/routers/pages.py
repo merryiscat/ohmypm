@@ -1,11 +1,15 @@
-"""대시보드 화면 (HTML). 왼쪽 사이드바(대시보드 / 전체 채팅방 / 프로젝트 룸) + 오른쪽 뷰.
+"""대시보드 화면 (HTML). 왼쪽 사이드바(탭 + 프로젝트 룸) + 오른쪽 뷰.
 
 단일 HTML SPA — location.hash 로 뷰를 전환한다:
-  #/dashboard          : 요약 바 → 임박 기한 → 프로젝트 카드
-  #/chat/global        : 에이전트·사용자 전체 채팅방(메시지 보드)
-  #/room/<프로젝트path> : 프로젝트 룸(그 프로젝트 이슈 + 전용 채팅방)
+  #/dashboard   요약 + 프로젝트 카드 (헤더 '스캔(설치)')
+  #/board       게시판 — 토론 시작/중지, 글 목록      #/post/<id> 글 상세
+  #/weekly      주간보고 — 실행, 날짜별 보고, 프로젝트별 몫
+  #/lab         랩실 — 연구원 3명의 위키·제안서·자문
+  #/agents      담당 에이전트 — 점수·배운 것·모델
+  #/ports       포트 — 등록·감지·시작/중지
+  #/room/<path> 프로젝트 룸 — 설치 상태·주간보고 몫·제안서·점수 이력 + 담당 채팅
 
-데이터는 /api/projects·/api/issues·/api/messages 를 fetch해 그린다.
+2026-10-09 2차 리뉴얼: 이슈·칸반·달력·일간보고 화면 제거. 데이터는 /api/* 를 fetch해 그린다.
 """
 
 from fastapi import APIRouter
@@ -22,34 +26,28 @@ _HTML = r"""<!doctype html>
   *{box-sizing:border-box}
   body{font-family:-apple-system,'Segoe UI',sans-serif;margin:0;background:var(--bg);color:var(--ink);font-size:14px}
   a{color:inherit;text-decoration:none}
-  /* 레이아웃: 사이드바 + 본문 */
-  .app{display:flex;height:100vh;overflow:hidden}   /* 앱 셸을 뷰포트에 가둔다 — 스크롤은 각 영역 내부에서만 */
+  .app{display:flex;height:100vh;overflow:hidden}
   aside{width:230px;flex:0 0 230px;background:var(--sb);color:#cfd3da;position:sticky;top:0;height:100vh;overflow-y:auto;display:flex;flex-direction:column}
   aside .brand{font-size:16px;font-weight:700;color:#fff;padding:16px 18px;border-bottom:1px solid #2c313b}
   aside nav{padding:8px 0}
   aside .nav-item{display:flex;align-items:center;gap:9px;padding:9px 18px;cursor:pointer;font-size:13.5px;color:#cfd3da;border-left:3px solid transparent}
   aside .nav-item:hover{background:#272c35;color:#fff}
   aside .nav-item.active{background:#2d333e;color:#fff;border-left-color:var(--green)}
-  aside .nav-item .cnt{margin-left:auto;font-size:11px;background:#3a414d;color:#cfd3da;border-radius:20px;padding:1px 7px}
   aside .sec-label{font-size:11px;letter-spacing:.04em;text-transform:uppercase;color:#7a808b;padding:14px 18px 5px;font-weight:700}
   aside .rooms{flex:1;overflow-y:auto}
   aside .room-item{display:flex;align-items:center;gap:8px;padding:7px 18px 7px 16px;cursor:pointer;font-size:12.5px;color:#b8bdc6;border-left:3px solid transparent}
   aside .room-item:hover{background:#272c35;color:#fff}
   aside .room-item.active{background:#2d333e;color:#fff;border-left-color:var(--green)}
   aside .room-item .dot{width:6px;height:6px;border-radius:50%;background:#4a515d;flex:0 0 6px}
-  aside .room-item .dot.u{background:var(--amber)} aside .room-item .dot.d{background:var(--red)}
+  aside .room-item .dot.on{background:var(--green)}
   aside .room-item .rname{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-  aside .room-item .rc{margin-left:auto;font-size:10.5px;color:#7a808b}
   aside .room-item .rx{margin-left:auto;font-size:11px;color:#7a808b;display:none;padding:0 3px;line-height:1}
-  aside .room-item .rc + .rx{margin-left:6px}
   aside .room-item:hover .rx{display:block}
   aside .room-item .rx:hover{color:#fff}
-  /* 전문가 탭(여러 전문가 전환) */
   .etabs{display:flex;gap:6px;margin-bottom:8px;flex-wrap:wrap}
   .etab{padding:3px 11px;border:1px solid var(--line);border-radius:14px;cursor:pointer;font-size:12px;color:var(--muted);background:#fff}
   .etab:hover{color:var(--ink)}
   .etab.on{background:var(--sb);color:#fff;border-color:var(--sb)}
-  /* 확인/알림 모달 — 브라우저 기본 confirm/alert 대신 화면 톤에 맞춘 팝업 */
   .modal-bg{position:fixed;inset:0;background:rgba(15,18,24,.45);display:flex;align-items:center;justify-content:center;z-index:100}
   .modal{background:var(--card);border:1px solid var(--line);border-radius:10px;min-width:320px;max-width:440px;padding:18px 20px;box-shadow:0 12px 40px rgba(0,0,0,.18)}
   .modal .m-title{font-size:14.5px;font-weight:700;margin-bottom:10px}
@@ -58,45 +56,37 @@ _HTML = r"""<!doctype html>
   .modal button{font:inherit;font-size:12.5px;padding:6px 14px;border-radius:8px;border:1px solid var(--line);background:#fff;color:var(--ink);cursor:pointer}
   .modal button:hover{background:var(--bg)}
   .modal button.danger{background:var(--red);border-color:var(--red);color:#fff}
-  .modal button.danger:hover{opacity:.9}
-  /* 본문 */
   .body{flex:1;min-width:0;display:flex;flex-direction:column}
-  header{position:sticky;top:0;background:var(--card);border-bottom:1px solid var(--line);padding:12px 22px;display:flex;align-items:center;gap:18px;z-index:10}
-  header h1{font-size:17px;margin:0}
-  .summary{display:flex;gap:16px;color:var(--muted);font-size:13px}
+  header{position:sticky;top:0;background:var(--card);border-bottom:1px solid var(--line);padding:12px 22px;display:flex;align-items:center;gap:18px;z-index:10;min-height:58px}
+  header h1{font-size:17px;margin:0;white-space:nowrap}
+  .summary{display:flex;gap:16px;color:var(--muted);font-size:13px;flex-wrap:wrap}
   .summary b{color:var(--ink);font-size:15px}
-  .summary .hot b{color:var(--red)}
-  .actions{margin-left:auto;display:flex;gap:8px}
-  /* hidden 속성이 display:flex를 이기게 — 뷰별 헤더 토글이 실제로 먹도록 */
-  .summary[hidden],.actions[hidden]{display:none!important}
-  button{padding:7px 14px;border:none;background:var(--green);color:#fff;border-radius:6px;cursor:pointer;font-size:13px}
+  .hstatus{color:var(--muted);font-size:12.5px;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .hstatus b{color:var(--ink)}
+  .hstatus .live{color:var(--green);font-weight:700}
+  .actions{margin-left:auto;display:flex;gap:8px;align-items:center}
+  .actions select{padding:6px 8px;border:1px solid var(--line);border-radius:6px;font-size:13px;font-family:inherit;background:#fff}
+  .summary[hidden],.actions[hidden],.hstatus[hidden]{display:none!important}
+  button{padding:7px 14px;border:none;background:var(--green);color:#fff;border-radius:6px;cursor:pointer;font-size:13px;font-family:inherit}
   button.ghost{background:#fff;color:var(--ink);border:1px solid var(--line)}
+  button.danger{background:var(--red)}
   button:disabled{opacity:.55;cursor:default}
   main{padding:20px 22px;max-width:1500px;margin:0 auto;width:100%;flex:1;min-height:0;display:flex;flex-direction:column;overflow-y:auto}
   section{margin-bottom:26px}
   section>h2{font-size:13px;letter-spacing:.02em;color:var(--muted);text-transform:uppercase;margin:0 0 10px;font-weight:700}
-  /* 임박 기한 */
-  .soon{background:var(--card);border:1px solid var(--line);border-radius:10px;overflow:hidden}
-  .soon .row{display:flex;align-items:center;gap:12px;padding:9px 14px;border-top:1px solid var(--line);font-size:13px}
-  .soon .row:first-child{border-top:none}
-  .soon .d{font-weight:700;min-width:96px}
-  .soon .d.today{color:var(--red)} .soon .d.week{color:var(--amber)}
-  .soon .proj{color:var(--muted);min-width:130px;font-size:12px}
-  /* 프로젝트 그리드 */
-  .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(340px,1fr));gap:14px}
+  .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:14px}
   .card{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:14px}
   .card h3{margin:0 0 9px;font-size:14.5px;display:flex;align-items:center;gap:8px}
-  .card h3 .open{margin-left:auto;font-size:11.5px;color:var(--green);cursor:pointer}
+  .card h3 .open{margin-left:auto;font-size:11.5px;color:var(--green);cursor:pointer;white-space:nowrap}
+  .card .line{font-size:12.5px;color:#3a3f47;padding:3px 0;line-height:1.45}
   .badge{font-size:11px;padding:1px 7px;border-radius:20px;font-weight:700}
-  .badge.u{background:#eef1fb;color:#3a52a8} .badge.d{background:#fdeceb;color:var(--red)}
-  .issue{font-size:12.5px;padding:4px 0;border-top:1px solid #f2f3f5;line-height:1.45;color:#3a3f47}
-  .issue .due{color:var(--red);font-weight:700}
+  .badge.on{background:#e7f3ec;color:#1f7a44} .badge.off{background:#f1f3f6;color:var(--muted)}
+  .badge.red{background:#fdeceb;color:var(--red)}
   .more{color:var(--muted);font-size:12px;padding-top:4px}
-  .note-line{color:var(--muted);font-size:12px;padding:8px 2px 0}
+  .note-line{color:var(--muted);font-size:12px;padding:8px 2px 0;line-height:1.55}
   .empty{color:var(--muted);text-align:center;padding:40px}
-  /* 채팅방 */
   .chat{display:flex;flex-direction:column;flex:1;background:var(--card);border:1px solid var(--line);border-radius:10px;overflow:hidden;min-height:0}
-  .chat .stream{flex:1;overflow-y:auto;padding:16px 18px;display:flex;flex-direction:column;gap:10px;min-height:340px}
+  .chat .stream{flex:1;overflow-y:auto;padding:16px 18px;display:flex;flex-direction:column;gap:10px;min-height:240px}
   .msg{max-width:74%;padding:8px 12px;border-radius:12px;font-size:13px;line-height:1.5;white-space:pre-wrap;word-break:break-word}
   .msg .who{font-size:11px;color:var(--muted);margin-bottom:2px;font-weight:700}
   .msg .ts{font-size:10.5px;color:var(--muted);margin-top:3px}
@@ -104,74 +94,22 @@ _HTML = r"""<!doctype html>
   .msg.agent{align-self:flex-start;background:#f1f3f6;border:1px solid var(--line)}
   .chat .composer{display:flex;gap:8px;padding:12px;border-top:1px solid var(--line);background:#fafbfc}
   .chat .composer textarea{flex:1;padding:9px 12px;border:1px solid var(--line);border-radius:8px;font-size:13.5px;font-family:inherit;resize:none;line-height:1.45;max-height:140px;overflow-y:auto}
-  .chat .composer .as{width:110px;padding:9px 8px;border:1px solid var(--line);border-radius:8px;font-size:12.5px;background:#fff}
   .chat-empty{color:var(--muted);text-align:center;margin:auto;padding:30px}
   .msg.pending{align-self:flex-start;background:#f7f8fa;border:1px dashed var(--line);color:var(--muted);font-style:italic}
   .msg.pending.stuck{color:var(--amber);border-color:#e7cfa6;background:#fdf7ee;font-style:normal;display:flex;align-items:center;gap:10px}
   .msg.pending.stuck .retry{padding:3px 10px;font-size:12px;background:#fff;color:var(--ink);border:1px solid var(--line);border-radius:6px;white-space:nowrap}
-  /* 프로젝트 룸: 왼쪽 내용 + 오른쪽 세로 채팅 패널 */
   .room-layout{display:flex;gap:16px;flex:1;min-height:0}
   .room-main{flex:1;min-width:0;min-height:0;overflow-y:auto}
-  .room-main>section{margin-bottom:0}
+  .room-main>section{margin-bottom:18px}
   .room-side{width:420px;flex:0 0 420px;display:flex;flex-direction:column;min-height:0}
   .room-side .side-h{font-size:12px;color:var(--muted);font-weight:700;text-transform:uppercase;letter-spacing:.02em;margin:0 2px 8px;display:flex;align-items:center;justify-content:space-between;gap:8px}
   .mini-btn{font-size:11px;font-weight:700;padding:4px 10px;border:1px solid var(--line);border-radius:14px;background:var(--card);color:#3a52a8;cursor:pointer;text-transform:none;letter-spacing:0}
   .mini-btn:hover:not(:disabled){background:#eef1fb}
+  .mini-btn.red{color:var(--red)}
   .mini-btn:disabled{opacity:.55;cursor:default}
   @media(max-width:1000px){.room-layout{flex-direction:column}.room-side{width:auto;flex:none}}
-  /* 달력 */
-  .cal{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:12px;margin-bottom:14px}
-  .cal-h{display:flex;align-items:center;gap:10px;margin-bottom:8px;font-weight:700;font-size:13px}
-  .cal-h span{min-width:110px}
-  .cal-h button{padding:2px 10px;background:#f1f3f6;color:var(--ink);border:1px solid var(--line)}
-  .cal-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:3px}
-  .cal-grid .dow{font-size:10.5px;color:var(--muted);text-align:center;padding:2px}
-  .cal-cell{min-height:46px;min-width:0;overflow:hidden;border:1px solid #eef0f2;border-radius:6px;padding:3px}
-  .cal-cell.out{background:#fafbfc}
-  .cal-cell.today{border-color:var(--green);border-width:2px}
-  .cal-cell .dd{font-size:10.5px;color:var(--muted)}
-  .cal-cell .ev{background:#fdeceb;color:var(--red);border-radius:4px;padding:0 3px;margin-top:2px;font-size:10px;line-height:1.4;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;cursor:default}
-  .cal-cell.has{cursor:pointer}
-  .cal-cell.has:hover{background:#f7f9fb}
-  .cal-cell .ev.more{background:#eef0f2;color:var(--muted)}
-  .cal-h .cal-hint{min-width:0;font-weight:400;font-size:11px;color:var(--muted)}
-  #cal-day{margin-top:10px}
-  #cal-day .cal-day-h{font-size:12px;font-weight:700;margin-bottom:4px}
-  #cal-day .cal-day-row{font-size:12px;line-height:1.5;padding:3px 6px;border-left:2px solid var(--red);background:#fbfcfd;margin-bottom:3px;border-radius:0 4px 4px 0}
-  /* 칸반 */
-  /* 칸반은 좌우로 넘겨 본다(2026-09-13 사용자 확정). 룸 왼쪽 칸이 600픽셀도 안 되는데 다섯 칸을
-     욱여넣으면 칸 하나가 110픽셀이라 제목이 글자 두세 개씩 끊겼다. 칸 너비를 읽을 수 있는 크기로
-     고정하고 넘치는 칸은 가로로 밀어서 본다 — Shift+휠(트랙패드는 좌우 스와이프). */
-  .kanban{display:flex;gap:10px;align-items:flex-start;overflow-x:auto;padding-bottom:8px}
-  .kanban::-webkit-scrollbar{height:9px}
-  .kanban::-webkit-scrollbar-thumb{background:#c8ced6;border-radius:5px}
-  .kanban::-webkit-scrollbar-track{background:#f0f1f4;border-radius:5px}
-  .kan-hint{color:var(--muted);font-size:11px;padding:0 2px 6px}
-  /* ★ 칸은 스스로 스크롤하지 않는다(2026-09-13 사용자 확정). 휠은 언제나 화면 전체를 위아래로
-     움직인다 — 칸에 max-height+overflow-y를 주면 마우스가 칸 위에 있을 때 휠을 칸이 가로채,
-     화면이 안 내려가거나(칸 안에서만 굴러감) 위로 못 올라가는 일이 생겼다.
-     세로는 화면, 가로는 칸반 — 축마다 주인이 하나씩이라 헷갈릴 데가 없다.
-     칸 이름·건수는 위에 붙어 있어(sticky) 긴 칸을 내려가도 지금 보는 칸이 어딘지 안 잃는다. */
-  .kcol{flex:0 0 264px;background:#eef0f3;border-radius:10px;padding:0 8px 8px}
-  .kcol>h3{position:sticky;top:0;z-index:1;background:#eef0f3;font-size:11.5px;color:var(--muted);text-transform:uppercase;margin:0 -8px 8px;padding:11px 12px 7px;font-weight:700;display:flex;gap:6px;align-items:center}
-  .kcol::-webkit-scrollbar{width:8px}
-  .kcol::-webkit-scrollbar-thumb{background:#c8ced6;border-radius:4px}
-  .kcol::-webkit-scrollbar-track{background:transparent}
-  .kcol>h3 .n{background:#d9dde3;color:#555;border-radius:20px;padding:0 7px;font-size:11px}
-  .kcard{background:#fff;border:1px solid var(--line);border-radius:8px;padding:8px 9px;margin-bottom:7px;font-size:12.5px;line-height:1.45;color:#3a3f47;overflow-wrap:anywhere}  /* 긴 영문·괄호 문자열이 박스 밖으로 안 삐져나가게 */
-  .kcard .due{color:var(--red);font-weight:700;font-size:11px}
-  .kcard .kdue{color:var(--red);font-weight:700;font-size:11px;margin-bottom:3px}
-  .kcard .kdue.soft{color:var(--muted);font-weight:600}   /* 재확인일 — 마감처럼 위협적이지 않게 */
-  .kcard .kdue.donel{color:var(--green);font-weight:600}  /* 당일 완결 등재 */
-  .kcard .kt{font-weight:600;margin-bottom:3px}
-  .kcard .kb{font-size:11.5px;color:var(--muted)}
-  .kcard .mv{display:flex;gap:6px;margin-top:7px}
-  .kcard .mv button{padding:1px 9px;font-size:12px;background:#f1f3f6;color:var(--ink);border:1px solid var(--line);border-radius:5px}
-  .kcol .col-empty{color:var(--muted);font-size:12px;padding:8px 4px}
-  /* 게시판(글+댓글) */
-  .post{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:14px;margin-bottom:12px;max-width:920px}
+  .post{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:18px 20px;margin-bottom:12px;max-width:920px}
   .post-h{display:flex;align-items:center;gap:10px;margin-bottom:6px}
-  .post{padding:18px 20px}
   .post-title{font-weight:700;font-size:16px;line-height:1.4}
   .post-day{color:var(--muted);font-size:12px;margin-left:auto;white-space:nowrap}
   .post-body{font-size:14.5px;color:#2b2f36;line-height:1.78;margin:4px 0 14px}
@@ -181,21 +119,19 @@ _HTML = r"""<!doctype html>
   .post-body ul{margin:9px 0} .post-body li{margin:4px 0}
   .cmts{border-top:1px solid #f2f3f5;padding-top:12px;display:flex;flex-direction:column;gap:9px}
   .cmt{font-size:13px;color:#33383f;line-height:1.62;background:#f7f8fa;border-radius:8px;padding:9px 12px}
-  .cmt-who{font-weight:700;color:var(--green);margin-right:5px}
+  .cmt-who{font-weight:700;color:var(--green);margin-right:5px;display:block;margin-bottom:2px}
   .cmt.none{color:var(--muted);background:none;padding:2px 0;font-style:italic}
-  .cmt-who{display:block;margin-bottom:2px}
-  /* 마크다운 렌더 */
   .md .mh{font-weight:700;margin:6px 0 2px}
   .md ul{margin:4px 0;padding-left:18px} .md li{margin:1px 0}
   .md code{background:#eceef1;border-radius:4px;padding:0 3px;font-size:.9em;font-family:ui-monospace,SFMono-Regular,Consolas,monospace}
-  .md>div{margin:0 0 6px} .md>div:last-child{margin-bottom:0}   /* 문단 사이 숨 쉴 간격 */
+  .md>div{margin:0 0 6px} .md>div:last-child{margin-bottom:0}
   .md .mgap{height:6px} .md>div:first-child,.md>ul:first-child{margin-top:0}
-  /* 게시판 목록(제목 행) → 클릭해 글 상세로 */
   .prow{display:flex;align-items:center;gap:12px;background:var(--card);border:1px solid var(--line);border-radius:8px;padding:11px 14px;margin-bottom:8px;cursor:pointer;max-width:920px}
   .prow:hover{border-color:var(--green)}
   .prow-t{font-weight:600;font-size:13.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
   .prow-meta{margin-left:auto;color:var(--muted);font-size:12px;white-space:nowrap}
   .prow-meta .c{color:var(--green);font-weight:700}
+  .prow-body{background:#fafbfc;border:1px solid var(--line);border-top:none;border-radius:0 0 8px 8px;padding:12px 14px;margin:-8px 0 10px;max-width:920px;font-size:13.5px;line-height:1.7}
   .back{color:var(--green);cursor:pointer;font-size:13px;margin-bottom:12px;display:inline-block}
   .cmt-form{display:flex;gap:8px;margin-top:12px}
   .cmt-form textarea{flex:1;padding:8px 11px;border:1px solid var(--line);border-radius:8px;font-family:inherit;font-size:13px;resize:vertical;min-height:38px}
@@ -208,68 +144,54 @@ _HTML = r"""<!doctype html>
   .reply-box textarea{flex:1;padding:6px 9px;border:1px solid var(--line);border-radius:6px;font-family:inherit;font-size:12.5px;resize:vertical;min-height:32px}
   .post-stat{font-size:12.5px;color:var(--muted);margin:2px 0 12px;display:flex;align-items:center;gap:8px}
   .post-stat .likebtn{cursor:pointer;color:var(--green);font-weight:700;border:1px solid #cfe6da;background:#e7f3ec;border-radius:6px;padding:2px 10px}
-  /* 포트 레지스트리 */
-  .pconf{background:#fdeceb;color:var(--red);border-radius:8px;padding:9px 12px;margin-bottom:10px;font-size:13px;font-weight:600;max-width:840px}
-  .ptable{border-collapse:collapse;width:100%;max-width:840px;background:var(--card);border:1px solid var(--line);border-radius:10px;overflow:hidden}
+  .pconf{background:#fdeceb;color:var(--red);border-radius:8px;padding:9px 12px;margin-bottom:10px;font-size:13px;font-weight:600;max-width:920px}
+  .ptable{border-collapse:collapse;width:100%;max-width:1100px;background:var(--card);border:1px solid var(--line);border-radius:10px;overflow:hidden}
   .ptable th{text-align:left;font-size:11.5px;color:var(--muted);text-transform:uppercase;padding:9px 12px;border-bottom:1px solid var(--line);font-weight:700}
-  .ptable td{padding:9px 12px;border-top:1px solid #f2f3f5;font-size:13px}
+  .ptable td{padding:9px 12px;border-top:1px solid #f2f3f5;font-size:13px;vertical-align:top}
   .ptable td.port{font-weight:700}
+  .ptable td.muted{color:var(--muted)}
+  .ptable tr.clickable{cursor:pointer} .ptable tr.clickable:hover td{background:#fafbfc}
+  .ptable tr.sel td{background:#f1f7f3}
   .ptable .up{color:var(--green);font-weight:700} .ptable .down{color:var(--muted)}
   .ptable .pid{color:var(--muted);font-size:11.5px}
+  .ptable .cmd{color:var(--muted);font-size:11.5px;font-family:ui-monospace,Consolas,monospace;max-width:380px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;display:block}
   .ptable .del{color:var(--red);cursor:pointer;font-size:12px}
-  .pbtn{font-size:11.5px;font-weight:700;padding:3px 10px;border-radius:12px;border:1px solid var(--line);cursor:pointer;margin-right:4px}
+  .pbtn{font-size:11.5px;font-weight:700;padding:3px 10px;border-radius:12px;border:1px solid var(--line);cursor:pointer;margin-right:4px;font-family:inherit}
   .pbtn.start{background:#e7f3ec;color:#1f7a44;border-color:#bcdcc7}
   .pbtn.stop{background:#fdecec;color:#b23b3b;border-color:#f0cdcd}
   .pbtn:disabled{opacity:.55;cursor:default}
-  .pform{display:flex;gap:8px;align-items:center;margin-top:16px;flex-wrap:wrap;max-width:840px}
+  .pform{display:flex;gap:8px;align-items:center;margin-top:16px;flex-wrap:wrap;max-width:1100px}
   .pform-h{font-size:12px;color:var(--muted);font-weight:700;width:100%}
   .pform select,.pform input{padding:8px 10px;border:1px solid var(--line);border-radius:8px;font-size:13px;font-family:inherit}
   .pform input.grow{flex:1;min-width:120px}
   .pdet-h{font-size:11.5px;color:var(--muted);font-weight:700;margin:18px 0 6px;text-transform:uppercase;letter-spacing:.02em}
-  .ptable .reg{color:var(--green);cursor:pointer;font-size:12px;font-weight:700}
+  .ptable .reg{color:var(--green);cursor:pointer;font-size:12px;font-weight:700;white-space:nowrap}
   .tbadge{display:inline-block;background:#eef1fb;color:#3a52a8;border-radius:20px;padding:1px 8px;font-size:11px;margin-right:4px;font-weight:700}
-  .tbadge.gold{background:#fdf3d6;color:#9a7b1e}
+  .tbadge.gold{background:#fdf3d6;color:#9a7b1e} .tbadge.green{background:#e7f3ec;color:#1f7a44} .tbadge.gray{background:#f1f3f6;color:var(--muted)}
   .ptable .reg-cell select,.ptable .reg-cell input,.ptable .reg-cell button{font-size:12px;padding:5px 8px;border:1px solid var(--line);border-radius:6px;font-family:inherit;margin-right:5px}
   .ptable .reg-cell .ireg-label{width:120px}
   .ptable .reg-cell button{background:var(--green);color:#fff;border:none;cursor:pointer}
-  /* 일간보고: 왼쪽 날짜/프로젝트 목록 + 오른쪽 대화(PM 우/담당 좌) */
-  .daily-nav{width:260px;flex:0 0 260px;min-height:0;overflow-y:auto;background:var(--card);border:1px solid var(--line);border-radius:10px;padding:6px}
-  .dnav-date{font-weight:700;font-size:13px;padding:10px 10px 5px;border-top:1px solid var(--line);margin-top:4px}
-  .dnav-date:first-child{border-top:none;margin-top:0}
-  .dnav-proj{padding:7px 10px;font-size:12.5px;color:#3a3f47;cursor:pointer;border-radius:6px;display:flex;align-items:center;gap:7px}
-  .dnav-proj .dnav-chk{flex:0 0 auto;margin:0;cursor:pointer;accent-color:var(--green)}
-  .dnav-proj .dnav-name{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-  /* 확인한 보고는 흐리게 — 안 지우고 남겨두되 남은 것이 눈에 띄게 한다 */
-  .dnav-proj.done .dnav-name{opacity:.45;text-decoration:line-through}
-  .dnav-count{font-size:11px;color:var(--muted);padding:4px 10px 6px;border-bottom:1px solid var(--line);margin-bottom:4px}
-  .dnav-proj:hover{background:#f1f3f6}
-  .dnav-proj.active{background:#e7f3ec;font-weight:600}
-  .dnav-proj.talked{color:var(--green);font-weight:600}   /* 실제 인터뷰 진행 */
-  .dnav-proj.quiet{color:var(--muted)}                    /* 변화없음·한도 등으로 생략 */
-  .daily-main{flex:1;min-width:0;min-height:0;display:flex;flex-direction:column;background:var(--card);border:1px solid var(--line);border-radius:10px;overflow:hidden}
-  .daily-h{padding:12px 16px;border-bottom:1px solid var(--line);font-weight:700;font-size:13.5px}
-  .daily-main .stream{flex:1;overflow-y:auto;padding:16px 18px;display:flex;flex-direction:column;gap:10px}
-  .msg.pm{align-self:flex-end;background:#eef2fb;border:1px solid #d3ddf3}
-  /* 일간보고 개편: 상단 날짜바 + (좌 프로젝트목록 · 중 대화 · 우 PM 패널) */
-  .daily-wrap{display:flex;flex-direction:column;gap:10px;flex:1;min-height:0}
-  .daily-datebar{display:flex;gap:8px;overflow-x:auto;padding:2px;flex:0 0 auto}
+  .datebar{display:flex;gap:8px;overflow-x:auto;padding:2px;flex:0 0 auto;margin-bottom:12px}
   .datechip{flex:0 0 auto;padding:7px 14px;border:1px solid var(--line);border-radius:20px;background:var(--card);cursor:pointer;font-size:12.5px;font-weight:600;white-space:nowrap}
   .datechip:hover{background:#f1f3f6}
   .datechip.active{background:#e7f3ec;border-color:#bcdcc7}
   .datechip .cnt{margin-left:6px;color:var(--muted);font-weight:700;font-size:11px}
-  .daily-body{flex:1;min-height:0;display:flex;gap:10px}
-  .daily-projcol{width:190px;flex:0 0 190px;min-height:0;overflow-y:auto;background:var(--card);border:1px solid var(--line);border-radius:10px;padding:6px}
-  .daily-pm{width:340px;flex:0 0 340px;min-height:0;display:flex;flex-direction:column;background:var(--card);border:1px solid var(--line);border-radius:10px;overflow:hidden}
-  .daily-pm .stream{flex:1;overflow-y:auto;padding:14px;display:flex;flex-direction:column;gap:10px}
-  .daily-pm .composer{border-top:1px solid var(--line);padding:8px;background:#fafbfc}
-  .daily-pm textarea{width:100%;box-sizing:border-box;border:1px solid var(--line);border-radius:8px;padding:8px 10px;font-family:inherit;font-size:13px;line-height:1.45;resize:none;max-height:120px;overflow-y:auto}
-  @media(max-width:1100px){.daily-pm{flex-basis:280px;width:280px}.daily-projcol{flex-basis:150px;width:150px}}
-  /* 전문가 */
-  #expert-top button{margin-left:8px;padding:4px 12px;font-size:12px}
-  .expert-wiki{flex:1;min-width:0;min-height:0;overflow-y:auto;background:var(--card);border:1px solid var(--line);border-radius:10px;padding:14px}
+  .report{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:18px 20px;max-width:920px;margin-bottom:18px;font-size:14px;line-height:1.75}
+  .report .mh{font-size:15px;margin:14px 0 5px}
+  .wiki{flex:1;min-width:0;min-height:0;overflow-y:auto;background:var(--card);border:1px solid var(--line);border-radius:10px;padding:14px}
   .wiki-body{font-size:13.5px;line-height:1.7;color:#2b2f36}
   .wiki-body .mh{font-size:15px;margin:14px 0 5px}
   .wiki-body .mgap{height:9px}
+  .props{display:flex;flex-direction:column;gap:8px;max-height:46%;overflow-y:auto;margin-bottom:10px;flex:0 0 auto}
+  .prop{background:var(--card);border:1px solid var(--line);border-radius:8px;padding:9px 12px;font-size:12.5px;line-height:1.55}
+  .prop .pt{font-weight:700;margin-bottom:3px;display:flex;gap:6px;align-items:center;flex-wrap:wrap}
+  .prop .pb{color:#3a3f47}
+  .prop .pa{display:flex;gap:10px;margin-top:5px}
+  .prop .pa span{font-size:11.5px;color:var(--muted);cursor:pointer}
+  .prop .pa span:hover{color:var(--green)}
+  .prop.done{opacity:.55}
+  .kv{font-size:13px;line-height:1.7;background:var(--card);border:1px solid var(--line);border-radius:10px;padding:12px 14px}
+  .kv b{display:inline-block;min-width:92px;color:var(--muted);font-weight:600}
 </style></head><body>
 <div class="app">
   <aside>
@@ -277,8 +199,8 @@ _HTML = r"""<!doctype html>
     <nav>
       <div class="nav-item" data-nav="dashboard" onclick="go('#/dashboard')">대시보드</div>
       <div class="nav-item" data-nav="board" onclick="go('#/board')">게시판</div>
-      <div class="nav-item" data-nav="daily" onclick="go('#/daily')">주간보고</div>
-      <div class="nav-item" data-nav="experts" onclick="go('#/experts')">전문가</div>
+      <div class="nav-item" data-nav="weekly" onclick="go('#/weekly')">주간보고</div>
+      <div class="nav-item" data-nav="lab" onclick="go('#/lab')">랩실</div>
       <div class="nav-item" data-nav="agents" onclick="go('#/agents')">에이전트</div>
       <div class="nav-item" data-nav="ports" onclick="go('#/ports')">포트</div>
     </nav>
@@ -289,39 +211,30 @@ _HTML = r"""<!doctype html>
   <div class="body">
     <header>
       <h1 id="hdr-title">대시보드</h1>
-      <div class="summary" id="hdr-summary">
-        <span>프로젝트 <b id="s-proj">–</b></span>
-        <span>이슈 <b id="s-iss">–</b></span>
-        <span class="hot">임박 <b id="s-soon">–</b></span>
-      </div>
-      <div class="actions" id="hdr-actions">
-        <button onclick="doScan()">스캔</button>
-      </div>
+      <div class="summary" id="hdr-summary"></div>
+      <div class="hstatus" id="hdr-status" hidden></div>
+      <div class="actions" id="hdr-actions"></div>
     </header>
     <main id="view">로딩…</main>
   </div>
 </div>
 <script>
-const esc = s => (s||'').replace(/[&<>]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));
-// HTML 속성값용(따옴표까지 이스케이프) — Windows 경로엔 \ 와 " 가 섞여 인라인 onclick을 깨므로 data-*로 넘긴다
+const esc = s => (s==null?'':String(s)).replace(/[&<>]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));
 const escAttr = s => esc(s).replace(/"/g,'&quot;').replace(/'/g,'&#39;');
 // 가벼운 마크다운 렌더 — 에이전트 답에 ## 제목·**굵게**·- 목록·`코드`가 섞여 온다(외부 lib 없이)
 function md(src){
   const e = s => s.replace(/[&<>]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));
-  // 안전한 링크만 렌더 — 외부 https:// 또는 내부 전문가 페이지(#/experts/...)만 <a>로. 그 외
-  // (javascript: · 임의 파일 경로 등)는 표시 텍스트만 남기고 걷어낸다(T-007, 모델동향 출처 링크용).
   const inl = s => {
     const links = [];
     let t = (s||'').replace(/\[([^\]]+)\]\(([^)\s]+)\)/g, (m, text, href) => {
-      const safe = /^https:\/\//.test(href) || /^#\/experts(\/|$)/.test(href);
+      const safe = /^https:\/\//.test(href) || /^#\/(lab|weekly|room)(\/|$)/.test(href);
       if (!safe) return text;
       const ext = href.startsWith('https://');
       const rel = ext ? ' target="_blank" rel="noopener noreferrer"' : '';
       links.push(`<a href="${href.replace(/"/g,'%22')}"${rel}>${e(text)}</a>`);
       return `\u0000${links.length - 1}\u0000`;
     });
-    t = e(t).replace(/`([^`]+)`/g,'<code>$1</code>')
-            .replace(/\*\*([^*]+?)\*\*/g,'<strong>$1</strong>');
+    t = e(t).replace(/`([^`]+)`/g,'<code>$1</code>').replace(/\*\*([^*]+?)\*\*/g,'<strong>$1</strong>');
     return t.replace(/\u0000(\d+)\u0000/g, (m, i) => links[Number(i)]);
   };
   const out=[]; let list=false;
@@ -336,13 +249,14 @@ function md(src){
   close();
   return out.join('');
 }
-const clean = s => (s||'').replace(/~~/g,'').replace(/\*\*|__|`/g,'').trim();  // 취소선·굵게·코드 마크다운 기호 제거(카드에선 원문 그대로 못 그린다)
-const isCancelled = s => /~~.+~~/.test(s||'');                 // ~~...~~ = 취소 → 제외
 const todayStr = () => new Date().toISOString().slice(0,10);
-function daysTo(due){ return Math.round((new Date(due)-new Date(todayStr()))/86400000); }
+const fmtTs = s => (s||'').slice(5,16);
+const fmtCost = c => (c||c===0) ? '$'+Number(c).toFixed(2) : '-';
+const getJ = (url) => fetch(url).then(r=>{ if(!r.ok) throw new Error('HTTP '+r.status); return r.json(); });   // 404 등은 예외 → 호출부 catch가 빈 값으로 처리
+const postJ = (url, body) => fetch(url,{method:'POST',headers:{'Content-Type':'application/json'},
+  body: body===undefined ? undefined : JSON.stringify(body)}).then(r=>r.json()).catch(()=>({ok:false,error:'서버에 연결하지 못했습니다'}));
 
-// ── 화면 톤에 맞춘 확인/알림 모달(브라우저 confirm/alert 대체) ──────────
-// appConfirm({title, body, okText, danger}) → Promise<boolean> / appAlert(title, body)
+// ── 확인/알림 모달 ──────────────────────────────────────
 function appModal({title, body, okText='확인', cancel=true, danger=false}){
   return new Promise(res=>{
     const bg = document.createElement('div'); bg.className = 'modal-bg';
@@ -352,12 +266,12 @@ function appModal({title, body, okText='확인', cancel=true, danger=false}){
     bg.querySelector('.m-title').textContent = title || '';
     bg.querySelector('.m-body').textContent = body || '';
     bg.querySelector('.m-ok').textContent = okText;
-    const done = v=>{ bg.remove(); document.removeEventListener('keydown', esc); res(v); };
-    const esc = e=>{ if(e.key==='Escape') done(false); };
-    bg.addEventListener('click', e=>{ if(e.target===bg) done(false); });   // 바깥 클릭 = 취소
+    const done = v=>{ bg.remove(); document.removeEventListener('keydown', escK); res(v); };
+    const escK = e=>{ if(e.key==='Escape') done(false); };
+    bg.addEventListener('click', e=>{ if(e.target===bg) done(false); });
     bg.querySelector('.m-ok').onclick = ()=>done(true);
     const c = bg.querySelector('.m-cancel'); if(c) c.onclick = ()=>done(false);
-    document.addEventListener('keydown', esc);
+    document.addEventListener('keydown', escK);
     document.body.appendChild(bg);
     bg.querySelector('.m-ok').focus();
   });
@@ -365,214 +279,229 @@ function appModal({title, body, okText='확인', cancel=true, danger=false}){
 const appConfirm = o => appModal(o);
 const appAlert = (title, body) => appModal({title, body, cancel:false});
 
-let PROJECTS = [], ISSUES = [];        // 마지막 로드 캐시
-let pollTimer = null;                   // 채팅 자동 새로고침 타이머
-let CUR_ROOM = null;                    // 현재 열린 프로젝트 룸 path
-let CAL_YM = null;                      // 달력이 보여주는 {y, m} (m=0-based)
-let portEditing = false;                // 포트 인라인 등록 중이면 폴링 새로고침 멈춤
-let DAILY_DATA = [];                    // 일간보고 트리 캐시(날짜→프로젝트)
+let PROJECTS = [];                      // 마지막 로드 캐시
+let pollTimer = null;                   // 뷰별 자동 새로고침 타이머(하나만)
+let tickTimer = null;                   // 토론 카운트다운(1초)
+let CUR_ROOM = null;
+let portEditing = false;
 
-// ── 데이터 로드 ─────────────────────────────────────────
 async function loadData(){
-  const [ps, allIs] = await Promise.all([
-    fetch('/api/projects').then(r=>r.json()),
-    fetch('/api/issues').then(r=>r.json()),
-  ]);
-  PROJECTS = ps;
-  ISSUES = allIs.filter(i => !isCancelled(i.title) && i.verdict !== 'drop');  // 노이즈 컷
+  try{ PROJECTS = await getJ('/api/projects'); }catch(e){ PROJECTS = []; }
   renderSidebar();
-}
-
-function issuesByProject(){
-  const m = {}; ISSUES.forEach(i => (m[i.project]=m[i.project]||[]).push(i)); return m;
 }
 const nameOfPath = p => (PROJECTS.find(x=>x.path===p)||{}).name || p;
 
-// ── 사이드바(프로젝트 룸 목록) ───────────────────────────
+// ── 사이드바 ───────────────────────────────────────────
 function renderSidebar(){
-  const byProj = issuesByProject();
-  const ordered = PROJECTS.slice().sort((a,b)=>(byProj[b.path]||[]).length-(byProj[a.path]||[]).length);
   const cur = decodeURIComponent(location.hash);
+  const ordered = PROJECTS.slice().sort((a,b)=>a.name.localeCompare(b.name,'ko'));
   document.getElementById('rooms').innerHTML = ordered.map(p=>{
-    const items = byProj[p.path]||[];
-    const u = items.filter(i=>i.kind==='unresolved').length;
-    const d = items.filter(i=>i.kind==='deadline').length;
-    const dot = d?'d':(u?'u':'');
     const active = cur === '#/room/'+p.path ? ' active':'';
-    return `<div class="room-item${active}" data-room="${escAttr(p.path)}">`+
-           `<span class="dot ${dot}"></span><span class="rname">${esc(p.name)}</span>`+
-           (items.length?`<span class="rc">${items.length}</span>`:'')+
+    return `<div class="room-item${active}" data-room="${escAttr(p.path)}" title="${escAttr(p.path)}">`+
+           `<span class="dot${p.installed?' on':''}"></span><span class="rname">${esc(p.name)}</span>`+
            `<span class="rx" data-exclude="${escAttr(p.path)}" title="관리 제외">x</span></div>`;
   }).join('') || '<div style="color:#7a808b;font-size:12px;padding:8px 18px">스캔을 눌러보세요</div>';
-  // 사이드바 상단 nav 활성화 표시
   document.querySelectorAll('[data-nav]').forEach(el=>el.classList.remove('active'));
   const view = (cur.startsWith('#/board') || cur.startsWith('#/post')) ? 'board'
-             : cur.startsWith('#/daily') ? 'daily'
-             : cur.startsWith('#/experts') ? 'experts'
+             : cur.startsWith('#/weekly') ? 'weekly'
+             : cur.startsWith('#/lab') ? 'lab'
              : cur.startsWith('#/agents') ? 'agents'
              : cur.startsWith('#/ports') ? 'ports'
              : (cur.startsWith('#/room') ? null : 'dashboard');
   if(view) document.querySelector(`[data-nav="${view}"]`)?.classList.add('active');
 }
 
-// ── 대시보드 뷰 ─────────────────────────────────────────
-function renderDashboard(){
-  setHeader('대시보드', {summary:true, actions:true});   // 스캔은 전역 액션 → 대시보드에서만
-  const is = ISSUES;
-  const soon = is.filter(i => i.kind==='deadline' && i.due && daysTo(i.due) <= 7)
-                 .sort((a,b)=> a.due.localeCompare(b.due));
-  const conditional = is.filter(i => i.kind==='conditional').length;
-  document.getElementById('s-proj').textContent = PROJECTS.length;
-  document.getElementById('s-iss').textContent = is.length;
-  document.getElementById('s-soon').textContent = soon.length;
-
-  const noteParts = [];
-  if(conditional) noteParts.push(`조건부 보류 ${conditional}건(기한 아님)`);
-
-  let soonHtml = '';
-  if(soon.length || conditional){
-    const rows = soon.map(i=>{
-      const dd = daysTo(i.due); const cls = dd<=0?'today':'week';
-      const label = dd<0?`${-dd}일 지남`:(dd===0?'오늘':`${dd}일 후`);
-      return `<div class="row"><span class="d ${cls}">${i.due} · ${label}</span>`+
-             `<span class="proj">${esc(nameOfPath(i.project))}</span>`+
-             `<span>${esc(clean(i.title))}</span></div>`;
-    }).join('') || '<div class="row"><span class="proj">확정된 임박 기한 없음</span></div>';
-    soonHtml = `<section><h2>임박 기한 (7일 내)</h2><div class="soon">${rows}</div>`+
-               (noteParts.length?`<div class="note-line">${esc(noteParts.join(' · '))}</div>`:'')+`</section>`;
-  }
-
-  const byProj = issuesByProject();
-  const ordered = PROJECTS.slice().sort((a,b)=>(byProj[b.path]||[]).length-(byProj[a.path]||[]).length);
-  const cards = ordered.map(p=>{
-    const items = byProj[p.path]||[];
-    const u = items.filter(i=>i.kind==='unresolved').length;
-    const d = items.filter(i=>i.kind==='deadline').length;
-    return `<div class="card"><h3>${esc(p.name)}`+
-      (u?`<span class="badge u">미해결 ${u}</span>`:'')+
-      (d?`<span class="badge d">기한 ${d}</span>`:'')+
-      `<span class="open" data-room="${escAttr(p.path)}">룸 열기</span></h3>`+
-      items.slice(0,8).map(i=>`<div class="issue">${i.due?`<span class="due">${i.due}</span> `:''}${esc(clean(i.title))}</div>`).join('')+
-      (items.length>8?`<div class="more">…외 ${items.length-8}건</div>`:(items.length?'':'<div class="more">이슈 없음</div>'))+
-      `</div>`;
-  }).join('');
-  document.getElementById('view').innerHTML = soonHtml +
-    `<section><h2>프로젝트</h2><div class="grid">${cards||'<div class="empty">관리 대상 없음 — 스캔을 눌러보세요</div>'}</div></section>`;
-}
-
-// ── 헤더 토글 (뷰별로 요약바·액션버튼 노출 제어) ──────────
+// ── 헤더: 제목 · 요약 · 상태줄 · 버튼(뷰마다 다르게) ─────────────
 function setHeader(title, opts){
   opts = opts || {};
   document.getElementById('hdr-title').textContent = title;
-  document.getElementById('hdr-summary').hidden = !opts.summary;
-  document.getElementById('hdr-actions').hidden = !opts.actions;
+  const sum = document.getElementById('hdr-summary');
+  sum.hidden = !opts.summary; sum.innerHTML = opts.summary || '';
+  const st = document.getElementById('hdr-status');
+  st.hidden = !opts.status; st.innerHTML = opts.status || '';
+  const act = document.getElementById('hdr-actions');
+  act.hidden = !(opts.buttons && opts.buttons.length);
+  act.innerHTML = (opts.buttons||[]).map(b => b.html ? b.html :
+    `<button${b.id?` id="${b.id}"`:''}${b.ghost?' class="ghost"':''}${b.danger?' class="danger"':''}${b.disabled?' disabled':''} onclick="${b.onclick}">${esc(b.label)}</button>`).join('');
+}
+function setStatus(html){ const st=document.getElementById('hdr-status'); st.hidden = !html; st.innerHTML = html||''; }
+
+// ── 대시보드 ───────────────────────────────────────────
+async function renderDashboard(){
+  setHeader('대시보드', {summary:'<span>불러오는 중…</span>',
+    buttons:[{id:'btn-scan', label:'스캔(설치)', onclick:'doScan()'}]});
+  document.getElementById('view').innerHTML = '<div class="empty">불러오는 중…</div>';
+  clearInterval(pollTimer);
+  const [agents, weekly, sess] = await Promise.all([
+    getJ('/api/agents').catch(()=>[]), getJ('/api/weekly').catch(()=>[]), getJ('/api/board/session').catch(()=>null)]);
+  const byPath = {}; agents.forEach(a=>byPath[a.project]=a);
+  const installed = PROJECTS.filter(p=>p.installed).length;
+  const lastW = weekly.length ? weekly[0].date : '없음';
+  const lastS = sess && sess.started_at ? (sess.started_at.slice(5,16)+' · '+sessionLabel(sess)) : '없음';
+  setHeader('대시보드', {summary:
+      `<span>프로젝트 <b>${PROJECTS.length}</b></span><span>설치 <b>${installed}</b></span>`+
+      `<span>마지막 주간보고 <b>${esc(lastW)}</b></span><span>마지막 토론 <b>${esc(lastS)}</b></span>`,
+    buttons:[{id:'btn-scan', label:'스캔(설치)', onclick:'doScan()'}]});
+  const ordered = PROJECTS.slice().sort((a,b)=>a.name.localeCompare(b.name,'ko'));
+  const cards = ordered.map(p=>{
+    const a = byPath[p.path] || {};
+    return `<div class="card"><h3>${esc(p.name)}`+
+      `<span class="badge ${p.installed?'on':'off'}">${p.installed?'설치됨':'미설치'}</span>`+
+      `<span class="open" data-room="${escAttr(p.path)}">룸 열기</span></h3>`+
+      `<div class="line">담당 <b>${esc(a.name||p.name)}</b> · 점수 ${a.points??0}${a.last_delta!=null?` (최근 ${a.last_delta>=0?'+':''}${a.last_delta})`:''}</div>`+
+      (a.note_head?`<div class="line" style="color:var(--muted)">${esc(a.note_head)}</div>`:'')+
+      `</div>`;
+  }).join('');
+  document.getElementById('view').innerHTML =
+    `<section><h2>프로젝트</h2><div class="grid">${cards||'<div class="empty">관리 대상 없음 — 스캔을 눌러보세요</div>'}</div></section>`;
 }
 
-// ── 채팅 공용 마크업/바인딩 (전체 채팅방 + 프로젝트 룸) ─────
-function chatMarkup(){
-  return `<div class="chat">`+
-    `<div class="stream" id="stream"><div class="chat-empty">불러오는 중…</div></div>`+
-    `<div class="composer">`+
-      `<textarea id="msg-input" rows="1" placeholder="" autocomplete="off"></textarea>`+
-    `</div>`+
-  `</div>`;
+async function doScan(){
+  const b = document.getElementById('btn-scan'); if(b){ b.disabled=true; b.textContent='스캔 중…'; }
+  const r = await postJ('/api/scan');
+  await loadData();
+  if(r.projects===undefined){ appAlert('스캔 실패', r.error||'알 수 없는 오류'); }
+  else appAlert('스캔 완료', `프로젝트 ${r.projects}개\n새로 설치 ${r.installed} · 이미 설치 ${r.already} · 자기 자신 제외 ${r.self_skipped}`+
+    (r.errors&&r.errors.length?`\n실패 ${r.errors.length}: ${r.errors.map(e=>e.name).join(', ')}`:''));
+  route();
 }
 
-function bindChat(room, agentRoom){
+// ── 채팅 공용 ─────────────────────────────────────────
+function chatMarkup(ph){
+  return `<div class="chat"><div class="stream" id="stream"><div class="chat-empty">불러오는 중…</div></div>`+
+    `<div class="composer"><textarea id="msg-input" rows="1" placeholder="${escAttr(ph||'')}" autocomplete="off"></textarea></div></div>`;
+}
+function bindChat(room, agentRoom, sender){
   const input = document.getElementById('msg-input');
   const grow = ()=>{ input.style.height='auto'; input.style.height=Math.min(input.scrollHeight,140)+'px'; };
-  // Enter=전송, Shift+Enter=줄바꿈(기본 동작 허용)
-  input.addEventListener('keydown', e=>{ if(e.key==='Enter' && !e.shiftKey){ e.preventDefault(); sendMsg(room, agentRoom); }});
+  input.onkeydown = e=>{ if(e.key==='Enter' && !e.shiftKey){ e.preventDefault(); (sender||sendMsg)(room, agentRoom); }};
   input.addEventListener('input', grow);
-  input.focus({preventScroll:true});   // 포커스가 페이지를 하단으로 끌어내리지 않게
+  input.focus({preventScroll:true});
   loadMessages(room, false, agentRoom);
   clearInterval(pollTimer);
-  // 담당 에이전트 답은 headless라 뒤늦게 온다 → 폴링으로 잡는다
   pollTimer = setInterval(()=>loadMessages(room, true, agentRoom), 4000);
 }
-
-function renderChat(room, title, subtitle){
-  setHeader(title, {summary:false, actions:false});
-  document.getElementById('view').innerHTML =
-    (subtitle?`<div class="note-line" style="padding-bottom:12px">${subtitle}</div>`:'')+
-    chatMarkup();
-  bindChat(room, false);
-}
-
 async function loadMessages(room, silent, agentRoom){
   let msgs;
-  try{ msgs = await fetch('/api/messages?room='+encodeURIComponent(room)).then(r=>r.json()); }
-  catch(e){ return; }
+  try{ msgs = await getJ('/api/messages?room='+encodeURIComponent(room)); }catch(e){ return; }
   const stream = document.getElementById('stream');
-  if(!stream) return;                              // 뷰가 바뀌었으면 중단
+  if(!stream) return;
   const atBottom = stream.scrollHeight - stream.scrollTop - stream.clientHeight < 40;
   let html = msgs.length ? msgs.map(m=>{
     const mine = m.author === 'user';
-    const who = mine ? '나' : m.author;
-    const ts = (m.created_at||'').slice(5,16);
-    return `<div class="msg ${mine?'user':'agent'}">`+
-           (mine?'':`<div class="who">${esc(who)}</div>`)+
-           `<div class="md">${md(m.body)}</div><div class="ts">${esc(ts)}</div></div>`;
+    return `<div class="msg ${mine?'user':'agent'}">`+(mine?'':`<div class="who">${esc(m.author)}</div>`)+
+           `<div class="md">${md(m.body)}</div><div class="ts">${esc(fmtTs(m.created_at))}</div></div>`;
   }).join('') : '<div class="chat-empty">아직 대화가 없습니다. 첫 메시지를 남겨보세요.</div>';
-  // 담당 에이전트 방에서 마지막 글이 사용자면 = 답이 오는 중 → 대기 표시
-  if(agentRoom && msgs.length && msgs[msgs.length-1].author === 'user'){
+  if(agentRoom && msgs.length && msgs[msgs.length-1].author === 'user')
     html += pendingMarkup(room, msgs[msgs.length-1], '에이전트');
-  }
   stream.innerHTML = html;
   if(!silent || atBottom) stream.scrollTop = stream.scrollHeight;
 }
-
 async function sendMsg(room, agentRoom){
   const input = document.getElementById('msg-input');
   const body = input.value.trim(); if(!body) return;
-  input.value = ''; input.style.height = 'auto';   // 전송 후 높이 리셋
-  // 채팅창은 항상 사용자('나')가 쓴다. PM·담당 에이전트는 서버가 자동으로 남긴다.
-  await fetch('/api/messages',{method:'POST',headers:{'Content-Type':'application/json'},
-    body:JSON.stringify({room, author: 'user', body})});
+  input.value = ''; input.style.height = 'auto';
+  await postJ('/api/messages', {room, author:'user', body});
   await loadMessages(room, false, agentRoom);
 }
+const PENDING_STUCK_MIN = 5;
+function pendingMarkup(room, lastMsg, who){
+  const asked = new Date((lastMsg.created_at||'').replace(' ','T'));
+  const mins = isNaN(asked) ? 0 : Math.floor((Date.now() - asked.getTime())/60000);
+  if(mins < PENDING_STUCK_MIN) return `<div class="msg pending">${who}이 확인하고 답하는 중…</div>`;
+  return `<div class="msg pending stuck">${mins}분째 답이 없습니다 — 답변이 중간에 끊겼을 수 있습니다`+
+         `<button class="retry" onclick="retryRoomReply('${encodeURIComponent(room)}')">다시 요청</button></div>`;
+}
+async function retryRoomReply(room){
+  room = decodeURIComponent(room);
+  const r = await postJ('/api/room-retry', {room});
+  if(!r.ok){ appAlert('다시 요청 실패', r.error||'알 수 없는 오류'); return; }
+  document.querySelectorAll('.msg.pending').forEach(el=>{ el.classList.remove('stuck'); el.textContent = '다시 요청했습니다 — 담당이 답하는 중…'; });
+}
 
-// ── 게시판 목록 뷰(제목 행 → 클릭해 글 상세로) ───────────────
+// ── 게시판: 토론 세션 + 글 목록 ─────────────────────────────
+const PHASE_LABEL = {write:'글쓰기', browse:'둘러보기·댓글', feedback:'글쓴이 반응', followup:'대대댓글', reflect:'복기'};
+const STATUS_LABEL = {running:'진행 중', stopping:'중지하는 중', done:'끝남', stopped:'중지됨', failed:'실패'};
+function sessionLabel(s){ return STATUS_LABEL[s.status]||s.status; }
+let SESSION = null, SESSION_END = 0;
+
 function renderBoard(){
-  setHeader('게시판', {summary:false, actions:false});
+  setHeader('게시판', {buttons: boardButtons(null)});
   document.getElementById('view').innerHTML =
-    '<div class="note-line" style="padding-bottom:12px">담당 에이전트들이 매일 밤 직접 골라 쓰는 글입니다. 제목을 눌러 내용과 댓글을 보세요 — 조회수·좋아요는 담당의 점수(보상)가 되고, 싫어요는 점수를 깎습니다(재탕·근거 부족에 대한 반대표).</div>'+
+    '<div class="note-line" style="padding-bottom:12px">토론 시작을 누르면 담당 에이전트들이 정한 시간 동안 글을 쓰고, 서로 읽고 댓글·좋아요를 남기고, 글쓴이가 답합니다. 끝나면 각 담당이 받은 반응을 복기해 \'배운 것\'으로 남깁니다.</div>'+
     '<div id="board">불러오는 중…</div>';
   fillBoardList();
   clearInterval(pollTimer);
   pollTimer = setInterval(fillBoardList, 5000);
 }
-
+function boardButtons(s){
+  const live = s && (s.status==='running' || s.status==='stopping');
+  if(live) return [{id:'btn-stop', label: s.status==='stopping'?'중지하는 중…':'중지', onclick:'stopSession()', danger:true, disabled: s.status==='stopping'}];
+  return [{html:'<select id="bs-min"><option value="10">10분</option><option value="30" selected>30분</option><option value="60">60분</option></select>'},
+          {id:'btn-start', label:'토론 시작', onclick:'startSession()'}];
+}
+function statusLine(s){
+  if(!s) return '';
+  const st = s.stats||{};
+  const sum = `글 ${st.posted??0} · 댓글 ${st.commented??0} · 좋아요 ${st.liked??0} · 반응 ${st.reacted??0} · 복기 ${st.reflected??0} · 비용 ${fmtCost(st.cost_usd)}`;
+  if(s.status==='running' || s.status==='stopping')
+    return `<span class="live">토론 ${sessionLabel(s)}</span> · ${PHASE_LABEL[s.phase]||s.phase||''} · 남은 <b id="bs-left">--:--</b> · ${sum}`;
+  return `마지막 토론 ${esc((s.started_at||'').slice(5,16))} · <b>${sessionLabel(s)}</b>(${s.minutes}분) · ${sum}`+(s.error?` · ${esc(s.error)}`:'');
+}
+function tickLeft(){
+  const el = document.getElementById('bs-left'); if(!el) return;
+  const left = Math.max(0, Math.round((SESSION_END - Date.now())/1000));
+  el.textContent = String(Math.floor(left/60)).padStart(2,'0')+':'+String(left%60).padStart(2,'0');
+}
 async function fillBoardList(){
-  let posts = [];
-  try{ posts = await fetch('/api/posts').then(r=>r.json()); }catch(e){ return; }
+  let posts = [], s = null;
+  try{ [posts, s] = await Promise.all([getJ('/api/posts'), getJ('/api/board/session').catch(()=>null)]); }catch(e){ return; }
   const box = document.getElementById('board');
   if(!box) return;
-  if(!posts.length){
-    box.innerHTML = '<div class="empty">아직 글이 없습니다 — 주간보고가 돌면 프로젝트별 글이 올라옵니다</div>';
-    return;
-  }
+  const wasLive = SESSION && (SESSION.status==='running'||SESSION.status==='stopping');
+  const isLive = s && (s.status==='running'||s.status==='stopping');
+  SESSION = s;
+  if(isLive) SESSION_END = Date.now() + (s.remaining_sec||0)*1000;
+  if(!SESSION || wasLive !== isLive || !document.getElementById('bs-min') && !document.getElementById('btn-stop'))
+    document.getElementById('hdr-actions').innerHTML = boardButtons(s).map(b=>b.html?b.html:
+      `<button id="${b.id}"${b.danger?' class="danger"':''}${b.disabled?' disabled':''} onclick="${b.onclick}">${esc(b.label)}</button>`).join('');
+  if(isLive && !document.getElementById('btn-stop')) document.getElementById('hdr-actions').innerHTML = boardButtons(s).map(b=>`<button id="${b.id}" class="danger"${b.disabled?' disabled':''} onclick="${b.onclick}">${esc(b.label)}</button>`).join('');
+  setStatus(statusLine(s));
+  clearInterval(tickTimer); if(isLive){ tickLeft(); tickTimer = setInterval(tickLeft, 1000); }
+  if(!posts.length){ box.innerHTML = '<div class="empty">아직 글이 없습니다 — 토론 시작을 누르면 담당들이 글을 올립니다</div>'; return; }
   box.innerHTML = posts.map(p=>{
     const n = (p.comments||[]).length;
     const day = (p.day || p.created_at || '').slice(0,10);
-    return `<div class="prow" onclick="go('#/post/${p.id}')">`+
-      `<span class="prow-t">${esc(p.title)}</span>`+
-      `<span class="prow-meta">${esc(day)} · ${esc(p.author)} · 조회 ${p.views||0} · `+
-      `좋아요 ${p.likes||0}${(p.dislikes||0) ? ' · 싫어요 '+p.dislikes : ''} · 댓글 <span class="c">${n}</span></span></div>`;
+    return `<div class="prow" onclick="go('#/post/${p.id}')"><span class="prow-t">${esc(p.title)}</span>`+
+      `<span class="prow-meta">${esc(day)} · ${esc(p.author)} · 조회 ${p.views||0} · 좋아요 ${p.likes||0}${(p.dislikes||0)?' · 싫어요 '+p.dislikes:''} · 댓글 <span class="c">${n}</span></span></div>`;
   }).join('');
 }
-
-// ── 글 상세 뷰(내용 + 댓글 + 댓글 작성) ────────────────────────
-function renderPost(id){
-  setHeader('게시판', {summary:false, actions:false});
-  document.getElementById('view').innerHTML = '<div id="post">불러오는 중…</div>';
-  clearInterval(pollTimer);   // 상세에선 폴링 안 함(댓글 입력 중 날아가지 않게)
-  fillPost(id);
+async function startSession(){
+  const minutes = parseInt((document.getElementById('bs-min')||{}).value||'30',10);
+  const b = document.getElementById('btn-start'); if(b){ b.disabled=true; b.textContent='시작하는 중…'; }
+  const r = await postJ('/api/board/session', {minutes});
+  if(!r.ok){ appAlert('토론을 시작하지 못함', r.error||'알 수 없는 오류'); if(b){ b.disabled=false; b.textContent='토론 시작'; } }
+  SESSION = null; fillBoardList();
+}
+async function stopSession(){
+  const ok = await appConfirm({title:'토론 중지', okText:'중지', danger:true,
+    body:'지금 돌고 있는 담당의 호출은 끝까지 가고, 새 호출만 멈춥니다. 끝난 뒤 복기는 하지 않습니다.'});
+  if(!ok) return;
+  const r = await postJ('/api/board/session/stop');
+  if(!r.ok) appAlert('중지 실패', r.error||'알 수 없는 오류');
+  SESSION = null; fillBoardList();
 }
 
+// ── 글 상세 ───────────────────────────────────────────
+function renderPost(id){
+  setHeader('게시판', {});
+  document.getElementById('view').innerHTML = '<div id="post">불러오는 중…</div>';
+  clearInterval(pollTimer);
+  fillPost(id);
+}
 async function fillPost(id){
   let p = {};
-  try{ p = await fetch('/api/posts/'+encodeURIComponent(id)).then(r=>r.json()); }catch(e){}
+  try{ p = await getJ('/api/posts/'+encodeURIComponent(id)); }catch(e){}
   const box = document.getElementById('post');
   if(!box) return;
   if(!p || !p.id){ box.innerHTML = '<div class="back" onclick="go(\'#/board\')">← 게시판</div><div class="empty">글을 찾을 수 없습니다</div>'; return; }
@@ -581,684 +510,384 @@ async function fillPost(id){
   const repliesOf = pid => all.filter(c=>c.parent_id===pid);
   const cmtHtml = (c, isReply) => {
     const mine = c.author === 'user';
-    return `<div class="cmt${mine?' user':''}${isReply?' reply':''}">`+
-      `<span class="cmt-who">${mine?'나':esc(c.author)}</span>`+
-      `<div class="md">${md(c.body)}</div>`+
-      `<div class="cmt-act">`+
+    return `<div class="cmt${mine?' user':''}${isReply?' reply':''}"><span class="cmt-who">${mine?'나':esc(c.author)}</span>`+
+      `<div class="md">${md(c.body)}</div><div class="cmt-act">`+
         `<span onclick="reactCmt(${c.id},'like','${id}')">좋아요 ${c.likes||0}</span>`+
         `<span onclick="reactCmt(${c.id},'dislike','${id}')">싫어요 ${c.dislikes||0}</span>`+
         (isReply?'':`<span onclick="replyTo(${c.id},'${id}')">답글</span>`)+
-      `</div>`+
-      `<div class="reply-box" id="reply-${c.id}"></div>`+
-      repliesOf(c.id).map(r=>cmtHtml(r,true)).join('')+
-    `</div>`;
+      `</div><div class="reply-box" id="reply-${c.id}"></div>`+
+      repliesOf(c.id).map(r=>cmtHtml(r,true)).join('')+`</div>`;
   };
   const top = all.filter(c=>!c.parent_id);
-  const cs = top.length ? top.map(c=>cmtHtml(c,false)).join('')
-                        : '<div class="cmt none">아직 댓글 없음 — 첫 댓글을 남겨보세요</div>';
+  const cs = top.length ? top.map(c=>cmtHtml(c,false)).join('') : '<div class="cmt none">아직 댓글 없음 — 첫 댓글을 남겨보세요</div>';
   box.innerHTML =
     `<div class="back" onclick="go('#/board')">← 게시판</div>`+
-    `<div class="post"><div class="post-h"><span class="post-title">${esc(p.title)}</span>`+
-      `<span class="post-day">${esc(day)}</span></div>`+
-      `<div class="post-stat">${esc(p.author)} · 조회 ${p.views||0} · 좋아요 <b id="plikes">${p.likes||0}</b> `+
-        `<span class="likebtn" onclick="likePost('${id}')">좋아요</span> `+
-        `· 싫어요 <b id="pdislikes">${p.dislikes||0}</b> `+
-        `<span class="likebtn" onclick="dislikePost('${id}')">싫어요</span></div>`+
-      `<div class="post-body md">${md(p.body)}</div>`+
-      `<div class="cmts">${cs}</div>`+
-      `<div class="cmt-form"><textarea id="cmt-input" rows="1" placeholder="댓글 달기…"></textarea>`+
-      `<button onclick="postComment('${id}')">댓글</button></div>`+
-    `</div>`;
+    `<div class="post"><div class="post-h"><span class="post-title">${esc(p.title)}</span><span class="post-day">${esc(day)}</span></div>`+
+      `<div class="post-stat">${esc(p.author)} · 조회 ${p.views||0} · 좋아요 <b>${p.likes||0}</b> <span class="likebtn" onclick="likePost('${id}')">좋아요</span> `+
+        `· 싫어요 <b>${p.dislikes||0}</b> <span class="likebtn" onclick="dislikePost('${id}')">싫어요</span></div>`+
+      `<div class="post-body md">${md(p.body)}</div><div class="cmts">${cs}</div>`+
+      `<div class="cmt-form"><textarea id="cmt-input" rows="1" placeholder="댓글 달기…"></textarea><button onclick="postComment('${id}')">댓글</button></div></div>`;
   const ta = document.getElementById('cmt-input');
   ta.addEventListener('keydown', e=>{ if(e.key==='Enter' && !e.shiftKey){ e.preventDefault(); postComment(id); }});
 }
-
 async function postComment(id, parentId){
   const ta = document.getElementById(parentId ? 'reply-input-'+parentId : 'cmt-input');
   const body = ta.value.trim(); if(!body) return;
   ta.value = '';
-  const payload = {author:'user', body};
-  if(parentId) payload.parent_id = parentId;
-  await fetch('/api/posts/'+encodeURIComponent(id)+'/comments',{method:'POST',
-    headers:{'Content-Type':'application/json'}, body:JSON.stringify(payload)});
+  const payload = {author:'user', body}; if(parentId) payload.parent_id = parentId;
+  await postJ('/api/posts/'+encodeURIComponent(id)+'/comments', payload);
   fillPost(id);
 }
-async function likePost(id){
-  await fetch('/api/posts/'+encodeURIComponent(id)+'/like',{method:'POST'});
-  fillPost(id);
-}
-async function dislikePost(id){
-  await fetch('/api/posts/'+encodeURIComponent(id)+'/dislike',{method:'POST'});
-  fillPost(id);
-}
-async function reactCmt(cid, reaction, postId){
-  await fetch('/api/comments/'+cid+'/react',{method:'POST',
-    headers:{'Content-Type':'application/json'}, body:JSON.stringify({reaction})});
-  fillPost(postId);
-}
+async function likePost(id){ await postJ('/api/posts/'+encodeURIComponent(id)+'/like'); fillPost(id); }
+async function dislikePost(id){ await postJ('/api/posts/'+encodeURIComponent(id)+'/dislike'); fillPost(id); }
+async function reactCmt(cid, reaction, postId){ await postJ('/api/comments/'+cid+'/react', {reaction}); fillPost(postId); }
 function replyTo(cid, postId){
   const box = document.getElementById('reply-'+cid);
-  if(!box || box.querySelector('textarea')){ if(box) box.innerHTML=''; return; }  // 토글
-  box.innerHTML = `<textarea id="reply-input-${cid}" rows="1" placeholder="답글…"></textarea>`+
-    `<button onclick="postComment('${postId}', ${cid})">답글</button>`;
+  if(!box || box.querySelector('textarea')){ if(box) box.innerHTML=''; return; }
+  box.innerHTML = `<textarea id="reply-input-${cid}" rows="1" placeholder="답글…"></textarea><button onclick="postComment('${postId}', ${cid})">답글</button>`;
   const t = document.getElementById('reply-input-'+cid); if(t) t.focus();
 }
 
-// ── 전문가 뷰(왼쪽 지식 위키 / 오른쪽 자문 채팅 + 웹 수집) ──────────
-function renderExperts(){
-  setHeader('전문가', {summary:false, actions:false});
+// ── 주간보고 ───────────────────────────────────────────
+let WEEKLY = [], WEEKLY_IDX = 0;
+function renderWeekly(){
+  setHeader('주간보고', {buttons:[{id:'btn-weekly', label:'주간보고 실행', onclick:'runWeekly()'}]});
   document.getElementById('view').innerHTML =
-    '<div id="expert-top" class="note-line" style="padding-bottom:10px">불러오는 중…</div>'+
-    '<div class="room-layout">'+
-      '<div class="expert-wiki" id="expert-wiki"></div>'+
-      '<div class="room-side"><div class="side-h">전문가에게 자문</div>'+chatMarkup()+'</div>'+
-    '</div>';
+    '<div class="note-line" style="padding-bottom:10px">최근 7일 커밋과 각 프로젝트 ohmypm/state.md를 모아 요약합니다. 프로젝트별 몫은 그 프로젝트의 ohmypm/weekly.md에도 적힙니다.</div>'+
+    '<div class="datebar" id="w-datebar">불러오는 중…</div><div id="w-body"></div>';
   clearInterval(pollTimer);
-  loadExpert();
+  fillWeekly();
+  pollTimer = setInterval(pollWeeklyJob, 5000);
 }
-
-const expertRoom = d => 'expert::'+d;
-
-let EXPERT_IDX = 0;   // 전문가 탭 선택(여럿을 전환해 본다 — 이전엔 첫 명만 보이던 한계 해소)
-async function loadExpert(){
-  let list = [];
-  try{ list = await fetch('/api/experts').then(r=>r.json()); }catch(e){}
-  const top = document.getElementById('expert-top'); if(!top) return;
-  if(!list.length){ top.textContent = '전문가가 없습니다'; return; }
-  if(EXPERT_IDX >= list.length) EXPERT_IDX = 0;
-  const e = list[EXPERT_IDX];
-  const tabs = list.map((x,i)=>
-    `<span class="etab${i===EXPERT_IDX?' on':''}" onclick="EXPERT_IDX=${i};loadExpert()">${esc(x.name)}</span>`
-  ).join('');
-  // 설명·수동 수집 버튼은 제거(2026-09-06) — 수집은 매주 정기 cron이 알아서 한다
-  top.innerHTML = `<div class="etabs">${tabs}</div>`+
-    `<b style="color:var(--ink);font-size:14px">${esc(e.name)}</b> · 위키 ${e.wiki_chars}자`;
-  const w = await fetch('/api/experts/'+e.domain+'/wiki').then(r=>r.json()).catch(()=>({wiki:''}));
-  const wikiBox = document.getElementById('expert-wiki');
-  if(wikiBox) wikiBox.innerHTML = '<div class="side-h">지식 위키</div>'+
-    (w.wiki ? `<div class="md wiki-body">${md(w.wiki)}</div>`
-            : '<div class="empty" style="padding:20px">아직 비어 있음 — "웹으로 지식 수집"을 눌러 채우세요</div>');
-  const input = document.getElementById('msg-input');
-  if(input){
-    // 탭 전환 때마다 불리므로 addEventListener(누적)가 아니라 대입으로 교체 — 옛 도메인으로 중복 전송 방지
-    input.onkeydown = ev=>{ if(ev.key==='Enter' && !ev.shiftKey){ ev.preventDefault(); sendExpertQ(e.domain); }};
-    input.focus({preventScroll:true});
+async function pollWeeklyJob(){
+  const j = await getJ('/api/jobs/weekly').catch(()=>null);
+  const b = document.getElementById('btn-weekly'); if(!b) return;
+  if(j && j.running){ b.disabled = true; b.textContent = '작성 중…'; setStatus(`주간보고 작성 중 (${esc((j.started_at||'').slice(11,16))} 시작) — 몇 분 걸립니다`); }
+  else{
+    if(b.disabled){ b.disabled = false; b.textContent = '주간보고 실행'; fillWeekly(); }
+    if(j && j.finished_at) setStatus(`마지막 실행 ${esc((j.finished_at||'').slice(5,16))} · ${j.ok?'완료':'실패'}${j.error?' · '+esc(j.error):''}${j.result&&j.result.cost_usd!=null?' · 비용 '+fmtCost(j.result.cost_usd):''}`);
   }
-  loadMessages(expertRoom(e.domain), false, true);
-  clearInterval(pollTimer);
-  pollTimer = setInterval(()=>loadMessages(expertRoom(e.domain), true, true), 4000);
+}
+async function fillWeekly(){
+  try{ WEEKLY = await getJ('/api/weekly'); }catch(e){ WEEKLY = []; }
+  const bar = document.getElementById('w-datebar'); if(!bar) return;
+  pollWeeklyJob();
+  if(!WEEKLY.length){ bar.innerHTML = ''; document.getElementById('w-body').innerHTML = '<div class="empty">아직 주간보고가 없습니다 — 오른쪽 위 버튼으로 실행하세요</div>'; return; }
+  if(WEEKLY_IDX >= WEEKLY.length) WEEKLY_IDX = 0;
+  bar.innerHTML = WEEKLY.map((d,i)=>`<div class="datechip${i===WEEKLY_IDX?' active':''}" onclick="WEEKLY_IDX=${i};fillWeekly()">${esc(d.date)}<span class="cnt">${d.projects.length}</span></div>`).join('');
+  const d = WEEKLY[WEEKLY_IDX];
+  const body = document.getElementById('w-body'); body.innerHTML = '<div class="empty">불러오는 중…</div>';
+  const msgs = await getJ('/api/messages?room='+encodeURIComponent(d.overall_room)).catch(()=>[]);
+  const report = msgs.length ? msgs[msgs.length-1].body : '(보고 본문 없음)';
+  body.innerHTML = `<div class="report md">${md(report)}</div>`+
+    `<section><h2>프로젝트별 몫 (${d.projects.length})</h2>`+
+    d.projects.map((p,i)=>`<div class="prow" onclick="toggleWeeklyProj(${i},this)"><span class="prow-t">${esc(p.name)}</span>`+
+      `<span class="prow-meta">${p.written?'<span class="tbadge green">ohmypm/weekly.md 기록</span>':'<span class="tbadge gray">미설치 — 파일 기록 안 함</span>'}</span></div><div class="prow-body" id="wp-${i}" hidden></div>`).join('')+`</section>`;
+}
+async function toggleWeeklyProj(i, el){
+  const box = document.getElementById('wp-'+i); if(!box) return;
+  if(!box.hidden){ box.hidden = true; return; }
+  box.hidden = false; box.innerHTML = '불러오는 중…';
+  const p = WEEKLY[WEEKLY_IDX].projects[i];
+  const msgs = await getJ('/api/messages?room='+encodeURIComponent(p.room)).catch(()=>[]);
+  box.innerHTML = `<div class="md">${md(msgs.length ? msgs[msgs.length-1].body : '(없음)')}</div>`;
+}
+async function runWeekly(){
+  const b = document.getElementById('btn-weekly'); if(b){ b.disabled=true; b.textContent='작성 중…'; }
+  const r = await postJ('/api/weekly/run');
+  if(!r.ok){ appAlert('실행 실패', r.error||'알 수 없는 오류'); if(b){ b.disabled=false; b.textContent='주간보고 실행'; } }
+  pollWeeklyJob();
 }
 
-async function sendExpertQ(domain){
+// ── 랩실 ────────────────────────────────────────────────
+let LAB = [], LAB_IDX = 0, LAB_SUB = 0;
+function renderLab(){
+  setHeader('랩실', {buttons:[{id:'btn-lab', label:'조사 실행', onclick:'runLab()'}]});
+  document.getElementById('view').innerHTML =
+    '<div id="lab-top" class="note-line" style="padding-bottom:10px">불러오는 중…</div>'+
+    '<div class="room-layout"><div class="wiki" id="lab-wiki"></div>'+
+    '<div class="room-side"><div class="side-h">제안서</div><div class="props" id="lab-props"></div>'+
+    '<div class="side-h">연구원에게 묻기</div>'+chatMarkup('이 주제에 대해 물어보세요')+'</div></div>';
+  clearInterval(pollTimer);
+  loadLab();
+}
+const labRoom = id => 'lab::'+id;
+async function loadLab(){
+  try{ LAB = await getJ('/api/lab'); }catch(e){ LAB = []; }
+  const top = document.getElementById('lab-top'); if(!top) return;
+  if(!LAB.length){ top.textContent = '연구원이 없습니다'; return; }
+  if(LAB_IDX >= LAB.length) LAB_IDX = 0;
+  const r = LAB[LAB_IDX];
+  top.innerHTML = `<div class="etabs">${LAB.map((x,i)=>`<span class="etab${i===LAB_IDX?' on':''}" onclick="LAB_IDX=${i};LAB_SUB=0;loadLab()">${esc(x.name)}</span>`).join('')}</div>`+
+    `<b style="color:var(--ink);font-size:14px">${esc(r.name)}</b> · ${esc(r.topic)} · 위키 ${r.wiki_chars}자 · 마지막 조사 ${esc(r.last_run?r.last_run.slice(0,16):'없음')}`;
+  const b = document.getElementById('btn-lab');
+  if(b){ b.disabled = !!r.running; b.textContent = r.running ? '조사 중…' : '조사 실행'; }
+  setStatus(r.running ? `<span class="live">${esc(r.name)} 조사 중</span> — 웹 조사라 몇 분 걸립니다` : '');
+  const w = await getJ('/api/lab/'+r.id+'/wiki').catch(()=>({tabs:[]}));
+  const wikiBox = document.getElementById('lab-wiki');
+  if(wikiBox){
+    const tabs = w.tabs||[];
+    if(LAB_SUB >= tabs.length) LAB_SUB = 0;
+    const sub = tabs.length>1 ? `<div class="etabs">${tabs.map((t,i)=>`<span class="etab${i===LAB_SUB?' on':''}" onclick="LAB_SUB=${i};loadLab()">${esc(t.title)}</span>`).join('')}</div>` : '';
+    const text = tabs.length ? tabs[LAB_SUB].wiki : '';
+    wikiBox.innerHTML = '<div class="side-h">연구 위키</div>'+sub+
+      (text ? `<div class="md wiki-body">${md(text)}</div>` : '<div class="empty" style="padding:20px">아직 비어 있음 — 조사 실행을 누르면 채워집니다</div>');
+  }
+  fillProposals(r.id);
+  const input = document.getElementById('msg-input');
+  if(input){ input.onkeydown = ev=>{ if(ev.key==='Enter' && !ev.shiftKey){ ev.preventDefault(); sendLabQ(r.id); }}; }
+  loadMessages(labRoom(r.id), false, true);
+  clearInterval(pollTimer);
+  pollTimer = setInterval(()=>{ loadMessages(labRoom(r.id), true, true); if(r.running) loadLab(); }, 4000);
+}
+function proposalHtml(p, showResearcher){
+  return `<div class="prop${p.status!=='open'?' done':''}"><div class="pt">${esc(p.title)}`+
+    (showResearcher?`<span class="tbadge">${esc(p.researcher_name||p.researcher)}</span>`:'')+
+    (p.target_name?`<span class="tbadge green">${esc(p.target_name)}</span>`:'<span class="tbadge gray">전체</span>')+
+    (p.status!=='open'?`<span class="tbadge gray">${p.status==='done'?'처리됨':'무시'}</span>`:'')+`</div>`+
+    `<div class="pb md">${md(p.body)}</div>`+(p.source_url?`<div class="pb"><a href="${escAttr(p.source_url)}" target="_blank" rel="noopener noreferrer">출처</a></div>`:'')+
+    (p.status==='open'?`<div class="pa"><span onclick="setProposal(${p.id},'done')">처리됨</span><span onclick="setProposal(${p.id},'dismissed')">무시</span></div>`:'')+`</div>`;
+}
+async function fillProposals(rid){
+  const list = await getJ('/api/lab/proposals?researcher='+encodeURIComponent(rid)).catch(()=>[]);
+  const box = document.getElementById('lab-props'); if(!box) return;
+  box.innerHTML = list.length ? list.map(p=>proposalHtml(p,false)).join('') : '<div class="note-line">아직 제안이 없습니다</div>';
+}
+async function setProposal(id, status){
+  await postJ('/api/lab/proposals/'+id+'/status', {status});
+  if(LAB[LAB_IDX]) fillProposals(LAB[LAB_IDX].id);
+  if(CUR_ROOM) fillRoomMain(CUR_ROOM);
+}
+async function sendLabQ(rid){
   const input = document.getElementById('msg-input');
   const body = input.value.trim(); if(!body) return;
   input.value = '';
-  await fetch('/api/experts/'+domain+'/ask',{method:'POST',headers:{'Content-Type':'application/json'},
-    body:JSON.stringify({question:body})});
-  loadMessages(expertRoom(domain), false, true);
+  await postJ('/api/lab/'+rid+'/ask', {question: body});
+  loadMessages(labRoom(rid), false, true);
+}
+async function runLab(){
+  const r = LAB[LAB_IDX]; if(!r) return;
+  const b = document.getElementById('btn-lab'); if(b){ b.disabled=true; b.textContent='조사 중…'; }
+  const res = await postJ('/api/lab/'+r.id+'/run');
+  if(!res.ok){ appAlert('조사를 시작하지 못함', res.error||'알 수 없는 오류'); if(b){ b.disabled=false; b.textContent='조사 실행'; } }
+  loadLab();
 }
 
-async function collectExpert(domain){
-  const b = document.getElementById('collect-btn');
-  if(b){ b.disabled = true; b.textContent = '수집 중…(웹, 수 분)'; }
-  await fetch('/api/experts/'+domain+'/collect',{method:'POST'});
-  // 수집은 오래 걸림 — 위키 글자수가 늘 때까지 가끔 확인
-  let tries = 0;
-  const before = await fetch('/api/experts').then(r=>r.json()).then(l=>(l[0]||{}).wiki_chars).catch(()=>0);
-  const iv = setInterval(async ()=>{
-    tries++;
-    const now = await fetch('/api/experts').then(r=>r.json()).then(l=>(l[0]||{}).wiki_chars).catch(()=>0);
-    if(now !== before || tries > 20){ clearInterval(iv); loadExpert(); }
-  }, 12000);
-}
-
-// ── 에이전트 리더보드(게시판 점수 + 보상 진행) ────────────────────
+// ── 에이전트 ───────────────────────────────────────────
+let AGENT_LIST = [], AGENT_SEL = null;
 function renderAgents(){
-  setHeader('에이전트', {summary:false, actions:false});
+  setHeader('에이전트', {});
   document.getElementById('view').innerHTML =
-    '<div class="note-line" style="padding-bottom:12px">담당 에이전트 리더보드 — 점수 = 글 좋아요·조회 − 글 싫어요 + 댓글 좋아요 − 댓글 싫어요. 1000점=보상 택1, 2000점=소원권. 모델 열에서 이 담당의 headless 모델을 바꿀 수 있습니다(기본=구독 기본 모델).</div>'+
-    '<div id="agents">불러오는 중…</div>';
+    '<div class="note-line" style="padding-bottom:12px">담당 에이전트별 누적 점수(글 좋아요·조회 − 싫어요 + 댓글 좋아요 − 싫어요)와 토론 끝에 복기한 \'배운 것\'. 행을 누르면 회차별 이력이 아래에 펼쳐집니다. 모델 열에서 이 담당의 headless 모델을 바꿀 수 있습니다.</div>'+
+    '<div id="agents">불러오는 중…</div><div id="agent-hist"></div>';
   clearInterval(pollTimer);
   fillAgents();
 }
-
 async function fillAgents(){
   let list = [];
-  try{ list = await fetch('/api/agents').then(r=>r.json()); }catch(e){ return; }
+  try{ list = await getJ('/api/agents'); }catch(e){ return; }
   const box = document.getElementById('agents'); if(!box) return;
   if(!list.length){ box.innerHTML = '<div class="empty">담당 없음</div>'; return; }
-  AGENT_LIST = list;   // 드롭다운 onchange에서 index로 project path를 찾는다(경로 인라인 금지 — \U 이스케이프 깨짐)
+  AGENT_LIST = list;
   const MODELS = [['','기본(sonnet)'],['opus','opus'],['sonnet','sonnet'],['haiku','haiku']];
-  box.innerHTML = '<table class="ptable"><thead><tr><th>#</th><th>담당(프로젝트)</th><th>점수</th>'+
-    '<th>다음 보상까지</th><th>획득</th><th>모델</th></tr></thead><tbody>'+
+  box.innerHTML = '<table class="ptable"><thead><tr><th>#</th><th>담당(프로젝트)</th><th>누적 점수</th><th>최근 회차</th><th>배운 것(최근)</th><th>모델</th></tr></thead><tbody>'+
     list.map((a,i)=>{
-      const next = a.points<1000 ? 1000 : (a.points<2000 ? 2000 : null);
-      const prog = next ? `${a.points} / ${next}` : '최고 단계';
-      const badges = (a.reward?`<span class="tbadge">${esc(a.reward)}</span>`:'')+
-        (a.persona?'<span class="tbadge">페르소나</span>':'')+
-        (a.tier>=2?'<span class="tbadge gold">소원권</span>':'')+
-        (a.tier>=1&&!a.reward?'<span class="tbadge">보상 대기</span>':'');
-      const sel = `<select onchange="setAgentModel(${i}, this.value)">`+
-        MODELS.map(([v,l])=>`<option value="${v}"${(a.model||'')===v?' selected':''}>${l}</option>`).join('')+
-        `</select>`;
-      return `<tr><td>${i+1}</td><td>${esc(a.name)}</td><td class="port">${a.points}</td>`+
-        `<td class="muted" style="color:var(--muted)">${prog}</td><td>${badges||'-'}</td><td>${sel}</td></tr>`;
+      const delta = a.last_delta==null ? '-' : (a.last_delta>=0?'+':'')+a.last_delta;
+      const sel = `<select onclick="event.stopPropagation()" onchange="setAgentModel(${i}, this.value)">`+
+        MODELS.map(([v,l])=>`<option value="${v}"${(a.model||'')===v?' selected':''}>${l}</option>`).join('')+`</select>`;
+      return `<tr class="clickable${AGENT_SEL===a.project?' sel':''}" onclick="showAgentHist(${i})"><td>${i+1}</td><td>${esc(a.name)}</td><td class="port">${a.points}</td>`+
+        `<td class="muted">${delta}</td><td class="muted">${esc(a.note_head||'')}</td><td>${sel}</td></tr>`;
     }).join('')+'</tbody></table>';
 }
-
-let AGENT_LIST = [];
+async function showAgentHist(i){
+  const a = AGENT_LIST[i]; if(!a) return;
+  AGENT_SEL = a.project; fillAgents();
+  const box = document.getElementById('agent-hist'); if(!box) return;
+  box.innerHTML = '<div class="note-line">불러오는 중…</div>';
+  const rows = await getJ('/api/scores?project='+encodeURIComponent(a.project)).catch(()=>[]);
+  box.innerHTML = `<section style="margin-top:18px"><h2>${esc(a.name)} 회차 이력</h2>`+scoreTable(rows)+`</section>`;
+}
+function scoreTable(rows){
+  if(!rows.length) return '<div class="note-line">아직 토론 이력이 없습니다</div>';
+  return '<table class="ptable"><thead><tr><th>회차</th><th>글/댓글</th><th>받은 반응</th><th>점수</th><th>누적</th><th>배운 것</th></tr></thead><tbody>'+
+    rows.map(r=>`<tr><td>${esc((r.session_started||'').slice(0,16))}</td><td>${r.posts}/${r.comments}</td>`+
+      `<td class="muted">조회 ${r.views} · 좋아요 ${r.post_likes+r.cmt_likes} · 싫어요 ${r.post_dislikes+r.cmt_dislikes} · 답글 ${r.replies_received}</td>`+
+      `<td class="port">${r.points>=0?'+':''}${r.points}</td><td>${r.total}</td><td>${esc(r.lesson||'-')}</td></tr>`).join('')+'</tbody></table>';
+}
 async function setAgentModel(idx, model){
-  const project = (AGENT_LIST[idx]||{}).project;
-  if(!project) return;
-  const r = await fetch('/api/agents/model',{method:'POST',
-    headers:{'Content-Type':'application/json'}, body:JSON.stringify({project, model})})
-    .then(r=>r.json()).catch(()=>({ok:false}));
+  const project = (AGENT_LIST[idx]||{}).project; if(!project) return;
+  const r = await postJ('/api/agents/model', {project, model});
   if(!r.ok) appAlert('모델 변경 실패', r.error||'알 수 없는 오류');
   fillAgents();
 }
 
-// ── 포트 레지스트리 뷰(등록 포트 + 실시간 상태 + 충돌) ────────────
+// ── 포트 ───────────────────────────────────────────────
 function renderPorts(){
-  setHeader('포트', {summary:false, actions:false});
+  setHeader('포트', {});
   const opts = PROJECTS.map(p=>`<option value="${escAttr(p.path)}">${esc(p.name)}</option>`).join('');
   document.getElementById('view').innerHTML =
-    '<div class="note-line" style="padding-bottom:12px">프로젝트가 점유하는 로컬 포트를 등록해 지금 떠 있는지·충돌 여부를 봅니다. 실행 명령(start_cmd)을 함께 등록하면 여기서 서버를 켜고(등록 명령만) 끌 수 있습니다.</div>'+
+    '<div class="note-line" style="padding-bottom:12px">지금 열려 있는 포트를 전부 보여주고, 프로세스 명령줄의 경로로 어느 프로젝트 것인지 맞춥니다. 등록하면 떠 있는지·충돌 여부를 보고, 실행 명령을 함께 등록하면 여기서 켜고 끌 수 있습니다.</div>'+
     '<div id="ports">불러오는 중…</div>'+
-    `<div class="pform"><div class="pform-h">포트 등록</div>`+
-      `<select id="pf-proj">${opts}</select>`+
+    `<div class="pform"><div class="pform-h">직접 등록</div><select id="pf-proj">${opts}</select>`+
       `<input id="pf-port" type="number" placeholder="포트(예: 8000)" style="width:150px">`+
       `<input id="pf-label" placeholder="용도(예: 웹 대시보드)" style="width:180px">`+
       `<input id="pf-cmd" class="grow" placeholder="실행 명령(선택, 예: uv run uvicorn ...)">`+
       `<button onclick="addPort()">등록</button></div>`;
   fillPorts();
   clearInterval(pollTimer);
-  pollTimer = setInterval(fillPorts, 8000);   // 점유 상태 갱신(편집 중이면 portEditing가 막음)
+  pollTimer = setInterval(fillPorts, 8000);
 }
-
 async function fillPorts(){
-  if(portEditing) return;   // 인라인 등록 중이면 새로고침으로 폼 날리지 않기
-  let d = {rows:[], conflicts:[]};
-  try{ d = await fetch('/api/ports').then(r=>r.json()); }catch(e){ return; }
+  if(portEditing) return;
+  let d = {rows:[], conflicts:[], detected:[]};
+  try{ d = await getJ('/api/ports'); }catch(e){ return; }
   const box = document.getElementById('ports'); if(!box) return;
   let html = '';
-  if(d.conflicts && d.conflicts.length){
-    html += '<div class="pconf">⚠ 포트 충돌 — '+
-      d.conflicts.map(c=>`${c.port}: ${esc(c.projects.join(', '))}`).join(' · ')+'</div>';
-  }
+  if(d.conflicts && d.conflicts.length)
+    html += '<div class="pconf">포트 충돌 — '+d.conflicts.map(c=>`${c.port}: ${esc(c.projects.join(', '))}`).join(' · ')+'</div>';
   if(d.rows.length){
     html += '<table class="ptable"><thead><tr><th>프로젝트</th><th>포트</th><th>용도</th><th>상태</th><th></th></tr></thead><tbody>'+
       d.rows.map(r=>{
-        const st = r.up
-          ? `<span class="up">● 떠 있음</span> <span class="pid">${esc(r.proc||'')} #${r.pid}</span>`
-          : '<span class="down">○ 멈춤</span>';
-        // 실행 관리: 떠 있으면 중지(확인창), 멈춰 있고 실행명령 있으면 시작(등록명령만)
+        const st = r.up ? `<span class="up">● 떠 있음</span> <span class="pid">${esc(r.proc||'')} #${r.pid}</span>` : '<span class="down">○ 멈춤</span>';
         let act = '';
-        if(r.up){
-          act = `<button class="pbtn stop" onclick="stopPort(${r.id},${r.port},'${escAttr(r.proc||'')}',${r.pid})">중지</button>`;
-        } else if(r.start_cmd){
-          act = `<button class="pbtn start" onclick="startPort(${r.id},this)">시작</button>`;
-        }
-        return `<tr><td>${esc(r.name)}</td><td class="port">${r.port}</td><td>${esc(r.label||'')}</td>`+
-          `<td>${st}</td><td>${act} <span class="del" onclick="delPort(${r.id})">삭제</span></td></tr>`;
+        if(r.up) act = `<button class="pbtn stop" onclick="stopPort(${r.id},${r.port},'${escAttr(r.proc||'')}',${r.pid})">중지</button>`;
+        else if(r.start_cmd) act = `<button class="pbtn start" onclick="startPort(${r.id},this)">시작</button>`;
+        return `<tr><td>${esc(r.name)}</td><td class="port">${r.port}</td><td>${esc(r.label||'')}</td><td>${st}</td><td>${act} <span class="del" onclick="delPort(${r.id})">삭제</span></td></tr>`;
       }).join('')+'</tbody></table>';
-  } else {
-    html += '<div class="empty" style="padding:20px">등록된 포트가 없습니다 — 아래 감지된 포트에서 등록하거나 직접 추가하세요</div>';
-  }
-  // 지금 떠 있는데 미등록인 개발 서버(python·node 등) — 클릭해 등록
+  } else html += '<div class="empty" style="padding:20px">등록된 포트가 없습니다 — 아래 감지된 포트에서 등록하거나 직접 추가하세요</div>';
   const det = d.detected || [];
   if(det.length){
-    html += '<div class="pdet-h">지금 떠 있는데 미등록 (개발 서버 자동 감지)</div>'+
-      '<table class="ptable"><thead><tr><th>포트</th><th>프로세스</th><th></th></tr></thead><tbody>'+
+    html += '<div class="pdet-h">지금 떠 있는데 미등록</div>'+
+      '<table class="ptable"><thead><tr><th>포트</th><th>프로세스</th><th>명령줄</th><th>프로젝트</th><th></th></tr></thead><tbody>'+
       det.map(x=>`<tr data-port="${x.port}"><td class="port">${x.port}</td><td>${esc(x.proc)} <span class="pid">#${x.pid}</span></td>`+
-        `<td class="reg-cell"><span class="reg" onclick="inlineReg(${x.port}, this)">＋ 등록</span></td></tr>`).join('')+
+        `<td><span class="cmd" title="${escAttr(x.cmdline||'')}">${esc(x.cmdline||'')}</span></td>`+
+        `<td>${x.project_name?esc(x.project_name):'<span class="pid">못 맞춤</span>'}</td>`+
+        `<td class="reg-cell">${x.project?`<span class="reg" data-reg-port="${x.port}" data-reg-proj="${escAttr(x.project)}">＋ ${esc(x.project_name)}으로 등록</span>`:`<span class="reg" onclick="inlineReg(${x.port}, this)">＋ 등록</span>`}</td></tr>`).join('')+
       '</tbody></table>';
   }
   box.innerHTML = html;
 }
-
-// 감지된 포트 행에서 바로 프로젝트 골라 등록(그 자리 인라인)
 function inlineReg(port, el){
   portEditing = true;
   const td = el.closest('td');
   const opts = PROJECTS.map(p=>`<option value="${escAttr(p.path)}">${esc(p.name)}</option>`).join('');
-  td.innerHTML = `<select class="ireg-proj">${opts}</select>`+
-    `<input class="ireg-label" placeholder="용도(선택)">`+
-    `<input class="ireg-cmd" placeholder="실행 명령(선택)">`+
-    `<button onclick="saveInlineReg(${port}, this)">저장</button>`+
-    `<span class="del" onclick="cancelInlineReg()">취소</span>`;
+  td.innerHTML = `<select class="ireg-proj">${opts}</select><input class="ireg-label" placeholder="용도(선택)"><input class="ireg-cmd" placeholder="실행 명령(선택)">`+
+    `<button onclick="saveInlineReg(${port}, this)">저장</button><span class="del" onclick="cancelInlineReg()">취소</span>`;
   td.querySelector('.ireg-proj').focus();
 }
 async function saveInlineReg(port, btn){
   const td = btn.closest('td');
-  const project = td.querySelector('.ireg-proj').value;
-  const label = td.querySelector('.ireg-label').value;
-  const start_cmd = (td.querySelector('.ireg-cmd')||{}).value || '';
-  await fetch('/api/ports',{method:'POST',headers:{'Content-Type':'application/json'},
-    body:JSON.stringify({project, port, label, start_cmd})});
-  portEditing = false;
-  fillPorts();   // 등록되면 위 '등록 포트' 표로 올라가고 감지 목록에서 빠짐
+  await postJ('/api/ports', {project: td.querySelector('.ireg-proj').value, port, label: td.querySelector('.ireg-label').value, start_cmd: (td.querySelector('.ireg-cmd')||{}).value||''});
+  portEditing = false; fillPorts();
 }
 function cancelInlineReg(){ portEditing = false; fillPorts(); }
-
-// ── 주간보고 뷰(상단 날짜바 → 좌 프로젝트목록 · 중 PM↔담당 대화 · 우 PM 대화 패널) ──
-// 2026-10-08 사용자 결정: 보고는 주간 주기(수동 실행)로 — 화면 이름을 '주간보고'로 바꿈.
-// 내부 키(#/daily, 방 키 daily::)는 그대로 둔다 — 바꾸면 쌓인 보고 이력과 연결이 끊긴다.
-function renderDaily(){
-  setHeader('주간보고', {summary:false, actions:false});
-  document.getElementById('view').innerHTML =
-    '<div class="daily-wrap">'+
-      '<div class="daily-datebar" id="daily-datebar">불러오는 중…</div>'+
-      '<div class="daily-body">'+
-        '<div class="daily-projcol" id="daily-projcol"><div class="empty" style="padding:14px 8px;font-size:12px">날짜를 고르세요</div></div>'+
-        '<div class="daily-main" id="daily-convo"><div class="chat-empty">프로젝트를 골라 PM↔담당 대화를 보세요</div></div>'+
-        '<div class="daily-pm" id="daily-pm"></div>'+
-      '</div>'+
-    '</div>';
-  clearInterval(pollTimer);
-  DAILY_SEL = null;
-  fillDailyNav();
-  fillDailyAgent();
-  // 담당 답변은 headless라 뒤늦게 온다 → 오른쪽 패널만 폴링
-  pollTimer = setInterval(()=>loadDailyAgent(true), 4000);
-}
-
-async function fillDailyNav(){
-  try{ DAILY_DATA = await fetch('/api/daily').then(r=>r.json()); }catch(e){ DAILY_DATA = []; }
-  const bar = document.getElementById('daily-datebar'); if(!bar) return;
-  if(!DAILY_DATA.length){ bar.innerHTML = '<div class="empty" style="padding:8px;font-size:12px">아직 주간보고가 없습니다</div>'; return; }
-  bar.innerHTML = DAILY_DATA.map((d,di)=>
-    `<div class="datechip" onclick="pickDate(${di},this)">${esc(d.date)}<span class="cnt">${d.projects.length}</span></div>`
-  ).join('');
-  const first = bar.querySelector('.datechip'); if(first) first.click();   // 최신 날짜 자동 선택
-}
-
-function pickDate(di, el){
-  document.querySelectorAll('.datechip').forEach(x=>x.classList.remove('active'));
-  el.classList.add('active');
-  const col = document.getElementById('daily-projcol');
-  // 보고가 실제로 있는 프로젝트가 위(진하게), 생략·스킵된 프로젝트가 아래(회색) — 정렬은 서버가 한다.
-  // 앞의 체크상자 = 내가 확인한 보고(날짜별로 따로 기억한다). 상자를 눌러도 보고는 안 열린다.
-  const projs = DAILY_DATA[di].projects;
-  col.innerHTML = (projs.length ? `<div class="dnav-count" id="dnav-count">${dailyCheckCount(di)}</div>` : '')+
-    projs.map((p,pi)=>
-      `<div class="dnav-proj${p.active?' talked':' quiet'}${p.checked?' done':''}" onclick="openDaily(${di},${pi},this)">`+
-        `<input type="checkbox" class="dnav-chk"${p.checked?' checked':''} title="확인함으로 표시"`+
-        ` onclick="event.stopPropagation();toggleDailyCheck(${di},${pi},this)">`+
-        `<span class="dnav-name">${esc(p.name)}</span>`+
-      `</div>`
-    ).join('') || '<div class="empty" style="padding:14px 8px;font-size:12px">이 날 보고 없음</div>';
-  document.getElementById('daily-convo').innerHTML = '<div class="chat-empty">프로젝트를 골라 PM↔담당 대화를 보세요</div>';
-}
-
-// 내가 확인한 보고 표시 — 날짜+프로젝트 단위로 서버에 남긴다(새로고침·다른 PC에서도 유지).
-// 보고가 하루 27개씩 쌓이니 "어디까지 봤더라"를 화면이 기억해 준다(2026-09-13 사용자 요청).
-function dailyCheckCount(di){
-  const projs = DAILY_DATA[di].projects;
-  const done = projs.filter(p=>p.checked).length;
-  return `확인 ${done} / ${projs.length}`;
-}
-
-async function toggleDailyCheck(di, pi, el){
-  const d = DAILY_DATA[di], p = d.projects[pi];
-  p.checked = el.checked;
-  const row = el.closest('.dnav-proj'); if(row) row.classList.toggle('done', el.checked);
-  const cnt = document.getElementById('dnav-count'); if(cnt) cnt.textContent = dailyCheckCount(di);
-  try{
-    await fetch('/api/daily/check', {method:'POST', headers:{'Content-Type':'application/json'},
-      body: JSON.stringify({date:d.date, project:p.project, checked:el.checked})});
-  }catch(e){
-    // 저장 실패는 조용히 넘기지 않는다 — 표시만 되고 안 남으면 다음 날 또 읽게 된다
-    appAlert('확인 표시 저장 실패', '잠시 뒤 다시 눌러 주세요');
-  }
-}
-
-// 답을 기다리는 표시. 담당 답변은 서버 프로세스 안에서 도는 작업이라, 그 사이 서버가
-// 내려가면 답이 영영 안 온다(2026-09-13 사고). 그런데 화면은 "마지막 글이 사용자"만 보고
-// 대기 표시를 그리므로 영영 안 없어졌다 — 그래서 시간이 지나면 말을 바꾸고 손잡이를 준다.
-const PENDING_STUCK_MIN = 5;   // 이 분을 넘겨 답이 없으면 끊긴 것으로 본다(담당 답변 제한시간 3분)
-
-function pendingMarkup(room, lastMsg, who){
-  const asked = new Date((lastMsg.created_at||'').replace(' ','T'));
-  const mins = isNaN(asked) ? 0 : Math.floor((Date.now() - asked.getTime())/60000);
-  if(mins < PENDING_STUCK_MIN) return `<div class="msg pending">${who}이 확인하고 답하는 중…</div>`;
-  return `<div class="msg pending stuck">${mins}분째 답이 없습니다 — 답변이 중간에 끊겼을 수 있습니다`+
-         // 방 이름은 윈도우 경로(역슬래시)다 — 그대로 JS 문자열에 넣으면 \U·\p가 이스케이프로 먹혀
-         // 경로가 뭉개진다. 주소 인코딩해 넘기고 받는 쪽에서 되돌린다.
-         `<button class="retry" onclick="retryRoomReply('${encodeURIComponent(room)}')">다시 요청</button></div>`;
-}
-
-async function retryRoomReply(room){
-  room = decodeURIComponent(room);
-  let r = {};
-  try{
-    r = await fetch('/api/room-retry',{method:'POST',headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({room})}).then(x=>x.json());
-  }catch(e){ r = {ok:false, error:'서버에 연결하지 못했습니다'}; }
-  if(!r.ok){ appAlert('다시 요청 실패', r.error||'알 수 없는 오류'); return; }
-  document.querySelectorAll('.msg.pending').forEach(el=>{
-    el.classList.remove('stuck');
-    el.textContent = '다시 요청했습니다 — 담당이 답하는 중…';
-  });
-}
-
-async function openDaily(di, pi, el){
-  document.querySelectorAll('.dnav-proj').forEach(x=>x.classList.remove('active'));
-  el.classList.add('active');
-  const p = DAILY_DATA[di].projects[pi];
-  const box = document.getElementById('daily-convo');
-  box.innerHTML = '<div class="chat-empty">불러오는 중…</div>';
-  let msgs = [];
-  try{ msgs = await fetch('/api/messages?room='+encodeURIComponent(p.room)).then(r=>r.json()); }catch(e){}
-  const bubbles = msgs.length ? msgs.map(m=>{
-    const isPm = m.author === 'pm';
-    const ts = (m.created_at||'').slice(5,16);
-    return `<div class="msg ${isPm?'pm':'agent'}"><div class="who">${isPm?'PM':esc(p.name)+' 담당'}</div>`+
-      `<div class="md">${md(m.body)}</div><div class="ts">${esc(ts)}</div></div>`;
-  }).join('') : '<div class="chat-empty">대화 없음</div>';
-  box.innerHTML = `<div class="daily-h">${esc(p.name)} · ${esc(DAILY_DATA[di].date)}</div><div class="stream">${bubbles}</div>`;
-  const s = box.querySelector('.stream'); if(s) s.scrollTop = s.scrollHeight;
-  // 오른쪽 패널을 이 프로젝트의 담당과의 대화로 전환(2026-09-07 사용자 확정 —
-  // 총괄 PM은 전 프로젝트 얘기를 꺼내와서, 보고를 보며 묻는 상대는 그 담당이 맞다)
-  DAILY_SEL = {path: p.project, name: p.name};
-  fillDailyAgent();
-}
-
-// ── 담당 대화 패널 — 선택한 프로젝트의 담당에게 직접 묻는다(room=프로젝트 path).
-//    총괄 PM 패널은 폐지(2026-09-07 사용자 확정 — PM은 상관없는 프로젝트 얘기까지 꺼내옴).
-//    같은 방을 프로젝트 룸이 쓰므로 여기서 나눈 대화가 룸에도 그대로 이어진다.
-let DAILY_SEL = null;   // 일간보고에서 선택된 프로젝트 {path, name}
-
-function fillDailyAgent(){
-  const box = document.getElementById('daily-pm'); if(!box) return;
-  if(!DAILY_SEL){
-    box.innerHTML = '<div class="daily-h">담당과 대화</div>'+
-      '<div class="stream" id="pm-stream"><div class="chat-empty">왼쪽에서 프로젝트를 고르면 그 담당과 바로 대화할 수 있습니다</div></div>';
-    return;
-  }
-  box.innerHTML =
-    `<div class="daily-h">${esc(DAILY_SEL.name)} 담당과 대화</div>`+
-    '<div class="stream" id="pm-stream"><div class="chat-empty">불러오는 중…</div></div>'+
-    `<div class="composer"><textarea id="pm-input" rows="1" placeholder="보고 내용을 담당에게 바로 물어보세요"></textarea></div>`;
-  const input = document.getElementById('pm-input');
-  const grow = ()=>{ input.style.height='auto'; input.style.height=Math.min(input.scrollHeight,120)+'px'; };
-  input.onkeydown = e=>{ if(e.key==='Enter' && !e.shiftKey){ e.preventDefault(); sendDailyAgent(); }};
-  input.addEventListener('input', grow);
-  loadDailyAgent(false);
-}
-
-async function loadDailyAgent(silent){
-  if(!DAILY_SEL) return;
-  let msgs; try{ msgs = await fetch('/api/messages?room='+encodeURIComponent(DAILY_SEL.path)).then(r=>r.json()); }catch(e){ return; }
-  const s = document.getElementById('pm-stream'); if(!s) return;
-  const atBottom = s.scrollHeight - s.scrollTop - s.clientHeight < 40;
-  let html = msgs.length ? msgs.map(m=>{
-    const mine = m.author === 'user';
-    const who = m.author === 'pm' ? 'PM' : esc(DAILY_SEL.name)+' 담당';
-    const ts = (m.created_at||'').slice(5,16);
-    return `<div class="msg ${mine?'user':'agent'}">`+(mine?'':`<div class="who">${who}</div>`)+
-      `<div class="md">${md(m.body)}</div><div class="ts">${esc(ts)}</div></div>`;
-  }).join('') : '<div class="chat-empty">이 담당과의 첫 대화입니다 — 보고 내용을 물어보세요</div>';
-  if(msgs.length && msgs[msgs.length-1].author === 'user')
-    html += pendingMarkup(DAILY_SEL.path, msgs[msgs.length-1], '담당');
-  s.innerHTML = html;
-  if(!silent || atBottom) s.scrollTop = s.scrollHeight;
-}
-
-async function sendDailyAgent(){
-  if(!DAILY_SEL) return;
-  const input = document.getElementById('pm-input'); const body = input.value.trim(); if(!body) return;
-  input.value = ''; input.style.height = 'auto';
-  await fetch('/api/messages',{method:'POST',headers:{'Content-Type':'application/json'},
-    body:JSON.stringify({room: DAILY_SEL.path, author:'user', body})});
-  await loadDailyAgent(false);
-}
-
+async function quickReg(port, project){ await postJ('/api/ports', {project, port: Number(port), label:'', start_cmd:''}); fillPorts(); }
 async function addPort(){
   const project = document.getElementById('pf-proj').value;
   const port = parseInt(document.getElementById('pf-port').value, 10);
-  const label = document.getElementById('pf-label').value;
-  const start_cmd = document.getElementById('pf-cmd').value;
   if(!port) return;
-  await fetch('/api/ports',{method:'POST',headers:{'Content-Type':'application/json'},
-    body:JSON.stringify({project, port, label, start_cmd})});
-  document.getElementById('pf-port').value = ''; document.getElementById('pf-label').value = '';
-  document.getElementById('pf-cmd').value = '';
+  await postJ('/api/ports', {project, port, label: document.getElementById('pf-label').value, start_cmd: document.getElementById('pf-cmd').value});
+  document.getElementById('pf-port').value = ''; document.getElementById('pf-label').value = ''; document.getElementById('pf-cmd').value = '';
   fillPorts();
 }
-async function delPort(id){
-  await fetch('/api/ports/'+id,{method:'DELETE'});
-  fillPorts();
-}
-
-// 서버 켜기 — 등록된 start_cmd만 실행(화이트리스트). 확인 없이 바로.
+async function delPort(id){ await fetch('/api/ports/'+id,{method:'DELETE'}); fillPorts(); }
 async function startPort(id, btn){
   if(btn){ btn.disabled = true; btn.textContent = '시작 중…'; }
-  let r = {};
-  try{ r = await fetch('/api/ports/'+id+'/start',{method:'POST'}).then(x=>x.json()); }catch(e){}
-  if(r && r.ok === false) appAlert('시작 못 함', r.reason||'알 수 없음');
-  setTimeout(fillPorts, 1500);   // 뜨는 데 잠깐 걸린다
+  const r = await postJ('/api/ports/'+id+'/start');
+  if(r && r.ok === false) appAlert('시작 못 함', r.reason||r.error||'알 수 없음');
+  setTimeout(fillPorts, 1500);
 }
-// 서버 끄기 — 되돌리기 어려운 행동이라 대상(PID·프로세스명)을 보여주고 확인받는다
 async function stopPort(id, port, proc, pid){
   const ok = await appConfirm({title:'포트 '+port+' 프로세스 종료', okText:'종료', danger:true,
-    body:'대상: '+(proc||'(이름 미상)')+' (PID '+pid+')\n\n'+
-         '저장하지 않은 작업이 있으면 유실될 수 있습니다. 정말 종료할까요?'});
+    body:'대상: '+(proc||'(이름 미상)')+' (PID '+pid+')\n\n저장하지 않은 작업이 있으면 유실될 수 있습니다. 정말 종료할까요?'});
   if(!ok) return;
-  let r = {};
-  try{ r = await fetch('/api/ports/'+id+'/stop',{method:'POST'}).then(x=>x.json()); }catch(e){}
-  if(r && r.ok === false) appAlert('종료 못 함', r.reason||'알 수 없음');
+  const r = await postJ('/api/ports/'+id+'/stop');
+  if(r && r.ok === false) appAlert('종료 못 함', r.reason||r.error||'알 수 없음');
   fillPorts();
 }
 
-// ── 프로젝트 룸 뷰(왼쪽 달력+칸반 / 오른쪽 담당 에이전트 채팅) ──
-// 칸 5종(2026-09-12 사용자 확정). '내 차례'=사람이 눌러야 끝나는 일(담당이 못 하는 것),
-// '조건 대기'=날짜가 아니라 조건을 기다리는 보류 — 둘 다 할일에 섞여 기한 초과처럼 보였다.
-const KCOLS = [['needs_user','내 차례'],['open','할일'],['consulting','진행중'],['deferred','조건 대기'],['resolved','완료']];
-const KORDER = ['needs_user','open','consulting','deferred','resolved'];   // 열 순서(‹ › 이동)
-
+// ── 프로젝트 룸 ──────────────────────────────────────────
 function renderRoom(path){
   CUR_ROOM = path;
-  const t = new Date(todayStr()); CAL_YM = {y:t.getFullYear(), m:t.getMonth()};  // 달력은 이번 달부터
   const p = PROJECTS.find(x=>x.path===path);
   const name = p ? p.name : path;
-  setHeader(name, {summary:false, actions:false});
+  setHeader(name, {});
   document.getElementById('view').innerHTML =
-    `<div class="room-layout">`+
-      `<div class="room-main" id="room-main"></div>`+
-      `<div class="room-side">`+
-        `<div class="side-h">${esc(name)} 담당 에이전트</div>`+
-        `<label class="note-line" style="display:flex;gap:6px;align-items:center;padding:0 0 8px;cursor:pointer" title="켜면 이 프로젝트의 담당이 밤에 docs를 고치고 ohmyPM이 커밋합니다(기록 정리·일간보고 반영·조언 반영). 기본은 끔.">`+
-          `<input type="checkbox" id="autowrite-toggle" data-path="${escAttr(path)}"${p && p.docs_autowrite ? ' checked' : ''}> 기록 자동 반영(담당이 docs 수정·자동 커밋)</label>`+
-        chatMarkup()+
-      `</div>`+
-    `</div>`;
+    `<div class="room-layout"><div class="room-main" id="room-main"><div class="empty">불러오는 중…</div></div>`+
+    `<div class="room-side"><div class="side-h">${esc(name)} 담당 에이전트</div>${chatMarkup('담당에게 물어보거나 시키세요')}</div></div>`;
   fillRoomMain(path);
-  bindChat(path, true);   // 프로젝트 룸 = 담당 에이전트 방
+  bindChat(path, true);
 }
-
-// (세팅 점검·골격 생성 버튼 제거 — 2026-09-06 사용자 확정 "버튼 없이 무조건 배치로만".
-//  검토·골격 생성은 야간 배치 ⓪이 담당: 첫 밤 검토 리포트 → 다음 밤 자동 생성)
-
-// 왼쪽(달력+칸반)만 다시 그린다 — 상태 이동·달력 넘김에서 채팅은 안 건드리게 분리
-function fillRoomMain(path){
-  const main = document.getElementById('room-main');
-  if(!main) return;
-  const items = issuesByProject()[path] || [];
-  const u = items.filter(i=>i.kind==='unresolved').length;
-  const d = items.filter(i=>i.kind==='deadline').length;
-  const sub = `${esc(path)}` + (items.length?` · 미해결 ${u} · 기한 ${d} · 이슈 ${items.length}건`:' · 이슈 없음');
-  main.innerHTML = `<div class="note-line" style="padding:0 0 10px">${sub}</div>`+
-                   calMarkup(items) + kanbanMarkup(items);
-}
-
-function calMarkup(items){
-  const y = CAL_YM.y, m = CAL_YM.m;
-  const startDow = new Date(y, m, 1).getDay();
-  const daysIn = new Date(y, m+1, 0).getDate();
-  const byDay = {};
-  items.forEach(i=>{
-    if(!i.due) return;
-    const dt = new Date(i.due);
-    if(dt.getFullYear()===y && dt.getMonth()===m) (byDay[dt.getDate()]=byDay[dt.getDate()]||[]).push(i);
-  });
-  const td = new Date(todayStr());
-  const isToday = d => td.getFullYear()===y && td.getMonth()===m && td.getDate()===d;
-  let cells = ['일','월','화','수','목','금','토'].map(w=>`<div class="dow">${w}</div>`).join('');
-  for(let k=0;k<startDow;k++) cells += `<div class="cal-cell out"></div>`;
-  // 한 칸에 다 밀어넣으면 하루에 11건 걸린 날이 달력을 세로로 찢는다(2026-09-11 사용자 지적).
-  // 칸에는 2건까지만 보이고 나머지는 '+N건' — 날짜를 누르면 아래 목록에 그날 전체가 펼쳐진다.
-  const MAX_EV = 2;
-  window._calByDay = byDay;
-  for(let day=1;day<=daysIn;day++){
-    const list = byDay[day]||[];
-    const evs = list.slice(0,MAX_EV).map(i=>
-      `<div class="ev" title="${escAttr(clean(i.title))}">${esc(clean(i.title))}</div>`).join('')
-      + (list.length>MAX_EV ? `<div class="ev more">+${list.length-MAX_EV}건</div>` : '');
-    const cl = `cal-cell${isToday(day)?' today':''}${list.length?' has':''}`;
-    const on = list.length ? ` onclick="calDay(${day})"` : '';
-    cells += `<div class="${cl}"${on}><div class="dd">${day}</div>${evs}</div>`;
+async function fillRoomMain(path){
+  const main = document.getElementById('room-main'); if(!main) return;
+  const p = PROJECTS.find(x=>x.path===path) || {path, name: path};
+  const [weekly, props, scores] = await Promise.all([
+    getJ('/api/weekly').catch(()=>[]), getJ('/api/lab/proposals?project='+encodeURIComponent(path)).catch(()=>[]),
+    getJ('/api/scores?project='+encodeURIComponent(path)+'&limit=10').catch(()=>[])]);
+  let weeklyHtml = '<div class="note-line">아직 주간보고 몫이 없습니다</div>';
+  for(const d of weekly){
+    const mine = (d.projects||[]).find(x=>x.project===path);
+    if(mine){ const msgs = await getJ('/api/messages?room='+encodeURIComponent(mine.room)).catch(()=>[]);
+      if(msgs.length){ weeklyHtml = `<div class="report md"><div class="mh">${esc(d.date)}</div>${md(msgs[msgs.length-1].body)}</div>`; } break; }
   }
-  return `<div class="cal"><div class="cal-h">`+
-    `<button onclick="calNav(-1)">‹</button><span>${y}년 ${m+1}월</span><button onclick="calNav(1)">›</button>`+
-    `<span class="cal-hint">날짜를 누르면 그날 전체가 아래에 펼쳐집니다</span>`+
-    `</div><div class="cal-grid">${cells}</div><div id="cal-day"></div></div>`;
+  main.innerHTML =
+    `<section><div class="kv"><div><b>경로</b> ${esc(path)}</div>`+
+      `<div><b>설치</b> <span class="badge ${p.installed?'on':'off'}">${p.installed?'ohmypm/ 설치됨':'미설치'}</span> `+
+      (p.installed?`<span class="mini-btn red" onclick="uninstallProject('${encodeURIComponent(path)}')">설치 제거</span>`:`<span class="mini-btn" onclick="installProject('${encodeURIComponent(path)}')">설치</span>`)+`</div></div></section>`+
+    `<section><h2>최근 주간보고 몫</h2>${weeklyHtml}</section>`+
+    `<section><h2>이 프로젝트 대상 제안서 (${props.length})</h2>${props.length?`<div class="props" style="max-height:none">${props.map(x=>proposalHtml(x,true)).join('')}</div>`:'<div class="note-line">아직 제안이 없습니다</div>'}</section>`+
+    `<section><h2>토론 점수 이력</h2>${scoreTable(scores)}</section>`;
 }
-
-// 그날 항목 전체 — 달력 칸은 좁으니 제목을 접지 않고 여기서 다 보여준다
-function calDay(day){
-  const list = (window._calByDay||{})[day]||[];
-  const box = document.getElementById('cal-day');
-  if(!box) return;
-  if(!list.length){ box.innerHTML=''; return; }
-  box.innerHTML = `<div class="cal-day-h">${day}일 · ${list.length}건</div>`+
-    list.map(i=>`<div class="cal-day-row">${esc(clean(i.title))}</div>`).join('');
+async function installProject(enc){
+  const path = decodeURIComponent(enc);
+  const r = await postJ('/api/projects/install', {path});
+  if(!r.ok){ appAlert('설치 실패', r.error||'알 수 없는 오류'); return; }
+  await loadData(); fillRoomMain(path);
 }
-
-function kanbanMarkup(items){
-  const cols = KCOLS.map(([st,label])=>{
-    const list = items.filter(i=>(i.status||'open')===st);
-    const cards = list.map(i=>{
-      const idx = KORDER.indexOf(st);
-      const prev = idx>0 ? `<button onclick="moveIssue(${i.id},'${KORDER[idx-1]}')" title="${KCOLS[idx-1][1]}로">‹</button>` : '';
-      const next = idx<KORDER.length-1 ? `<button onclick="moveIssue(${i.id},'${KORDER[idx+1]}')" title="${KCOLS[idx+1][1]}로">›</button>` : '';
-      // 카드 = 기한 / 제목 / 내용 — 긴 원문을 첫 구분자(— 또는 :)에서 갈라 처음 보는 사람도 읽게
-      const t = clean(i.easy_title || i.title);   // 쉬운 제목(완결 검증 부여)이 있으면 우선
-      const m = t.match(/^(.{4,70}?)(?:\s+—\s+|:\s+)([\s\S]+)$/);
-      const head = m ? m[1] : t, body = m ? m[2] : '';
-      // 진짜 마감(deadline)=빨간 '기한' / 당일 완결(done)=초록 '완결' / 그 외=회색 '재확인'
-      // (판정 배지 keep·재분류는 내부 장부라 표시 안 함 — 2026-09-07 사용자 확정)
-      const dueLabel = i.kind === 'deadline' ? `<div class="kdue">기한 ${i.due}</div>`
-                     : i.kind === 'done'     ? `<div class="kdue donel">완결 ${i.due}</div>`
-                                             : `<div class="kdue soft">재확인 ${i.due}</div>`;
-      return `<div class="kcard">`+
-        (i.due?dueLabel:'')+
-        `<div class="kt">${esc(head)}</div>`+
-        (body?`<div class="kb">${esc(body)}</div>`:'')+
-        `<div class="mv">${prev}${next}</div></div>`;
-    }).join('') || `<div class="col-empty">없음</div>`;
-    return `<div class="kcol"><h3>${label}<span class="n">${list.length}</span></h3>${cards}</div>`;
-  }).join('');
-  // 휠은 세로(화면) 전용이라 좌우는 Shift+휠로 넘긴다. 가로 막대는 칸반 맨 아래에 있는데
-  // 긴 칸이 3000픽셀을 넘어가는 날이 있어 안내에는 넣지 않는다 — 손 닿는 방법만 적는다.
-  return `<div class="kan-hint">칸은 좌우로 넘겨서 봅니다 (Shift+휠, 트랙패드는 좌우 스와이프)</div>`+
-         `<div class="kanban">${cols}</div>`;
-}
-
-function calNav(delta){
-  let m = CAL_YM.m + delta, y = CAL_YM.y;
-  if(m<0){ m=11; y--; } if(m>11){ m=0; y++; }
-  CAL_YM = {y, m};
-  fillRoomMain(CUR_ROOM);
-}
-
-async function moveIssue(id, status){
-  await fetch('/api/issues/'+id+'/status',{method:'POST',headers:{'Content-Type':'application/json'},
-    body:JSON.stringify({status})});
-  const it = ISSUES.find(i=>i.id===id); if(it) it.status = status;   // 로컬 캐시 갱신
-  fillRoomMain(CUR_ROOM);
-  renderSidebar();
+async function uninstallProject(enc){
+  const path = decodeURIComponent(enc);
+  const ok = await appConfirm({title:`'${nameOfPath(path)}' 설치 제거`, okText:'제거', danger:true,
+    body:'ohmypm/ 폴더를 통째로 지우고(안에 든 주간보고·제안·상태 메모 포함), CLAUDE.md·AGENTS.md의 ohmyPM 블록을 뗍니다.\n프로젝트의 다른 파일은 건드리지 않습니다.'});
+  if(!ok) return;
+  const r = await postJ('/api/projects/uninstall', {path});
+  if(!r.ok){ appAlert('제거 실패', r.error||'알 수 없는 오류'); return; }
+  await loadData(); fillRoomMain(path);
 }
 
 // ── 라우터 ─────────────────────────────────────────────
 function go(hash){ if(location.hash===hash) route(); else location.hash = hash; }
-
 function route(){
-  clearInterval(pollTimer);
+  clearInterval(pollTimer); clearInterval(tickTimer); setStatus('');
   const h = decodeURIComponent(location.hash) || '#/dashboard';
   renderSidebar();
-  if(h.startsWith('#/daily')){
-    renderDaily();
-  } else if(h.startsWith('#/experts')){
-    renderExperts();
-  } else if(h.startsWith('#/agents')){
-    renderAgents();
-  } else if(h.startsWith('#/ports')){
-    renderPorts();
-  } else if(h.startsWith('#/post/')){
-    renderPost(h.slice('#/post/'.length));
-  } else if(h.startsWith('#/board')){
-    renderBoard();
-  } else if(h.startsWith('#/chat/')){
-    const room = h.slice('#/chat/'.length);
-    if(room === 'daily') renderChat('daily', '주간보고', 'PM과 각 담당 에이전트의 주간보고 대화 기록');
-    else renderChat('global', '전체 채팅방', '에이전트와 사용자가 함께 쓰는 방');
-  } else if(h.startsWith('#/room/')){
-    renderRoom(h.slice('#/room/'.length));
-  } else {
-    renderDashboard();
-  }
+  if(h.startsWith('#/weekly')) renderWeekly();
+  else if(h.startsWith('#/lab')) renderLab();
+  else if(h.startsWith('#/agents')) renderAgents();
+  else if(h.startsWith('#/ports')) renderPorts();
+  else if(h.startsWith('#/post/')) renderPost(h.slice('#/post/'.length));
+  else if(h.startsWith('#/board')) renderBoard();
+  else if(h.startsWith('#/room/')) renderRoom(h.slice('#/room/'.length));
+  else renderDashboard();
 }
 window.addEventListener('hashchange', route);
-// 프로젝트 룸 진입 — data-room 을 가진 요소(사이드바 룸·카드 '룸 열기') 위임 처리
-// 온보딩 검토(data-onboard)도 여기서 위임 — 경로에 역슬래시가 있어 onclick 인라인은 못 쓴다
 document.addEventListener('click', e=>{
   const ex = e.target.closest('[data-exclude]');
   if(ex){ excludeProject(ex.getAttribute('data-exclude')); return; }
+  const rg = e.target.closest('[data-reg-port]');
+  if(rg){ quickReg(rg.getAttribute('data-reg-port'), rg.getAttribute('data-reg-proj')); return; }
   const el = e.target.closest('[data-room]');
   if(el) go('#/room/'+encodeURIComponent(el.getAttribute('data-room')));
 });
-
-// 프로젝트별 '기록 자동 반영' 스위치(2026-09-17) — 기본 끔. 켠 프로젝트만 담당이 docs를 고치고 커밋한다.
-document.addEventListener('change', async e=>{
-  const t = e.target;
-  if(!t || t.id!=='autowrite-toggle') return;
-  const r = await fetch('/api/projects/autowrite',{method:'POST',
-    headers:{'Content-Type':'application/json'},
-    body:JSON.stringify({path:t.getAttribute('data-path'), on:t.checked})})
-    .then(r=>r.json()).catch(()=>({ok:false}));
-  if(!r.ok){ t.checked = !t.checked; appAlert('저장 실패', '기록 자동 반영 설정을 저장하지 못했습니다'); return; }
-  const p = PROJECTS.find(x=>x.path===t.getAttribute('data-path')); if(p) p.docs_autowrite = t.checked;
-});
-
-// 프로젝트를 관리에서 제외 — 폴더는 안 건드리고, 이슈·게시판 글/댓글·대화만 정리된다.
-// 재스캔에도 다시 안 올라온다(enabled=0). 데이터가 지워지므로 확인창을 거친다.
 async function excludeProject(path){
-  const name = nameOfPath(path);
-  const ok = await appConfirm({title:`'${name}' 관리 제외`, okText:'제외', danger:true,
-    body:'프로젝트 폴더는 그대로 둡니다.\n'+
-         'ohmyPM의 이슈·게시판 글/댓글·대화 기록은 삭제됩니다.\n'+
-         '재스캔해도 다시 올라오지 않습니다.'});
+  const ok = await appConfirm({title:`'${nameOfPath(path)}' 관리 제외`, okText:'제외', danger:true,
+    body:'프로젝트 폴더는 그대로 둡니다(설치된 ohmypm/ 폴더도 남습니다 — 먼저 룸에서 설치 제거를 하세요).\nohmyPM의 게시판 글/댓글·대화 기록은 삭제됩니다.\n재스캔해도 다시 올라오지 않습니다.'});
   if(!ok) return;
-  const r = await fetch('/api/projects/remove',{method:'POST',
-    headers:{'Content-Type':'application/json'}, body:JSON.stringify({path})})
-    .then(r=>r.json()).catch(()=>({ok:false}));
+  const r = await postJ('/api/projects/remove', {path});
   if(!r.ok){ appAlert('제외 실패', r.error||'알 수 없는 오류'); return; }
-  await loadData();
-  go('#/');
+  await loadData(); go('#/');
 }
 
-// ── 상단 액션 버튼 ──────────────────────────────────────
-async function doScan(){
-  document.getElementById('s-iss').textContent = '…';
-  await fetch('/api/scan',{method:'POST'});
-  await loadData(); route();
-}
-
-// 시작
 (async ()=>{ await loadData(); if(!location.hash) location.hash='#/dashboard'; route(); })();
-
-// 늘 열어두는 대시보드라 수동 새로고침 없이도 사이드바(프로젝트·이슈 뱃지)가 스스로 갱신되게:
-// 탭으로 돌아올 때 + 5분마다 목록을 다시 불러온다. 본문 뷰는 안 건드린다(채팅 입력 등 보호).
 window.addEventListener('focus', ()=>loadData());
 setInterval(loadData, 300000);
 </script></body></html>"""

@@ -38,6 +38,10 @@ async def lifespan(app: FastAPI):
     from src.cc.room_agent import resume_dangling_replies
 
     resume_dangling_replies()
+    # 돌다 끊긴 토론 세션은 닫는다(자동 재개 없음 — 비용 통제). 점수 집계만 남긴다.
+    from src.cc.board_session import recover_on_startup
+
+    recover_on_startup()
     yield
     # 종료: 스케줄러 정리
     stop_scheduler()
