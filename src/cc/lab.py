@@ -29,7 +29,7 @@ from src.db import messages as messages_db
 from src.db import projects as projects_db
 from src.install import OHMYPM_DIR, is_installed
 
-LAB_DIR = REPO_ROOT / "docs" / "lab"            # 위키(런타임 산출물, git 미추적)
+LAB_DIR = REPO_ROOT / "docs" / "lab"            # 위키는 로컬 전용, 조사 문서(notes/*.md)는 git에 올린다(.gitignore)
 STATE_DIR = REPO_ROOT / "data" / "lab"          # 연구원별 마지막 실행 상태·실패 원문
 RESEARCH_TIMEOUT = 420
 NOTE_TIMEOUT = 900          # 조사 요청 → 정리 문서(웹을 여러 번 보고 길게 쓴다)

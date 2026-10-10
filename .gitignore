@@ -27,6 +27,11 @@ docs/archive-wiki-*.md
 # Playwright 스크래치(스크린샷·콘솔 로그)
 .playwright-mcp/
 
-# 랩실 연구 위키·상태(런타임, 로컬 전용)
-docs/lab/
+# 랩실 — 조사 문서(notes/ 아래 .md)는 git에 올린다(2026-10-11 사용자 결정).
+# 연구 위키(docs/lab/*.md, 주 1회 자동 갱신)와 첨부 영상·그림은 로컬 전용.
+docs/lab/*
+!docs/lab/notes/
+docs/lab/notes/**/*
+!docs/lab/notes/**/
+!docs/lab/notes/**/*.md
 data/
