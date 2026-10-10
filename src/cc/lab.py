@@ -15,6 +15,7 @@
 import json
 from datetime import datetime
 from pathlib import Path
+from urllib.parse import quote
 
 from loguru import logger
 
@@ -96,6 +97,41 @@ def wiki_tabs(rid: str) -> list[dict]:
         return [{"key": d, "title": expert.EXPERTS[d]["name"], "wiki": expert.read_wiki(d)} for d in r["domains"]]
     p = LAB_DIR / f"{rid}.md"
     return [{"key": rid, "title": r["name"], "wiki": p.read_text(encoding="utf-8") if p.exists() else ""}]
+
+
+def note_file(rid: str, filename: str) -> Path | None:
+    """연구원 문서 폴더 안의 일반 파일만 허용한다(링크의 실제 경로도 확인)."""
+    if rid not in RESEARCHERS or not filename or Path(filename).name != filename:
+        return None
+    root = (LAB_DIR / "notes").resolve()
+    folder = (root / rid).resolve()
+    path = (folder / filename).resolve()
+    if folder.parent != root or path.parent != folder or not path.is_file():
+        return None
+    return path
+
+
+def research_notes(rid: str) -> list[dict]:
+    """정리 문서와 같은 이름으로 시작하는 영상·그림을 함께 읽는다."""
+    if rid not in RESEARCHERS:
+        return []
+    folder = LAB_DIR / "notes" / rid
+    notes = []
+    media_types = {".mp4": "video", ".webm": "video", ".png": "image",
+                   ".jpg": "image", ".jpeg": "image", ".webp": "image", ".gif": "image"}
+    for file in sorted(folder.glob("*.md")):
+        if not note_file(rid, file.name):
+            continue
+        body = file.read_text(encoding="utf-8")
+        title = next((line[2:] for line in body.splitlines() if line.startswith("# ")), file.stem)
+        assets = []
+        for asset in sorted(folder.iterdir()):
+            kind = media_types.get(asset.suffix.lower())
+            if kind and asset.name.startswith(file.stem) and note_file(rid, asset.name):
+                assets.append({"name": asset.name, "kind": kind,
+                               "url": f"/api/lab/{rid}/notes/{quote(file.stem)}/assets/{quote(asset.name)}"})
+        notes.append({"key": file.stem, "title": title, "body": body, "assets": assets})
+    return notes
 
 
 def _state_file(rid: str) -> Path:
@@ -276,6 +312,7 @@ def consult(rid: str, question: str) -> str:
     from src.cc.prompts import EXPERT_SYSTEM, expert_consult
 
     wiki = "\n\n".join(f"## {t['title']}\n{t['wiki'][:4000]}" for t in wiki_tabs(rid) if t["wiki"])
+    wiki += "\n\n" + "\n\n".join(n["body"] for n in research_notes(rid))
     allowed, disallowed = tools_for("expert")
     meta = run_headless_ex(expert_consult(r["topic"], wiki, question), cwd=neutral_cwd(),
                            allowed_tools=allowed, disallowed_tools=disallowed,

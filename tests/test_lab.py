@@ -78,3 +78,42 @@ def test_proposal_status(env):
     row = lab_db.add_proposal("skills", "t", "b", None, None)
     assert lab_db.set_status(row["id"], "done") and not lab_db.set_status(row["id"], "weird")
     assert lab_db.list_proposals(researcher="skills")[0]["status"] == "done"
+
+
+def test_notes_assets_and_consult_keep_full_document(env, monkeypatch):
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
+    from src.web.routers.api import router
+
+    folder = lab.LAB_DIR / "notes" / "skills"
+    folder.mkdir(parents=True)
+    body = "# HyperFrames\n\n## 핵심 요약\n" + "조사 내용 " * 1000 + "\n끝까지 읽어야 하는 시험 결과"
+    (folder / "hyperframes.md").write_text(body, encoding="utf-8")
+    (folder / "hyperframes-showcase.mp4").write_bytes(b"0123456789")
+    (folder / "other.mp4").write_bytes(b"unrelated")
+    (folder / "hyperframes-secret.txt").write_text("private", encoding="utf-8")
+    (lab.LAB_DIR / "skills.md").write_text("최근 위키", encoding="utf-8")
+
+    app = FastAPI()
+    app.include_router(router)
+    with TestClient(app) as client:
+        note, = client.get("/api/lab/skills/notes").json()
+        assert note["title"] == "HyperFrames" and note["body"] == body
+        asset, = note["assets"]
+        response = client.get(asset["url"], headers={"Range": "bytes=2-5"})
+        assert response.status_code == 206 and response.content == b"2345"
+        assert response.headers["content-type"] == "video/mp4"
+        for name in ["other.mp4", "hyperframes-secret.txt", "missing.mp4"]:
+            assert client.get(f"/api/lab/skills/notes/hyperframes/assets/{name}").status_code == 404
+        assert client.get("/api/lab/unknown/notes").json() == []
+    assert lab.note_file("skills", "../skills.md") is None
+    assert lab.note_file("skills", str(folder / "hyperframes.md")) is None
+    assert lab.note_file("../skills", "hyperframes.md") is None
+
+    prompts = []
+    def answer(prompt, **kwargs):
+        prompts.append(prompt)
+        return {"result": "답변"}
+    monkeypatch.setattr(lab, "run_headless_ex", answer)
+    assert lab.consult("skills", "시험 결과 알려줘") == "답변"
+    assert "최근 위키" in prompts[0] and body in prompts[0]
