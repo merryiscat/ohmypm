@@ -130,13 +130,13 @@ def run_headless_ex(
 ) -> dict:
     """claude -p 실행 → {"result": 텍스트|None, "model": 실제 쓴 모델, "cost_usd", "output_tokens"}.
 
-    ★ task는 필수 — src/cc/models.py 표에서 등급→모델을 정하고 **항상 --model을 명시**한다.
+    task는 필수 — src/cc/models.py 표에서 등급→모델을 정하고 **항상 --model을 명시**한다.
       개인 CLI 기본 모델(이 PC는 Fable)에 기대지 않는다(2026-09-28 사고). model 인자는 담당별
       지정 같은 명시적 override이며, 그것도 최상위 모델 금지 규칙을 거친다.
-    ★ 프롬프트는 argv가 아니라 stdin으로 넘긴다 — Windows claude.CMD→cmd.exe가 특수문자(·→—"[]{})
+    프롬프트는 argv가 아니라 stdin으로 넘긴다 — Windows claude.CMD→cmd.exe가 특수문자(·→—"[]{})
       투성이 대형 프롬프트를 argv로 받으면 뭉갠다(후보 리스트·경로가 잘려 판정 불가). stdin은 무손실.
-    ★ append_system_prompt로 대상 프로젝트 CLAUDE.md의 대화체 지시를 덮어쓴다(구조화 출력 강제).
-    ★ 판정(읽기)은 중립 cwd + add_dirs로 대상을 '읽기만' — cwd=대상 프로젝트로 두면 그 프로젝트
+    append_system_prompt로 대상 프로젝트 CLAUDE.md의 대화체 지시를 덮어쓴다(구조화 출력 강제).
+    판정(읽기)은 중립 cwd + add_dirs로 대상을 '읽기만' — cwd=대상 프로젝트로 두면 그 프로젝트
       SessionStart 훅이 실행되고 CLAUDE.md 대화체가 JSON 출력을 깨므로. (편집 태스크는 cwd=대상 유지)
     """
     from src.cc.models import resolve_effort, resolve_model
@@ -157,12 +157,12 @@ def run_headless_ex(
         effort,
     ]
     if append_system_prompt:
-        # ★ argv로 가는 시스템 프롬프트에서 개행 제거 — Windows claude.CMD→cmd.exe 재파싱이
+        # argv로 가는 시스템 프롬프트에서 개행 제거 — Windows claude.CMD→cmd.exe 재파싱이
         #   개행 뒤 인자(--add-dir 등)를 잘라먹는다(09-06 실증: 담당이 폴더를 못 열음).
         #   08-31 '파이프 금지' 함정의 개행 변종. 프롬프트 파일은 여러 줄로 써도 여기서 안전해진다.
         #   원인은 윈도우에서 .cmd 배치 파일을 실행하면 인자가 cmd.exe에 재해석되는 알려진 문제
         #   (Node.js CVE-2024-27980과 같은 뿌리) — 인자를 목록으로 따로 넘겨도 못 막는다.
-        #   ⚠ 이 정규화는 '구분용 개행'과 '내용인 개행'을 구별하지 못한다. 지금 argv에 실리는 값은
+        #   주의: 이 정규화는 '구분용 개행'과 '내용인 개행'을 구별하지 못한다. 지금 argv에 실리는 값은
         #   시스템 프롬프트·도구 이름·폴더 경로뿐이라 안전하지만, 개행이 의미를 갖는 값(여러 줄
         #   커밋 메시지 등)을 argv로 넘기려는 순간 내용이 조용히 뭉개진다 → 그때는 재해석 단계
         #   자체를 피하는 쪽으로(배치 파일 대신 node cli.js 직접 호출 등). docs/pending.md 참조.
@@ -190,7 +190,7 @@ def run_headless_ex(
             creationflags=NO_WINDOW,
         )
         if r.returncode != 0:
-            # ★ 실패 원인은 stderr가 비고 stdout(JSON)에 담기는 경우가 많다(사용량·속도 한도 등).
+            # 실패 원인은 stderr가 비고 stdout(JSON)에 담기는 경우가 많다(사용량·속도 한도 등).
             #   둘 다 로깅해야 사후 진단이 된다(2026-09-01 야간 전량 실패를 stderr 빈 값이라 놓침).
             full = (r.stdout or "") + (r.stderr or "")
             _capture_limit(full)   # 한도 429면 리셋 시각을 기억 — 야간 배치가 재개에 쓴다

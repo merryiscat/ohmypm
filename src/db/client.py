@@ -6,7 +6,7 @@ from pathlib import Path
 
 from src.config.settings import settings
 
-# ★ 커넥션은 **스레드마다 하나**(2026-09-09). 예전엔 싱글톤 하나를 스레드가 공유했는데,
+# 커넥션은 **스레드마다 하나**(2026-09-09). 예전엔 싱글톤 하나를 스레드가 공유했는데,
 #   게시판 토론이 ThreadPoolExecutor로 여러 담당을 동시에 돌리면서 두 스레드가 같은
 #   커넥션에 commit을 걸어 "cannot commit - no transaction is active"로 배치가 죽었다.
 #   sqlite 파일 잠금이 동시 쓰기를 조정하므로, WAL + busy_timeout으로 대기시킨다.

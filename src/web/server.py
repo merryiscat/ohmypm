@@ -1,7 +1,7 @@
 """FastAPI 대시보드 서버. odin lifespan 패턴 차용 — 인증·RBAC·no-cache 미들웨어는 제거(로컬 단독).
 
 실행: uv run uvicorn src.web.server:app --port 8000
-★ 단일 워커 전제(APScheduler 중복 방지) — --workers 늘리지 말 것.
+단일 워커 전제(APScheduler 중복 방지) — --workers 늘리지 말 것.
 """
 
 from contextlib import asynccontextmanager
@@ -17,7 +17,7 @@ from src.db.client import init_db
 async def lifespan(app: FastAPI):
     # 시작: DB 보장 + 필수 설정 점검 + 스케줄러 기동
     init_db()
-    # ★ 필수 설정이 비면 배치가 '실패'가 아니라 '할 일 0건'으로 조용히 끝난다(2026-09-12 사고).
+    # 필수 설정이 비면 배치가 '실패'가 아니라 '할 일 0건'으로 조용히 끝난다(2026-09-12 사고).
     #   기동할 때 한 번 크게 찍어, 코드 업데이트로 새 설정이 생긴 걸 그 자리에서 알아채게 한다.
     from pathlib import Path as _P
 
