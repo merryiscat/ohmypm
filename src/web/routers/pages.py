@@ -128,6 +128,12 @@ _HTML = r"""<!doctype html>
   .md code{background:#eceef1;border-radius:4px;padding:0 3px;font-size:.9em;font-family:ui-monospace,SFMono-Regular,Consolas,monospace}
   .md>div{margin:0 0 6px} .md>div:last-child{margin-bottom:0}
   .md .mgap{height:6px} .md>div:first-child,.md>ul:first-child{margin-top:0}
+  /* 마크다운 표 — 칸이 많으면 표만 옆으로 밀어 볼 수 있게 */
+  .md .md-table{overflow-x:auto;margin:8px 0}
+  .md table{border-collapse:collapse;width:100%;font-size:.93em;line-height:1.6}
+  .md th,.md td{border-bottom:1px solid var(--line);padding:7px 10px;text-align:left;vertical-align:top}
+  .md th{color:var(--muted);font-weight:700;white-space:nowrap;border-bottom-color:#cfd3d9}
+  .md tbody tr:last-child td{border-bottom:none}
   .prow{display:flex;align-items:center;gap:12px;background:var(--card);border:1px solid var(--line);border-radius:8px;padding:11px 14px;margin-bottom:8px;cursor:pointer;max-width:920px}
   .prow:hover{border-color:var(--green)}
   .prow-t{font-weight:600;font-size:13.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
@@ -357,16 +363,29 @@ function md(src){
     t = e(t).replace(/`([^`]+)`/g,'<code>$1</code>').replace(/\*\*([^*]+?)\*\*/g,'<strong>$1</strong>');
     return t.replace(/\u0000(\d+)\u0000/g, (m, i) => links[Number(i)]);
   };
-  const out=[]; let list=false;
+  const out=[]; let list=false; let rows=[];
+  // 표 — '| 가 | 나 |' 줄이 이어지면 모았다가 한 번에 <table>로. 둘째 줄이 '|---|'면 첫 줄이 머리글.
+  const cells = r => r.trim().replace(/^\|/,'').replace(/\|$/,'').split('|').map(c=>inl(c.trim()));
+  const flushTable = ()=>{
+    if(!rows.length) return;
+    let head = null;
+    if(rows.length > 1 && /^\s*\|?\s*:?-{2,}/.test(rows[1])){ head = cells(rows[0]); rows = rows.slice(2); }
+    out.push('<div class="md-table"><table>'+
+      (head ? '<thead><tr>'+head.map(c=>`<th>${c}</th>`).join('')+'</tr></thead>' : '')+
+      '<tbody>'+rows.map(r=>'<tr>'+cells(r).map(c=>`<td>${c}</td>`).join('')+'</tr>').join('')+'</tbody></table></div>');
+    rows = [];
+  };
   const close=()=>{ if(list){ out.push('</ul>'); list=false; } };
   for(const raw of (src||'').split('\n')){
     const line = raw.replace(/\s+$/,''); let m;
+    if(/^\s*\|.*\|$/.test(line)){ close(); rows.push(line); continue; }
+    flushTable();
     if(m = line.match(/^(#{1,6})\s+(.*)$/)){ close(); out.push(`<div class="mh">${inl(m[2])}</div>`); }
     else if(m = line.match(/^\s*[-*]\s+(.*)$/)){ if(!list){ out.push('<ul>'); list=true; } out.push(`<li>${inl(m[1])}</li>`); }
     else if(!line.trim()){ close(); out.push('<div class="mgap"></div>'); }
     else { close(); out.push(`<div>${inl(line)}</div>`); }
   }
-  close();
+  flushTable(); close();
   return out.join('');
 }
 const todayStr = () => new Date().toISOString().slice(0,10);
