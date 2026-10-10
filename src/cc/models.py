@@ -7,6 +7,9 @@
   ① 모든 호출은 등록된 task 이름을 내야 한다(미등록 task는 호출 거부 — 새 호출부는 표에 먼저 등록).
   ② 호출은 항상 `--model`을 명시한다(개인 기본값에 기대지 않는다).
   ③ Fable·Mythos 같은 최상위 모델은 `ALLOW_FRONTIER_HEADLESS=true`가 아니면 heavy로 내리고 경고한다.
+  ④ 추론 강도(--effort)도 작업마다 명시한다(2026-10-10). 안 정하면 이 PC 개인 설정이나 모델 기본값을
+     따르는데, 모델을 개인 기본값에 맡겼다가 난 09-28 사고와 같은 빈틈이다(랩실 정리 문서
+     docs/lab/notes/models/harness-per-model.md). 강도가 높을수록 품질이 오르고 한도(세션)도 더 쓴다.
 """
 
 from loguru import logger
@@ -34,6 +37,32 @@ TASK_TIER: dict[str, str] = {
     "model_catalog_extract": "standard",   # 공식 문서 diff → 정형 JSON 추출
     "model_catalog_profile": "heavy",      # 모델별 상세 프로필 종합
 }
+
+# 작업 → 추론 강도(low/medium/high/xhigh/max). TASK_TIER와 같은 작업이 모두 있어야 한다(테스트가 확인).
+# 출발점: 짧고 정형인 일 low, 대화·조사·추출 medium, 종합 글쓰기 high. 바꿀 땐 호출 로그의 세션 값으로 비교한다.
+TASK_EFFORT: dict[str, str] = {
+    "board_write": "medium",
+    "board_comment": "low",
+    "board_feedback": "low",
+    "board_followup": "low",
+    "board_reflect": "low",
+    "room_chat": "medium",
+    "weekly_report": "high",          # 주간 종합 — 전 프로젝트 대화를 한 장으로
+    "weekly_pm": "medium",
+    "weekly_agent": "medium",
+    "expert_consult": "medium",
+    "lab_research": "medium",
+    "lab_proposal": "medium",
+    "model_catalog_extract": "medium",     # 정확도가 중요한 추출 — low는 비교 확인 뒤에만
+    "model_catalog_profile": "high",
+}
+EFFORT_LEVELS = ("low", "medium", "high", "xhigh", "max")
+
+
+def resolve_effort(task: str) -> str:
+    """호출에 쓸 추론 강도. 표에 없으면 medium(새 작업은 TASK_TIER와 함께 여기에도 등록)."""
+    return TASK_EFFORT.get(task, "medium")
+
 
 # 헤드리스 기본 금지 모델(부분 문자열 매칭). 대화 세션에서 쓰는 것과 배치에서 쓰는 것은 다르다.
 FRONTIER_MARKERS = ("fable", "mythos")

@@ -91,8 +91,16 @@ def test_run_headless_always_passes_model_flag(monkeypatch):
     meta = client.run_headless_ex("p", ".", [], [], task="room_chat")
     cmd = captured["cmd"]
     assert "--model" in cmd and cmd[cmd.index("--model") + 1] == "sonnet"
+    assert cmd[cmd.index("--effort") + 1] == models.TASK_EFFORT["room_chat"]
+    assert cmd[cmd.index("--tools") + 1] == ""          # 허용 도구가 없으면 도구를 끈다
     assert meta["result"] == "ok" and meta["model"] == "claude-sonnet-5"
     assert meta["cost_usd"] == 0.01 and meta["output_tokens"] == 3
 
     with pytest.raises(TypeError):
         client.run_headless("p", ".", [], [])  # task 없이는 못 부른다
+
+
+def test_every_task_has_a_valid_effort():
+    """추론 강도 표는 작업 표와 같은 작업을 모두 갖고, 값은 CLI가 받는 단계 중 하나다."""
+    assert set(models.TASK_EFFORT) == set(models.TASK_TIER)
+    assert set(models.TASK_EFFORT.values()) <= set(models.EFFORT_LEVELS)

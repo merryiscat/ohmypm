@@ -139,10 +139,11 @@ def run_headless_ex(
     ★ 판정(읽기)은 중립 cwd + add_dirs로 대상을 '읽기만' — cwd=대상 프로젝트로 두면 그 프로젝트
       SessionStart 훅이 실행되고 CLAUDE.md 대화체가 JSON 출력을 깨므로. (편집 태스크는 cwd=대상 유지)
     """
-    from src.cc.models import resolve_model
+    from src.cc.models import resolve_effort, resolve_model
 
     model = resolve_model(task, model)
-    meta = {"result": None, "model": model, "cost_usd": 0.0, "output_tokens": 0, "task": task}
+    effort = resolve_effort(task)
+    meta = {"result": None, "model": model, "effort": effort, "cost_usd": 0.0, "output_tokens": 0, "task": task}
     cmd = [
         _resolve_bin(),
         "-p",
@@ -152,6 +153,8 @@ def run_headless_ex(
         permission_mode,
         "--model",
         model,
+        "--effort",          # 추론 강도도 항상 명시 — 개인 설정에 기대지 않는다(models.TASK_EFFORT)
+        effort,
     ]
     if append_system_prompt:
         # ★ argv로 가는 시스템 프롬프트에서 개행 제거 — Windows claude.CMD→cmd.exe 재파싱이
@@ -168,6 +171,10 @@ def run_headless_ex(
         cmd += ["--add-dir", d]
     if allowed_tools:
         cmd += ["--allowedTools", " ".join(allowed_tools)]
+    else:
+        # 허용 도구가 없는 작업(주간 PM·종합, 복기, 제안서 등)은 도구를 아예 끈다. --allowedTools를
+        # 안 붙이면 기본 읽기 도구가 열려 있을 수 있고, 도구 설명이 입력 토큰도 먹는다.
+        cmd += ["--tools", ""]
     if disallowed_tools:
         cmd += ["--disallowedTools", " ".join(disallowed_tools)]
     try:
@@ -208,7 +215,7 @@ def run_headless_ex(
         from src.config.settings import settings
 
         sess = meta["cost_usd"] / (settings.session_usd or 80.0)   # 1세션 = 맥스 5시간 한도
-        logger.info(f"[headless] task={task} model={meta['model']} cost=${meta['cost_usd']:.4f} "
+        logger.info(f"[headless] task={task} model={meta['model']} effort={effort} cost=${meta['cost_usd']:.4f} "
                     f"({sess:.3f}세션) out_tokens={meta['output_tokens']}")
         return meta
     except Exception as e:
