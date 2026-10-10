@@ -111,9 +111,29 @@ def install_project(project_path: str) -> dict:
         else:
             _write(f, text)
             created.append(f"{OHMYPM_DIR}/{name}")
+    claude, agents = root / "CLAUDE.md", root / "AGENTS.md"
+    # 내용 있는 AGENTS.md만 있던 프로젝트에 CLAUDE.md를 새로 만들면, Claude Code는 CLAUDE.md가
+    # 생긴 순간부터 AGENTS.md를 안 읽는다 → 새 CLAUDE.md 첫 줄에서 AGENTS.md를 불러오게 한다.
+    if not claude.exists() and _BLOCK_RE.sub("", _read(agents)).strip():
+        _write(claude, "@AGENTS.md\n")
     for name in INSTRUCTION_FILES:
-        (created if _upsert_block(root / name) else skipped).append(name)
+        path = root / name
+        if name == "CLAUDE.md" and _imports_agents(path):
+            # CLAUDE.md가 AGENTS.md를 불러오면 블록은 AGENTS.md 한 곳에만 — 두 번 실리지 않게
+            # (2026-10-10 orca에서 확인한 중복). 예전에 붙은 CLAUDE.md 쪽 블록은 뗀다.
+            _remove_block(path)
+            skipped.append(name)
+            continue
+        (created if _upsert_block(path) else skipped).append(name)
     return {"created": created, "skipped": skipped}
+
+
+_IMPORT_AGENTS_RE = re.compile(r"^\s*@\.?/?AGENTS\.md\s*$", re.M)
+
+
+def _imports_agents(path: Path) -> bool:
+    """CLAUDE.md가 '@AGENTS.md' 줄로 AGENTS.md를 불러오는가."""
+    return bool(_IMPORT_AGENTS_RE.search(_read(path)))
 
 
 def uninstall_project(project_path: str) -> dict:

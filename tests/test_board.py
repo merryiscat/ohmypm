@@ -118,3 +118,32 @@ def test_new_tables_exist(tmp_db):
     assert "session_id" in cols
     assert isinstance(db_client.get_db(), sqlite3.Connection)
     assert Path(settings.db_path).exists()
+
+
+def test_install_puts_block_once_when_claude_imports_agents(tmp_path):
+    """CLAUDE.md가 @AGENTS.md를 불러오면 블록은 AGENTS.md에만 — 예전에 붙은 CLAUDE.md 쪽 블록도 뗀다."""
+    from src import install
+
+    proj = tmp_path / "orca"
+    proj.mkdir()
+    (proj / "AGENTS.md").write_text("# 규칙\n내용\n", encoding="utf-8")
+    (proj / "CLAUDE.md").write_text("# 클로드\n@AGENTS.md\n\n<!-- ohmypm:start -->\n옛 블록\n<!-- ohmypm:end -->\n",
+                                    encoding="utf-8")
+    install.install_project(str(proj))
+    claude = (proj / "CLAUDE.md").read_text(encoding="utf-8")
+    agents = (proj / "AGENTS.md").read_text(encoding="utf-8")
+    assert "ohmypm:start" not in claude and "@AGENTS.md" in claude
+    assert agents.count("ohmypm:start") == 1
+
+
+def test_install_new_claude_md_imports_existing_agents(tmp_path):
+    """내용 있는 AGENTS.md만 있던 프로젝트 — 새 CLAUDE.md가 AGENTS.md를 가리지 않게 불러온다."""
+    from src import install
+
+    proj = tmp_path / "codex_only"
+    proj.mkdir()
+    (proj / "AGENTS.md").write_text("# 규칙\n내용\n", encoding="utf-8")
+    install.install_project(str(proj))
+    assert (proj / "CLAUDE.md").read_text(encoding="utf-8").startswith("@AGENTS.md")
+    assert (proj / "AGENTS.md").read_text(encoding="utf-8").count("ohmypm:start") == 1
+    assert "ohmypm:start" not in (proj / "CLAUDE.md").read_text(encoding="utf-8")
