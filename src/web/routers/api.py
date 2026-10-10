@@ -1,9 +1,11 @@
 """대시보드 데이터 API (JSON). 화면 JS가 이걸 fetch해 그린다."""
 
-from fastapi import APIRouter, BackgroundTasks
+from fastapi import APIRouter, BackgroundTasks, HTTPException
+from fastapi.responses import FileResponse
 from pydantic import BaseModel
 
 from src.db import board as board_db
+from src.db import cards as cards_db
 from src.db import messages as messages_db
 from src.db import ports as ports_db
 from src.db import projects as projects_db
@@ -30,7 +32,53 @@ def remove_project(p: ProjectPath) -> dict:
     projects_db.set_enabled(p.path, False)
     posts = board_db.delete_by_project(p.path)
     messages_db.delete_for_project(p.path)
+    cards_db.delete_for_project(p.path)
     return {"ok": True, "disabled": p.path, "posts_deleted": posts}
+
+
+# ── 칸반 카드 ─────────────────────────────────────────────────────────────────
+# PM(주간보고)·담당(채팅)은 src/cc/cards.py로, 사용자는 여기 API로 카드를 만들고 옮긴다.
+@router.get("/cards")
+def get_cards(project: str) -> dict:
+    """이 프로젝트의 카드 전부 + 칸 목록(화면이 칸 이름·순서를 여기서 받는다)."""
+    return {"statuses": [{"key": k, "label": v} for k, v in cards_db.STATUSES],
+            "cards": cards_db.list_cards(project)}
+
+
+class CardNew(BaseModel):
+    project: str
+    title: str
+    status: str = "todo"
+    note: str | None = None
+    due: str | None = None
+
+
+@router.post("/cards")
+def add_card(c: CardNew) -> dict:
+    title = c.title.strip()
+    if not title:
+        return {"ok": False, "error": "제목이 비었습니다"}
+    return {"ok": True, "card": cards_db.add_card(c.project, title[:200], c.status, c.note, c.due, "user")}
+
+
+class CardEdit(BaseModel):
+    title: str | None = None
+    note: str | None = None
+    status: str | None = None
+    due: str | None = None
+
+
+@router.post("/cards/{card_id}")
+def edit_card(card_id: int, c: CardEdit) -> dict:
+    """준 필드만 고친다. due를 빈 문자열로 주면 기한을 지운다."""
+    fields = c.model_dump(exclude_unset=True)
+    card = cards_db.update_card(card_id, **fields)
+    return {"ok": bool(card), "card": card} if card else {"ok": False, "error": "없는 카드이거나 잘못된 칸"}
+
+
+@router.delete("/cards/{card_id}")
+def remove_card(card_id: int) -> dict:
+    return {"ok": cards_db.delete_card(card_id)}
 
 
 @router.post("/scan")
@@ -109,6 +157,25 @@ def get_lab_wiki(rid: str) -> dict:
     from src.cc import lab
 
     return {"tabs": lab.wiki_tabs(rid)}
+
+
+@router.get("/lab/{rid}/notes")
+def get_lab_notes(rid: str) -> list[dict]:
+    from src.cc import lab
+
+    return lab.research_notes(rid)
+
+
+@router.get("/lab/{rid}/notes/{key}/assets/{filename}")
+def get_lab_note_asset(rid: str, key: str, filename: str) -> FileResponse:
+    from src.cc import lab
+
+    note = next((n for n in lab.research_notes(rid) if n["key"] == key), None)
+    if note and any(a["name"] == filename for a in note["assets"]):
+        path = lab.note_file(rid, filename)
+        if path:
+            return FileResponse(path)
+    raise HTTPException(status_code=404, detail="첨부 파일을 찾을 수 없습니다")
 
 
 @router.post("/lab/{rid}/run")
