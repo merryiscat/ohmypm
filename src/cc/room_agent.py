@@ -25,7 +25,13 @@ def reply_in_room(project_path: str, name: str) -> None:
     history = messages_db.list_messages(project_path, limit=HISTORY_LIMIT)
     hist_txt = "\n".join(f"{m['author']}: {m['body']}" for m in history)
     # 정체성 + 배운 것(토론 복기가 쌓은 note)을 앞에 붙인다 — 룸에서도 같은 담당이 이어진다
-    prompt = agents_db.persona_prefix(project_path) + room_chat(name, project_path, hist_txt)
+    # 최근 주간 점검 대화도 준다 — 주간보고 화면에서 그 보고를 보며 묻는 대화가 이 방이다
+    # 칸반 카드도 준다 — 담당이 답 끝에 카드 변경 블록을 붙이면 코드가 반영한다
+    from src.cc.cards import apply_ops, cards_text, take_block
+    from src.cc.weekly_report import latest_conversation
+
+    prompt = agents_db.persona_prefix(project_path) + room_chat(
+        name, project_path, hist_txt, latest_conversation(project_path), cards_text(project_path))
     allowed, disallowed = tools_for("room_chat")
     result = run_headless(task="room_chat",
         prompt=prompt,
@@ -40,7 +46,11 @@ def reply_in_room(project_path: str, name: str) -> None:
         add_dirs=[project_path],      # 대상 폴더 — 읽고, 사용자가 시키면 고친다
         model=agents_db.model_for(project_path),   # 담당별 지정 모델(없으면 기본)
     )
-    body = (result or "").strip() or "(지금은 답을 만들지 못했어 — 잠시 후 다시 시도해줘)"
+    body, ops = take_block((result or "").strip())
+    if ops:
+        moved = apply_ops(project_path, ops, by="agent")
+        body = (body + f"\n\n(칸반 {moved}건 반영)").strip()
+    body = body or "(지금은 답을 만들지 못했어 — 잠시 후 다시 시도해줘)"
     messages_db.add_message(project_path, AGENT_AUTHOR, body)
 
 

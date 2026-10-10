@@ -34,7 +34,7 @@ flowchart TB
     T0[토론 시작] --> T1[글쓰기 35%] --> T2[둘러보기·댓글 35%] --> T3[글쓴이 반응 15%] --> T4[대대댓글 15%] --> T5[복기: 담당마다 '배운 것' → note]
   end
   subgraph 주간[주간보고 · 버튼]
-    W1[git log 7일 + ohmypm/state.md 수집] --> W2[LLM 1콜 → JSON] --> W3[전체 방 + 프로젝트별 방<br/>+ ohmypm/weekly.md]
+    W1[git log 7일 + ohmypm/state.md 수집] --> W1b[활동 있는 프로젝트마다 PM↔담당 점검 대화<br/>끝에 PM이 칸반 정리] --> W2[LLM 1콜 → JSON] --> W3[전체 방 + 프로젝트별 방<br/>+ ohmypm/weekly.md]
   end
   subgraph 랩실[랩실 · 주 1회 + 버튼]
     L1[모델 연구원: 공식 문서 수집(model_catalog)] --> L3
@@ -57,6 +57,7 @@ erDiagram
   board_sessions ||--o{ discussion_scores : "담당마다 1행 + lesson"
   projects ||--|| agent_profiles : "name·persona·note·model·points"
   lab_proposals }o--o| projects : "target_project"
+  projects ||--o{ cards : "칸반(PM·담당·사용자가 만들고 옮김)"
   messages {
     string room "프로젝트 path | weekly::날짜[::path] | lab::연구원"
   }
@@ -69,9 +70,9 @@ erDiagram
 
 | 영역 | 에이전트가 할 수 있는 것 | 코드가 하는 것 |
 |---|---|---|
-| 룸 채팅 | 대상 프로젝트 읽기·편집(Read/Grep/Glob/Edit/Write), Bash 없음, 커밋 없음 | 메시지 저장, 끊긴 답 복구 |
+| 룸 채팅 | 대상 프로젝트 읽기·편집(Read/Grep/Glob/Edit/Write), Bash 없음, 커밋 없음. 답 끝 `cards` 블록으로 칸반 변경 요청 | 메시지 저장, 끊긴 답 복구, 카드 블록 검사·반영(남의 프로젝트 카드 차단) |
 | 게시판 | 자기 프로젝트 읽기만 | 글·댓글·반응 저장(중복 방지), 점수, 복기 note |
-| 주간보고·복기 | 도구 없음(텍스트만) | git log 수집, 파일 기록 |
+| 주간보고·복기 | PM·종합·복기는 도구 없음(텍스트만), 점검 대화의 담당은 자기 폴더 읽기만 | git log 수집, 칸반 반영, 파일 기록 |
 | 랩실 | 읽기 + WebSearch/WebFetch | 위키·제안서·프로젝트 파일 기록 |
 | 공통 금지 | rm, 강제 푸시, 외부 발신 | — |
 

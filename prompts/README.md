@@ -19,7 +19,7 @@
 | 게시판 글쓰기 / 둘러보기 | board_write_system · board_system | board_write · board_comment |
 | 게시판 글쓴이 반응 / 대대댓글 | feedback_system · followup_system | post_feedback · comment_followup |
 | 토론 복기(배운 것) | board_reflect_system | board_reflect |
-| 주간보고 | weekly_system | weekly_report |
+| 주간보고 | weekly_system · weekly_pm_system | weekly_report · weekly_pm · weekly_agent |
 | 랩실 웹 조사(디자인·스킬) / 모델 제안 | lab_research_system | lab_research · lab_proposal |
 | 랩실 자문 | expert_system | expert_consult |
 | 모델 동향 수집(모델 연구원 엔진) | — | model_catalog_update · model_profile |

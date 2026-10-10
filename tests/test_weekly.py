@@ -32,8 +32,28 @@ def env(tmp_path, monkeypatch):
     db_client._local.conn = None
 
 
-def _fake(result):
-    return lambda *args, **kw: {"result": result, "model": "sonnet", "cost_usd": 0.1, "output_tokens": 10, "task": kw.get("task")}
+def _fake(result, pm=None, agent="화면은 다 붙였고 막힌 건 없다."):
+    """task별로 다른 응답 — 종합(weekly_report)·PM 턴(weekly_pm)·담당 답(weekly_agent).
+    pm 기본값: 첫 턴엔 묻고, 둘째 턴엔 끝낸다."""
+    calls = {"pm": 0}
+
+    def run(*args, **kw):
+        task = kw.get("task")
+        if task == "weekly_pm":
+            calls["pm"] += 1
+            if pm is not None:
+                out = pm
+            elif calls["pm"] % 2 == 1:
+                out = json.dumps({"ask": "화면은 끝났나?", "done": False, "summary": "화면 작업이 있었다."}, ensure_ascii=False)
+            else:
+                out = json.dumps({"ask": None, "done": True, "summary": "화면을 마쳤다.",
+                                  "cards": [{"add": "배포 날짜 정하기", "status": "needs_user"}]}, ensure_ascii=False)
+        elif task == "weekly_agent":
+            out = agent
+        else:
+            out = result
+        return {"result": out, "model": "sonnet", "cost_usd": 0.1, "output_tokens": 10, "task": task}
+    return run
 
 
 def test_weekly_splits_per_project_and_writes_file(env, monkeypatch):
@@ -61,12 +81,73 @@ def test_weekly_broken_json_keeps_raw(env, monkeypatch):
     monkeypatch.setattr(wr, "run_headless_ex", _fake("이번 주는 이러저러했다 (JSON 아님)"))
     r = wr.run_weekly_report()
     assert r["ok"] and r["written"] == []
-    rooms = messages_db.list_rooms_like("weekly::")
-    assert rooms == [wr._room(r["date"])]
+    # 전체 방엔 원문, alpha 방엔 점검 대화만(몫은 없음)
+    assert messages_db.list_messages(wr._room(r["date"]))[-1]["body"].startswith("이번 주는")
+    authors = [m["author"] for m in messages_db.list_messages(wr._room(r["date"], str(env["a"])))]
+    assert "ohmyPM" not in authors
     assert not (env["a"] / "ohmypm" / "weekly.md").exists()
 
 
 def test_weekly_no_result(env, monkeypatch):
-    monkeypatch.setattr(wr, "run_headless_ex", _fake(None))
+    monkeypatch.setattr(wr, "run_headless_ex", _fake(None, pm=""))
     r = wr.run_weekly_report()
-    assert r["ok"] is False and messages_db.list_rooms_like("weekly::") == []
+    assert r["ok"] is False and messages_db.list_rooms_like("weekly::") == [wr._room(r["date"], str(env["a"]))]
+    # PM이 실패해도 방에 한 줄 남긴다(조용한 실패 금지)
+    assert "실패" in messages_db.list_messages(wr._room(r["date"], str(env["a"])))[0]["body"]
+
+
+def test_weekly_conversation_stored_and_fed(env, monkeypatch):
+    """활동 있는 프로젝트만 PM↔담당 대화가 방에 쌓이고, 몫이 맨 끝, 룸 맥락으로도 읽힌다."""
+    data = {"headline": "h", "projects": [{"name": "alpha", "summary": "몫"}], "quiet": ["beta"]}
+    seen = {}
+    fake = _fake(json.dumps(data, ensure_ascii=False))
+
+    def spy(*args, **kw):
+        if kw.get("task") == "weekly_report":
+            seen["prompt"] = args[0]
+        return fake(*args, **kw)
+    monkeypatch.setattr(wr, "run_headless_ex", spy)
+    r = wr.run_weekly_report()
+    msgs = messages_db.list_messages(wr._room(r["date"], str(env["a"])))
+    assert [m["author"] for m in msgs] == ["pm", "agent", "pm", "ohmyPM"]
+    assert "담당에게: 화면은 끝났나?" in msgs[0]["body"]
+    assert "칸반 1건 정리" in msgs[2]["body"]
+    from src.db import cards as cards_db
+    assert [c["title"] for c in cards_db.list_cards(str(env["a"]))] == ["배포 날짜 정하기"]
+    assert "[PM과 담당의 점검 대화]" in seen["prompt"] and "막힌 건 없다" in seen["prompt"]
+    assert messages_db.list_messages(wr._room(r["date"], str(env["b"]))) == []   # 조용한 프로젝트는 대화 없음
+    ctx = wr.latest_conversation(str(env["a"]))
+    assert r["date"] in ctx and "나(담당)" in ctx and wr.latest_conversation(str(env["b"])) == ""
+
+
+def test_weekly_partial_run_merges_into_existing_report(env, monkeypatch):
+    """한 프로젝트만 돌리면 그날 보고에 끼워 넣고, 조용했던 목록에서 빼며, 한 줄은 그대로 둔다."""
+    date = "2026-10-10"
+    messages_db.add_message(wr._room(date), "ohmyPM",
+                            "# 주간보고 2026-10-10\n\n**이번 주 한 줄** — 원래 한 줄\n\n## gamma\n감마 몫\n\n"
+                            "**조용했던 프로젝트** — alpha, beta\n")
+    data = {"headline": "새 한 줄", "projects": [{"name": "alpha", "summary": "알파 몫"}], "quiet": []}
+    calls = []
+    fake = _fake(json.dumps(data, ensure_ascii=False))
+
+    def spy(*args, **kw):
+        calls.append(kw.get("task"))
+        return fake(*args, **kw)
+    monkeypatch.setattr(wr, "run_headless_ex", spy)
+    r = wr.run_weekly_report(paths=[str(env["a"])], date=date)
+    assert r["ok"] and r["projects"] == 1
+    body = messages_db.list_messages(wr._room(date))[-1]["body"]
+    assert "원래 한 줄" in body and "새 한 줄" not in body
+    assert body.index("## gamma") < body.index("## alpha") < body.index("**조용했던 프로젝트** — beta")
+    assert "알파 몫" in body and "alpha," not in body
+    # 같은 프로젝트를 또 돌리면 절을 바꾼다(두 번 들어가지 않는다)
+    data["projects"][0]["summary"] = "알파 다시"
+    monkeypatch.setattr(wr, "run_headless_ex", _fake(json.dumps(data, ensure_ascii=False)))
+    wr.run_weekly_report(paths=[str(env["a"])], date=date)
+    body = messages_db.list_messages(wr._room(date))[-1]["body"]
+    assert body.count("## alpha") == 1 and "알파 다시" in body and "알파 몫" not in body
+
+
+def test_merge_report_drops_quiet_line_when_empty():
+    out = wr._merge_report("# t\n\n**조용했던 프로젝트** — alpha\n", [("alpha", "몫")])
+    assert "조용했던" not in out and "## alpha\n몫" in out

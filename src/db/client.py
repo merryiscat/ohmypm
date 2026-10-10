@@ -73,6 +73,10 @@ def _migrate(db: sqlite3.Connection) -> None:
         ("rest_until", "rest_until TEXT"),
     ))
 
+    # 옛 칸반 카드(issues)는 2026-10-10 사용자 결정으로 삭제 — 새 칸반(cards)으로 새로 시작한다.
+    #   지우기 전 사본: data/ohmypm.before-kanban-2026-10-10.db
+    db.execute("DROP TABLE IF EXISTS issues")
+
     _migrate_timestamps_to_localtime(db)
 
 

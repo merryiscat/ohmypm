@@ -146,3 +146,20 @@ CREATE TABLE IF NOT EXISTS lab_proposals (
     written        INTEGER DEFAULT 0,      -- 대상 프로젝트 ohmypm/proposals.md에 기록했는가
     created_at     TEXT DEFAULT (datetime('now','localtime'))
 );
+
+-- 11) 칸반 카드 — 프로젝트별 할 일 판(2026-10-10 신설). 옛 issues 표(문서 스캔이 채우던 것)는 폐기·삭제.
+--     status: needs_user(사용자 확인 요청) | todo | doing | waiting(대기) | done
+--     '지연'은 저장하지 않는다 — 기한(due)이 오늘보다 앞이고 done이 아니면 화면이 지연 칸에 모은다.
+CREATE TABLE IF NOT EXISTS cards (
+    id         INTEGER PRIMARY KEY AUTOINCREMENT,
+    project    TEXT NOT NULL,              -- 프로젝트 path
+    title      TEXT NOT NULL,
+    note       TEXT,                       -- 한두 줄 설명(대기면 무엇을 기다리는지)
+    status     TEXT NOT NULL DEFAULT 'todo',
+    due        TEXT,                       -- 기한 YYYY-MM-DD(없으면 NULL)
+    created_by TEXT,                       -- pm | agent | user
+    created_at TEXT DEFAULT (datetime('now','localtime')),
+    updated_at TEXT DEFAULT (datetime('now','localtime')),
+    done_at    TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_cards_project ON cards(project, status);

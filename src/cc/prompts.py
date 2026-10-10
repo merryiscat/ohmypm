@@ -36,9 +36,10 @@ EXPERT_SYSTEM = load("expert_system")
 
 
 # ── 본문 템플릿 (매 호출 파일 재로딩 — 수정 즉시 반영) ─────────────────────
-def room_chat(project_name: str, project_path: str, history: str) -> str:
+def room_chat(project_name: str, project_path: str, history: str, weekly: str = "",
+              cards: str = "") -> str:
     return render("room_chat", project_name=project_name, project_path=project_path,
-                  history=history)
+                  history=history, weekly=weekly or "(아직 없음)", cards=cards or "(카드 없음)")
 
 
 def post_feedback(author: str, project_path: str, title: str, body: str, comments: str) -> str:

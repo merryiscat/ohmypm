@@ -25,6 +25,8 @@ TASK_TIER: dict[str, str] = {
     "room_chat": "standard",
     # 주간보고 — 커밋 팩트를 종합해 한 장 보고(종합 글쓰기라 heavy)
     "weekly_report": "heavy",
+    "weekly_pm": "standard",          # 주간 점검 — PM이 담당에게 묻는 질문·중간 요약(JSON)
+    "weekly_agent": "standard",       # 주간 점검 — 담당이 자기 폴더를 읽고 답(담당별 지정 모델 우선)
     # 랩실(연구소)
     "expert_consult": "standard",     # 연구원 자문
     "lab_research": "standard",       # 웹 조사형 연구원(디자인·스킬)의 수집·제안
