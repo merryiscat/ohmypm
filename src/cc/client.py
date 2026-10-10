@@ -205,8 +205,11 @@ def run_headless_ex(
         if used:
             meta["model"] = used[0] if len(used) == 1 else ",".join(used)
         # 한 줄 회계 — 어떤 작업이 어떤 모델로 얼마를 썼는지 매 호출 남긴다(09-28 Fable 사고 항체)
+        from src.config.settings import settings
+
+        sess = meta["cost_usd"] / (settings.session_usd or 80.0)   # 1세션 = 맥스 5시간 한도
         logger.info(f"[headless] task={task} model={meta['model']} cost=${meta['cost_usd']:.4f} "
-                    f"out_tokens={meta['output_tokens']}")
+                    f"({sess:.3f}세션) out_tokens={meta['output_tokens']}")
         return meta
     except Exception as e:
         logger.warning(f"[headless] task={task} model={model} 호출 실패: {e}")
