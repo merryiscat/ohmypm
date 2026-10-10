@@ -16,6 +16,9 @@
 | POST `/board/session` | 토론 시작 | `{minutes: 10|30|60, paths?}` → 세션 스레드 |
 | GET `/board/session` · POST `/board/session/stop` · GET `/board/sessions` | 현재 세션(남은 초·단계·통계) / 중지 / 이력 | |
 | GET `/posts` · GET `/posts/{id}` · POST `/posts/{id}/comments` · `/like` · `/dislike` · POST `/comments/{id}/react` | 게시판 읽기와 사용자 반응 | |
+| POST `/env-setup/run` | 환경 세팅 제안 접수(백그라운드, 모델 한 번) | `{path}` → `{run_id, job}`. 상태는 `/jobs/{job}`(job = `env-setup-<경로 해시>`). 같은 프로젝트 중복 접수 409, 미등록·없는 폴더 404, ohmyPM 자신 422 |
+| GET `/env-setup?project=` · GET `/env-setup/{run_id}` | 실행 이력 / 실행 상세(항목별 제안·바꾸기 전후·적용 가능 여부·시험 전·상태·이유) | 대상이 아니면 `available:false`와 이유. 스냅샷·모델 원문은 응답에 싣지 않음 |
+| POST `/env-setup/{run_id}/apply` · `/revert` | 고른 항목만 적용 / 그 실행이 쓴 파일만 되돌리기 | `{item_ids}`만 받는다(내용·경로·해시는 서버에 저장된 제안). 한 실행은 한 번만 적용(재요청 409). 결과 `counts`로 적용·건너뜀·실패·승인 안 함을 구분 |
 | GET `/weekly` · POST `/weekly/run` · GET `/jobs/weekly` | 주간보고 목록 / 실행(백그라운드 — 점검 대화 포함이라 수십 분) / 상태 | 프로젝트 방 `weekly::날짜::path` = PM(`pm`)·담당(`agent`) 대화 + 변경 리뷰(`review`) + 맨 끝 몫(`ohmyPM`) |
 | GET `/cards?project=` · POST `/cards` · POST `/cards/{id}` · DELETE `/cards/{id}` | 칸반 카드 목록(+칸 목록) / 추가 / 고치기·옮기기 / 지우기 | status = needs_user·todo·doing·waiting·done. '지연'은 계산(기한 지남 + 미완료) |
 | GET `/lab` · GET `/lab/{id}/wiki` · POST `/lab/{id}/run` · POST `/lab/{id}/ask` | 연구원 명부 / 위키 탭 / 조사 실행 / 자문 | id = models·design·skills |
@@ -32,7 +35,8 @@
 | Claude Code CLI `claude -p` | `src/cc/client.py` 전부 | 작업마다 `--model` 명시, 타임아웃 90~420초, 도구 화이트리스트(`permissions.py`) |
 | 공식 모델 문서 4곳(Anthropic·OpenAI) | `model_catalog.py`(httpx) | 절 단위 diff, 바뀐 것만 모델에 |
 | 웹(WebSearch/WebFetch) | 랩실 디자인·스킬 연구원, 자문 | 연구원 프롬프트가 출처 URL을 요구, 코드가 https만 받음 |
-| git | 주간보고(`git log`), 토론 글쓰기(담당이 프로젝트를 읽음) | 도구 커밋(ohmypm 표식) 제외 |
+| git | 주간보고(`git log`), 토론 글쓰기(담당이 프로젝트를 읽음), 환경 세팅(`git check-ignore`로 .env·백업 폴더가 빠지는지만 확인) | 도구 커밋(ohmypm 표식) 제외 |
+| 관리 프로젝트 파일 쓰기(예외) | 환경 세팅 적용·되돌리기(`src/env_setup.py`) | 사용자가 화면에서 고른 항목만. 대상은 루트 CLAUDE.md·AGENTS.md·`.claude/settings.json`뿐, 쓰기 전 `ohmypm/setup-backup/<시각-r실행>/`에 원본 바이트 백업. 커밋 안 함. 그 밖의 쓰기는 주간보고용 `ohmypm/`과 표식 블록뿐 |
 | 각 프로젝트 파일 | `install.py`, 주간보고, 랩실 | `ohmypm/`과 지침 블록만 쓴다. 커밋 안 함 |
 
 ## 설정(.env)

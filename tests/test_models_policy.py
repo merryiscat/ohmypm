@@ -104,3 +104,7 @@ def test_every_task_has_a_valid_effort():
     """추론 강도 표는 작업 표와 같은 작업을 모두 갖고, 값은 CLI가 받는 단계 중 하나다."""
     assert set(models.TASK_EFFORT) == set(models.TASK_TIER)
     assert set(models.TASK_EFFORT.values()) <= set(models.EFFORT_LEVELS)
+
+
+def test_env_setup_task_is_heavy_and_high():
+    assert models.TASK_TIER["env_setup"] == "heavy" and models.TASK_EFFORT["env_setup"] == "high"

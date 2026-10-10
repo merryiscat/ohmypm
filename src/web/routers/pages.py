@@ -318,6 +318,18 @@ _HTML = r"""<!doctype html>
   @media (prefers-reduced-motion: reduce){.loading::before{animation:none}}
   /* 화면에는 안 보이고 화면 읽기 프로그램만 읽는 글자 */
   .sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+  /* 환경 세팅 — 제안 비교·승인 */
+  .env-head{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+  .env-run{margin:10px 0}
+  .env-err,.env-reason{color:var(--amber);margin-top:4px}
+  #envset h3{font-size:.95em;margin:14px 0 4px}
+  .env-item{border:1px solid var(--line);border-radius:8px;padding:10px 12px;margin:8px 0}
+  .env-item input[type=checkbox]{width:16px;height:16px;vertical-align:-2px;margin-right:4px}
+  .env-meta{color:var(--muted);font-size:.9em;margin:2px 0}
+  .env-why{margin:4px 0}
+  .env-diff .dh{color:var(--muted);font-size:.85em;margin-top:6px}
+  .env-diff pre{white-space:pre-wrap;word-break:break-word;background:var(--bg);border:1px solid var(--line);border-radius:6px;padding:6px 8px;margin:2px 0;font-size:.88em;max-height:240px;overflow:auto}
+  .env-actions{margin-top:10px;display:flex;gap:8px}
 </style></head><body>
 <div class="app">
   <aside>
@@ -1144,11 +1156,117 @@ async function fillRoomMain(path){
     `<section><div class="kv"><div><b>경로</b> ${esc(path)}</div>`+
       `<div><b>설치</b> <span class="badge ${p.installed?'on':'off'}">${p.installed?'ohmypm/ 설치됨':'미설치'}</span> `+
       (p.installed?`<span class="mini-btn red" onclick="uninstallProject('${encodeURIComponent(path)}')">설치 제거</span>`:`<span class="mini-btn" onclick="installProject('${encodeURIComponent(path)}')">설치</span>`)+`</div></div></section>`+
+    `<section><h2>환경 세팅</h2><div id="envset"><div class="empty loading">불러오는 중…</div></div></section>`+
     `<section><h2>칸반</h2><div id="kanban"></div></section>`+
     `<section><h2>최근 주간보고 몫</h2>${weeklyHtml}</section>`+
     `<section><h2>이 프로젝트 대상 제안서 (${props.length})</h2>${props.length?`<div class="props" style="max-height:none">${props.map(x=>proposalHtml(x,true)).join('')}</div>`:'<div class="note-line">아직 제안이 없습니다</div>'}</section>`+
     `<section><h2>토론 점수 이력</h2>${scoreTable(scores)}</section>`;
   fillKanban(path);
+  fillEnvSetup(path);
+}
+
+// ── 환경 세팅 ───────────────────────────────────────────
+// ohmyPM이 프로젝트를 살펴 CLAUDE.md·AGENTS.md·.claude/settings.json의 작은 변경안을 내고(모델 한 번),
+// 사용자가 고른 항목만 서버가 백업한 뒤 쓴다. 브라우저는 항목 번호만 보낸다 — 내용은 서버에 저장된 제안이다.
+let ENV_TIMER = null;          // 제안·적용이 진행 중일 때만 3초마다 다시 읽는다(화면을 떠나면 route()가 끈다)
+let ENV_TOKEN = 0;             // 늦게 도착한 응답이 다른 프로젝트 화면을 덮지 않게
+const ENV_SEL = {};            // 실행 번호 → 고른 항목 번호들(다시 그려도 선택이 남게)
+const ENV_BUSY = ['queued','running','applying','reverting'];
+const ENV_RUN_LABEL = {queued:'접수됨', running:'제안을 만드는 중…', proposed:'제안 도착 — 적용할 항목을 고르세요',
+  applying:'적용하는 중…', applied:'적용함', partial:'일부만 처리함', failed:'실패', reverting:'되돌리는 중…', reverted:'되돌림'};
+const ENV_ITEM_LABEL = {proposed:'제안', approved:'승인함', applied:'적용함', skipped:'건너뜀', rejected:'승인 안 함', reverted:'되돌림'};
+const ENV_ITEM_BADGE = {applied:'green', skipped:'gold', reverted:'gray', rejected:'gray', approved:'gray'};
+const ENV_OP = {create:'새 파일 만들기', append:'끝에 덧붙이기', replace:'한 부분 바꾸기'};
+
+async function fillEnvSetup(path){
+  const box = document.getElementById('envset'); if(!box) return;
+  const token = ++ENV_TOKEN;
+  let list, detail = null;
+  try{ list = await getJ('/api/env-setup?project='+encodeURIComponent(path)); }
+  catch(e){ list = {available:false, reason:'환경 세팅 이력을 불러오지 못했습니다', runs:[]}; }
+  if(list.runs && list.runs.length){ try{ detail = await getJ('/api/env-setup/'+list.runs[0].id); }catch(e){} }
+  if(token !== ENV_TOKEN || CUR_ROOM !== path || !document.getElementById('envset')) return;
+  setHTML(box, envSetupHtml(path, list, detail));
+  clearTimeout(ENV_TIMER);
+  if(detail && ENV_BUSY.includes(detail.run.status)) ENV_TIMER = setTimeout(()=>fillEnvSetup(path), 3000);
+}
+function envSetupHtml(path, list, detail){
+  const enc = encodeURIComponent(path);
+  if(!list.available)
+    return `<div class="env-head"><button disabled>환경 세팅</button><span class="note-line">${esc(list.reason||'이 프로젝트는 환경 세팅 대상이 아닙니다')}</span></div>`;
+  const run = detail && detail.run;
+  const busy = run && ENV_BUSY.includes(run.status);
+  let h = `<div class="env-head"><button id="env-start"${busy?' disabled':''} onclick="startEnvSetup('${enc}')">${run?'새 제안 만들기':'환경 세팅'}</button>`+
+    `<span class="note-line">CLAUDE.md·AGENTS.md·.claude/settings.json을 살펴 작은 변경안을 냅니다. 고른 항목만 쓰고, 쓰기 전에 ohmypm/setup-backup/에 백업합니다. 커밋은 하지 않습니다.</span></div>`;
+  if(!run) return h;
+  h += `<div class="env-run"><b>${esc(ENV_RUN_LABEL[run.status]||run.status)}</b> · ${esc((run.created_at||'').slice(5,16))}`+
+    (run.cost_usd ? ' · 비용 '+fmtCost(run.cost_usd) : '')+
+    (run.error ? `<div class="env-err">${esc(run.error)}</div>` : '')+
+    ((run.warnings||[]).length ? `<div class="note-line">수집 때 경고: ${run.warnings.map(esc).join(' / ')}</div>` : '')+`</div>`;
+  const items = detail.items || [];
+  const writable = items.filter(i=>i.applicable);
+  const shown = items.filter(i=>!i.applicable && !i.experimental);
+  const exp = items.filter(i=>!i.applicable && i.experimental);
+  const sel = ENV_SEL[run.id] || (ENV_SEL[run.id] = new Set());
+  const canPick = run.status === 'proposed';
+  if(writable.length) h += '<h3>적용할 수 있는 항목</h3>' + writable.map(i=>envItemHtml(run, i, canPick, sel.has(i.id))).join('');
+  if(shown.length) h += '<h3>보여 주기만 하는 항목</h3>' + shown.map(i=>envItemHtml(run, i, false, false)).join('');
+  if(exp.length) h += '<h3>시험 전 재료 — 보여 주기만</h3><div class="note-line">아직 효과를 확인하지 않은 재료라 적용할 수 없습니다.</div>' +
+    exp.map(i=>envItemHtml(run, i, false, false)).join('');
+  if(canPick && writable.length)
+    h += `<div class="env-actions"><button id="env-apply" onclick="applyEnvSetup(${run.id},'${enc}')">고른 항목 적용</button></div>`;
+  if(['applied','partial'].includes(run.status) && items.some(i=>i.status==='applied'))
+    h += `<div class="env-actions"><button class="ghost" onclick="revertEnvSetup(${run.id},'${enc}')">이 실행 되돌리기</button></div>`;
+  return h;
+}
+function envItemHtml(run, i, canPick, checked){
+  const id = `env-${run.id}-${i.id}`;
+  const pick = canPick ? `<input type="checkbox" id="${id}"${checked?' checked':''} onchange="envPick(${run.id},${i.id},this.checked)">` : '';
+  const title = canPick ? `<label for="${id}"><b>${esc(i.title)}</b></label>` : `<b>${esc(i.title)}</b>`;
+  const st = (i.applicable && (run.status !== 'proposed' || i.status !== 'proposed'))
+    ? ` <span class="tbadge ${ENV_ITEM_BADGE[i.status]||'gray'}">${esc(ENV_ITEM_LABEL[i.status]||i.status)}</span>` : '';
+  const ex = i.experimental ? ' <span class="tbadge gray">시험 전</span>' : '';
+  const diff = i.op === 'replace'
+    ? `<div class="env-diff"><div class="dh">바꾸기 전</div><pre>${esc(i.before||'')}</pre><div class="dh">바꾼 뒤</div><pre>${esc(i.after||'')}</pre></div>`
+    : `<div class="env-diff"><div class="dh">${i.op==='create'?'새로 만들 내용':'끝에 덧붙일 내용'}</div><pre>${esc(i.after||'')}</pre></div>`;
+  return `<div class="env-item">${pick}${title}${ex}${st}`+
+    `<div class="env-meta">${esc(i.target)} · ${esc(ENV_OP[i.op]||i.op)}</div><div class="env-why">${esc(i.why)}</div>`+
+    (i.install_guide ? `<div class="note-line">${esc(i.install_guide)}</div>` : '')+
+    (i.reason ? `<div class="env-reason">${esc(i.reason)}</div>` : '')+diff+`</div>`;
+}
+function envPick(runId, itemId, on){
+  const s = ENV_SEL[runId] || (ENV_SEL[runId] = new Set());
+  if(on) s.add(itemId); else s.delete(itemId);
+}
+async function startEnvSetup(enc){
+  const path = decodeURIComponent(enc);
+  const b = document.getElementById('env-start'); if(b) b.disabled = true;
+  const r = await postJ('/api/env-setup/run', {path});
+  if(!r.ok){ appAlert('환경 세팅을 시작하지 못함', errMsg(r)); if(b) b.disabled = false; return; }
+  fillEnvSetup(path);
+}
+async function applyEnvSetup(runId, enc){
+  const path = decodeURIComponent(enc);
+  const ids = [...(ENV_SEL[runId] || [])];
+  if(!ids.length){ appAlert('고른 항목이 없음', '적용할 항목의 체크박스를 먼저 고르세요.'); return; }
+  const b = document.getElementById('env-apply'); if(b){ b.disabled = true; b.textContent = '적용하는 중…'; }
+  const r = await postJ(`/api/env-setup/${runId}/apply`, {item_ids: ids});
+  if(!r.ok) appAlert('적용 실패', errMsg(r));
+  else { const c = r.counts;
+    appAlert('적용 결과', `적용 ${c.applied}건 · 건너뜀 ${c.skipped}건 · 실패 ${c.failed}건 · 승인 안 함 ${c.rejected}건\n\n항목마다 결과와 이유가 화면에 표시됩니다.`); }
+  fillEnvSetup(path);
+}
+async function revertEnvSetup(runId, enc){
+  const path = decodeURIComponent(enc);
+  const d = await getJ('/api/env-setup/'+runId).catch(()=>null);
+  const targets = d ? d.items.filter(i=>i.status==='applied').map(i=>i.target) : [];
+  const ok = await appConfirm({title:'환경 세팅 되돌리기', okText:'되돌리기', danger:true,
+    body:`실행 시각: ${d ? d.run.created_at : '(알 수 없음)'}\n대상 파일: ${targets.join(', ') || '(없음)'}\n\n백업해 둔 원본으로 되살립니다. 적용 뒤 직접 고친 파일은 덮어쓰지 않고 충돌로 남깁니다.`});
+  if(!ok) return;
+  const r = await postJ(`/api/env-setup/${runId}/revert`);
+  if(!r.ok) appAlert('되돌리기 실패', errMsg(r));
+  else { const c = r.counts; appAlert('되돌리기 결과', `되돌림 ${c.reverted}건 · 충돌로 남김 ${c.skipped}건 · 실패 ${c.failed}건`); }
+  fillEnvSetup(path);
 }
 
 // ── 칸반 ────────────────────────────────────────────────
@@ -1228,7 +1346,7 @@ async function uninstallProject(enc){
 // ── 라우터 ─────────────────────────────────────────────
 function go(hash){ if(location.hash===hash) route(); else location.hash = hash; }
 function route(){
-  clearInterval(pollTimer); clearInterval(tickTimer); setStatus('');
+  clearInterval(pollTimer); clearInterval(tickTimer); clearTimeout(ENV_TIMER); ENV_TOKEN++; setStatus('');
   const h = decodeURIComponent(location.hash) || '#/dashboard';
   renderSidebar();
   if(h.startsWith('#/weekly')) renderWeekly();

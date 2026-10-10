@@ -141,6 +141,12 @@ def uninstall_project(project_path: str) -> dict:
     root = Path(project_path)
     removed: list[str] = []
     d = root / OHMYPM_DIR
+    # 환경 세팅 백업(ohmypm/setup-backup/)이 남아 있으면 폴더째 지우지 않는다 — 되돌리기에 필요한 원본이다.
+    from src.env_setup import has_backups   # 순환 import를 피해 여기서
+
+    if has_backups(project_path):
+        return {"removed": [], "blocked": f"{OHMYPM_DIR}/setup-backup/에 환경 세팅 백업이 있어 설치 제거를 멈췄습니다. "
+                                          "되돌릴 일이 없으면 그 폴더를 직접 옮기거나 지운 뒤 다시 하세요."}
     if d.is_dir():
         shutil.rmtree(d)
         removed.append(OHMYPM_DIR + "/")

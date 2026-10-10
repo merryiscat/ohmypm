@@ -110,6 +110,8 @@ def uninstall_one(p: ProjectPath) -> dict:
     from src.scan.discover import discover_projects
 
     r = uninstall_project(p.path)
+    if r.get("blocked"):
+        return {"ok": False, "error": r["blocked"]}
     discover_projects()
     return {"ok": True, **r}
 
@@ -120,6 +122,104 @@ def job_status(name: str) -> dict:
     from src import jobs
 
     return jobs.status(name)
+
+
+# ── 환경 세팅 ────────────────────────────────────────────────────────────────
+# 제안은 백그라운드 작업(모델 한 번), 적용·되돌리기는 항목 수가 정해진 코드 작업이라 바로 처리한다.
+class ApplyBody(BaseModel):
+    item_ids: list[int]
+
+
+def _env_run_view(run: dict) -> dict:
+    import json as _json
+
+    snap = _json.loads(run["snapshot_json"]) if run.get("snapshot_json") else {}
+    keys = ("id", "project", "status", "error", "model", "cost_usd", "created_at", "finished_at",
+            "applied_at", "reverted_at")
+    return {**{k: run.get(k) for k in keys}, "has_backup": bool(run.get("backup_dir")),
+            "warnings": snap.get("warnings", [])}
+
+
+def _env_item_view(it: dict) -> dict:
+    import json as _json
+
+    prop = _json.loads(it["proposal_json"])
+    return {"id": it["id"], "proposal_id": it["proposal_id"], "kind": prop["kind"], "title": prop["title"],
+            "why": prop["why"], "target": it["target"], "op": prop["op"], "before": prop.get("before"),
+            "after": prop.get("after"), "material": prop.get("material"), "experimental": prop.get("experimental"),
+            "install_guide": prop.get("install_guide"), "applicable": bool(it["applicable"]),
+            "existed_before": it["existed_before"], "status": it["status"], "reason": it["reason"],
+            "applied_at": it["applied_at"], "reverted_at": it["reverted_at"]}
+
+
+def _env_error(e) -> HTTPException:
+    return HTTPException(status_code=e.code, detail=str(e))
+
+
+@router.post("/env-setup/run")
+def env_setup_run(p: ProjectPath) -> dict:
+    """환경 세팅 제안을 접수(백그라운드). 상태는 /api/jobs/{job}, 결과는 /api/env-setup/{run_id}."""
+    from src.cc import env_setup as cc_env
+    from src.env_setup import EnvSetupError
+
+    try:
+        r = cc_env.start(p.path)
+    except EnvSetupError as e:
+        raise _env_error(e)
+    return {"ok": True, "started": True, **r}
+
+
+@router.get("/env-setup")
+def env_setup_list(project: str) -> dict:
+    """프로젝트의 환경 세팅 실행 이력(최신 먼저). 대상이 아니면 available=false와 이유."""
+    from src.db import env_setup as env_db
+    from src.env_setup import EnvSetupError, resolve_project
+
+    try:
+        root = resolve_project(project)
+    except EnvSetupError as e:
+        return {"available": False, "reason": str(e), "runs": []}
+    runs = []
+    for run in env_db.list_runs(str(root)):
+        items = env_db.list_items(run["id"])
+        runs.append({**_env_run_view(run), "items": len(items),
+                     "applied_items": sum(1 for i in items if i["status"] == "applied")})
+    return {"available": True, "runs": runs}
+
+
+@router.get("/env-setup/{run_id}")
+def env_setup_detail(run_id: int) -> dict:
+    from src.db import env_setup as env_db
+
+    run = env_db.get_run(run_id)
+    if not run:
+        raise HTTPException(status_code=404, detail="없는 실행입니다")
+    return {"run": _env_run_view(run), "items": [_env_item_view(i) for i in env_db.list_items(run_id)]}
+
+
+@router.post("/env-setup/{run_id}/apply")
+def env_setup_apply(run_id: int, body: ApplyBody) -> dict:
+    """승인한 항목만 적용. 브라우저는 항목 번호만 보낸다 — 내용·경로·해시는 서버에 저장된 제안을 쓴다."""
+    from src.env_setup import EnvSetupError, apply_run
+
+    try:
+        r = apply_run(run_id, body.item_ids)
+    except EnvSetupError as e:
+        raise _env_error(e)
+    return {"ok": True, "run": _env_run_view(r["run"]), "items": [_env_item_view(i) for i in r["items"]],
+            "counts": r["counts"]}
+
+
+@router.post("/env-setup/{run_id}/revert")
+def env_setup_revert(run_id: int) -> dict:
+    from src.env_setup import EnvSetupError, revert_run
+
+    try:
+        r = revert_run(run_id)
+    except EnvSetupError as e:
+        raise _env_error(e)
+    return {"ok": True, "run": _env_run_view(r["run"]), "items": [_env_item_view(i) for i in r["items"]],
+            "counts": r["counts"]}
 
 
 # ── 주간보고 ────────────────────────────────────────────────────────────────

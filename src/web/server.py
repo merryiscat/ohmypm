@@ -46,6 +46,10 @@ async def lifespan(app: FastAPI):
     from src.cc.lab import resume_requests
 
     resume_requests()
+    # 환경 세팅 — 끊긴 실행은 정리만 한다(모델 재호출·파일 자동 덮어쓰기 없음)
+    from src.env_setup import recover_on_startup as recover_env_setup
+
+    recover_env_setup()
     yield
     # 종료: 스케줄러 정리
     stop_scheduler()

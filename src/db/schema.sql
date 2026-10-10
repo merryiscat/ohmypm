@@ -178,3 +178,48 @@ CREATE TABLE IF NOT EXISTS lab_requests (
     created_at  TEXT DEFAULT (datetime('now','localtime')),
     finished_at TEXT
 );
+
+-- 13) 환경 세팅 — 프로젝트를 코드로 조사하고(snapshot), 모델이 한 번 변경안을 내고, 사용자가 화면에서
+--     승인한 항목만 코드가 적용한다. 적용 전 원본은 <프로젝트>/ohmypm/setup-backup/에 백업, 실행 단위로 되돌린다.
+--     실행 status: queued | running | proposed | applying | applied | partial | failed | reverting | reverted
+CREATE TABLE IF NOT EXISTS env_setup_runs (
+    id            INTEGER PRIMARY KEY AUTOINCREMENT,
+    project       TEXT NOT NULL,          -- 프로젝트 절대경로
+    status        TEXT NOT NULL,
+    snapshot_json TEXT,                   -- 수집 결과(제안의 기준 시점)
+    materials_json TEXT,                  -- kit/ 재료 표(그때 상태)
+    raw_response  TEXT,                   -- 모델 응답 원문
+    model         TEXT,
+    cost_usd      REAL DEFAULT 0,
+    output_tokens INTEGER DEFAULT 0,
+    error         TEXT,
+    backup_dir    TEXT,                   -- 적용 때 만든 백업 폴더(절대경로)
+    created_at    TEXT,
+    finished_at   TEXT,
+    applied_at    TEXT,
+    reverted_at   TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_env_setup_runs_project ON env_setup_runs(project, id);
+
+-- 항목 status: proposed | approved | applied | skipped | rejected | reverted
+CREATE TABLE IF NOT EXISTS env_setup_items (
+    id             INTEGER PRIMARY KEY AUTOINCREMENT,
+    run_id         INTEGER NOT NULL,
+    proposal_id    TEXT NOT NULL,         -- 모델이 붙인 항목 식별자(실행 안에서 유일)
+    position       INTEGER NOT NULL,      -- 제안 순서
+    proposal_json  TEXT NOT NULL,         -- 검증을 거친 제안 원본
+    target         TEXT NOT NULL,         -- 프로젝트 기준 상대경로
+    status         TEXT NOT NULL,
+    reason         TEXT,                  -- 적용 불가·건너뜀·실패·충돌의 이유
+    applicable     INTEGER NOT NULL DEFAULT 0,   -- 1 = 승인하면 쓸 수 있는 항목(코드가 정한다)
+    existed_before INTEGER,               -- 수집 때 대상 파일이 있었나
+    source_hash    TEXT,                  -- 수집 때 전체 바이트 해시(파일이 없었으면 NULL)
+    planned_hash   TEXT,                  -- 적용으로 만들 최종 바이트 해시(쓰기 전에 기록)
+    applied_hash   TEXT,                  -- 실제로 쓴 뒤 확인한 해시
+    backup_path    TEXT,
+    approved_at    TEXT,
+    applied_at     TEXT,
+    reverted_at    TEXT,
+    UNIQUE(run_id, proposal_id)
+);
+CREATE INDEX IF NOT EXISTS idx_env_setup_items_run ON env_setup_items(run_id, position);
