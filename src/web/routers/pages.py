@@ -24,7 +24,7 @@ _HTML = r"""<!doctype html>
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>ohmyPM</title>
 <style>
-  :root{--bg:#f5f6f8;--card:#fff;--line:#e4e6ea;--muted:#8b8f96;--ink:#20242b;--red:#d64545;--amber:#c77b1e;--green:#1a8a5a;--sb:#1f232b}
+  :root{--bg:#f5f6f8;--card:#fff;--line:#e4e6ea;--muted:#626975;--ink:#20242b;--red:#c23838;--amber:#95580b;--green:#167a4c;--sb:#1f232b}
   *{box-sizing:border-box}
   body{font-family:-apple-system,'Segoe UI',sans-serif;margin:0;background:var(--bg);color:var(--ink);font-size:14px}
   a{color:inherit;text-decoration:none}
@@ -35,7 +35,7 @@ _HTML = r"""<!doctype html>
   aside .nav-item{display:flex;align-items:center;gap:9px;padding:9px 18px;cursor:pointer;font-size:13.5px;color:#cfd3da;border-left:3px solid transparent}
   aside .nav-item:hover{background:#272c35;color:#fff}
   aside .nav-item.active{background:#2d333e;color:#fff;border-left-color:var(--green)}
-  aside .sec-label{font-size:11px;letter-spacing:.04em;text-transform:uppercase;color:#7a808b;padding:14px 18px 5px;font-weight:700}
+  aside .sec-label{font-size:11px;letter-spacing:.04em;text-transform:uppercase;color:#9aa0aa;padding:14px 18px 5px;font-weight:700}
   aside .rooms{flex:1;overflow-y:auto}
   aside .room-item{display:flex;align-items:center;gap:8px;padding:7px 18px 7px 16px;cursor:pointer;font-size:12.5px;color:#b8bdc6;border-left:3px solid transparent}
   aside .room-item:hover{background:#272c35;color:#fff}
@@ -43,7 +43,7 @@ _HTML = r"""<!doctype html>
   aside .room-item .dot{width:6px;height:6px;border-radius:50%;background:#4a515d;flex:0 0 6px}
   aside .room-item .dot.on{background:var(--green)}
   aside .room-item .rname{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-  aside .room-item .rx{margin-left:auto;font-size:11px;color:#7a808b;display:none;padding:0 3px;line-height:1}
+  aside .room-item .rx{margin-left:auto;font-size:11px;color:#9aa0aa;display:none;padding:0 3px;line-height:1}
   aside .room-item:hover .rx{display:block}
   aside .room-item .rx:hover{color:#fff}
   .etabs{display:flex;gap:6px;margin-bottom:8px;flex-wrap:wrap}
@@ -169,7 +169,7 @@ _HTML = r"""<!doctype html>
   .pdet-h{font-size:11.5px;color:var(--muted);font-weight:700;margin:18px 0 6px;text-transform:uppercase;letter-spacing:.02em}
   .ptable .reg{color:var(--green);cursor:pointer;font-size:12px;font-weight:700;white-space:nowrap}
   .tbadge{display:inline-block;background:#eef1fb;color:#3a52a8;border-radius:20px;padding:1px 8px;font-size:11px;margin-right:4px;font-weight:700}
-  .tbadge.gold{background:#fdf3d6;color:#9a7b1e} .tbadge.green{background:#e7f3ec;color:#1f7a44} .tbadge.gray{background:#f1f3f6;color:var(--muted)} .tbadge.red{background:#fdecec;color:#b33a3a}
+  .tbadge.gold{background:#fdf3d6;color:#7a5f12} .tbadge.green{background:#e7f3ec;color:#1f7a44} .tbadge.gray{background:#f1f3f6;color:var(--muted)} .tbadge.red{background:#fdecec;color:#b33a3a}
   .ptable .reg-cell select,.ptable .reg-cell input,.ptable .reg-cell button{font-size:12px;padding:5px 8px;border:1px solid var(--line);border-radius:6px;font-family:inherit;margin-right:5px}
   .ptable .reg-cell .ireg-label{width:120px}
   .ptable .reg-cell button{background:var(--green);color:#fff;border:none;cursor:pointer}
@@ -291,6 +291,27 @@ _HTML = r"""<!doctype html>
   .prop.done{opacity:.55}
   .kv{font-size:13px;line-height:1.7;background:var(--card);border:1px solid var(--line);border-radius:10px;padding:12px 14px}
   .kv b{display:inline-block;min-width:92px;color:var(--muted);font-weight:600}
+  /* ── 화면 다듬기 점검표(2026-10-10, 랩실 Taste 검토) ── */
+  /* 키보드 Tab으로 옮겨 다닐 때 지금 어디에 있는지 테두리로 보인다(마우스 클릭 때는 안 보임) */
+  :focus-visible{outline:2px solid var(--green);outline-offset:2px}
+  aside :focus-visible{outline-color:#3fb37f;outline-offset:-2px}
+  /* 프로젝트 옆 '관리 제외(x)'는 마우스를 올릴 때만 보였다 — 키보드로 그 줄에 와도 보이게 */
+  aside .room-item:focus-within .rx{display:block}
+  /* 마우스를 올리면 버튼이 살짝 어두워진다(눌러지는 것임을 알림) */
+  button:hover:not(:disabled){filter:brightness(.92)}
+  button.ghost:hover:not(:disabled){filter:none;background:var(--bg)}
+  /* 숫자 폭을 고르게 — 개수·비용·날짜가 바뀌어도 글자가 흔들리지 않고 표에서 줄이 맞는다.
+     긴 글(게시글·보고서·랩실 문서)은 원래 숫자 모양이 읽기 편해 되돌린다 */
+  body{font-variant-numeric:tabular-nums}
+  .post-body,.report,.wk-scroll,.lab-article .md,.wiki-body,.cmt,.msg{font-variant-numeric:normal}
+  /* 불러오는 중 — 글자 앞에 작은 회전 표시 */
+  .loading{color:var(--muted);display:flex;align-items:center;justify-content:center;gap:8px}
+  .loading::before{content:"";width:12px;height:12px;border:2px solid var(--line);border-top-color:var(--muted);border-radius:50%;animation:spin .8s linear infinite;flex:0 0 12px}
+  @keyframes spin{to{transform:rotate(360deg)}}
+  /* 컴퓨터에서 '움직임 줄이기'를 켜 두면 돌지 않는다 */
+  @media (prefers-reduced-motion: reduce){.loading::before{animation:none}}
+  /* 화면에는 안 보이고 화면 읽기 프로그램만 읽는 글자 */
+  .sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
 </style></head><body>
 <div class="app">
   <aside>
@@ -314,7 +335,7 @@ _HTML = r"""<!doctype html>
       <div class="hstatus" id="hdr-status" hidden></div>
       <div class="actions" id="hdr-actions"></div>
     </header>
-    <main id="view">로딩…</main>
+    <main id="view"><div class="empty loading">불러오는 중…</div></main>
   </div>
 </div>
 <script>
@@ -385,6 +406,14 @@ function appModal({title, body, okText='확인', cancel=true, danger=false}){
 }
 const appConfirm = o => appModal(o);
 const appAlert = (title, body) => appModal({title, body, cancel:false});
+// 실패 알림의 본문 — 서버가 준 이유 + '그럼 뭘 하면 되나' 한 줄을 붙인다.
+const errMsg = r => {
+  const why = (r && r.error) || '서버가 이유를 알려 주지 않았습니다.';
+  const next = why === '서버에 연결하지 못했습니다'
+    ? 'ohmyPM 서버가 꺼져 있을 수 있습니다. scripts 폴더의 run_ohmypm.cmd로 다시 켠 뒤 이 화면을 새로고침해 주세요.'
+    : '잠시 후 다시 시도해 주세요. 계속되면 logs 폴더의 server_console.log에 자세한 이유가 남습니다.';
+  return why + '\n\n' + next;
+};
 
 let PROJECTS = [];                      // 마지막 로드 캐시
 let pollTimer = null;                   // 뷰별 자동 새로고침 타이머(하나만)
@@ -409,9 +438,10 @@ function renderSidebar(){
   document.getElementById('rooms').innerHTML = ordered.map(p=>{
     const active = cur === '#/room/'+p.path ? ' active':'';
     return `<div class="room-item${active}" data-room="${escAttr(p.path)}" title="${escAttr(p.path)}">`+
-           `<span class="dot${REPORTED.has(p.path)?' on':''}"></span><span class="rname">${esc(p.name)}</span>`+
+           (REPORTED.has(p.path) ? '<span class="dot on" title="최근 주간보고에 이 프로젝트 몫이 있음"></span><span class="sr">최근 주간보고 있음, </span>'
+                                 : '<span class="dot"></span>')+`<span class="rname">${esc(p.name)}</span>`+
            `<span class="rx" data-exclude="${escAttr(p.path)}" title="관리 제외">x</span></div>`;
-  }).join('') || '<div style="color:#7a808b;font-size:12px;padding:8px 18px">스캔을 눌러보세요</div>';
+  }).join('') || '<div style="color:#9aa0aa;font-size:12px;padding:8px 18px">스캔을 눌러보세요</div>';
   document.querySelectorAll('[data-nav]').forEach(el=>el.classList.remove('active'));
   const view = (cur.startsWith('#/board') || cur.startsWith('#/post')) ? 'board'
              : cur.startsWith('#/weekly') ? 'weekly'
@@ -441,7 +471,7 @@ function setStatus(html){ const st=document.getElementById('hdr-status'); st.hid
 async function renderDashboard(){
   setHeader('대시보드', {summary:'<span>불러오는 중…</span>',
     buttons:[{id:'btn-scan', label:'스캔(설치)', onclick:'doScan()'}]});
-  document.getElementById('view').innerHTML = '<div class="empty">불러오는 중…</div>';
+  document.getElementById('view').innerHTML = '<div class="empty loading">불러오는 중…</div>';
   clearInterval(pollTimer);
   const [agents, weekly, sess] = await Promise.all([
     getJ('/api/agents').catch(()=>[]), getJ('/api/weekly').catch(()=>[]), getJ('/api/board/session').catch(()=>null)]);
@@ -472,7 +502,7 @@ async function doScan(){
   const b = document.getElementById('btn-scan'); if(b){ b.disabled=true; b.textContent='스캔 중…'; }
   const r = await postJ('/api/scan');
   await loadData();
-  if(r.projects===undefined){ appAlert('스캔 실패', r.error||'알 수 없는 오류'); }
+  if(r.projects===undefined){ appAlert('스캔 실패', errMsg(r)); }
   else appAlert('스캔 완료', `프로젝트 ${r.projects}개\n새로 설치 ${r.installed} · 이미 설치 ${r.already} · 자기 자신 제외 ${r.self_skipped}`+
     (r.errors&&r.errors.length?`\n실패 ${r.errors.length}: ${r.errors.map(e=>e.name).join(', ')}`:''));
   route();
@@ -480,7 +510,7 @@ async function doScan(){
 
 // ── 채팅 공용 ─────────────────────────────────────────
 function chatMarkup(ph){
-  return `<div class="chat"><div class="stream" id="stream"><div class="chat-empty">불러오는 중…</div></div>`+
+  return `<div class="chat"><div class="stream" id="stream"><div class="chat-empty loading">불러오는 중…</div></div>`+
     `<div class="composer"><textarea id="msg-input" rows="1" placeholder="${escAttr(ph||'')}" autocomplete="off"></textarea></div></div>`;
 }
 function bindChat(room, agentRoom, sender){
@@ -527,7 +557,7 @@ function pendingMarkup(room, lastMsg, who){
 async function retryRoomReply(room){
   room = decodeURIComponent(room);
   const r = await postJ('/api/room-retry', {room});
-  if(!r.ok){ appAlert('다시 요청 실패', r.error||'알 수 없는 오류'); return; }
+  if(!r.ok){ appAlert('다시 요청 실패', errMsg(r)); return; }
   document.querySelectorAll('.msg.pending').forEach(el=>{ el.classList.remove('stuck'); el.textContent = '다시 요청했습니다 — 담당이 답하는 중…'; });
 }
 
@@ -541,7 +571,7 @@ function renderBoard(){
   setHeader('게시판', {buttons: boardButtons(null)});
   document.getElementById('view').innerHTML =
     '<div class="note-line" style="padding-bottom:12px">토론 시작을 누르면 담당 에이전트들이 정한 시간 동안 글을 쓰고, 서로 읽고 댓글·좋아요를 남기고, 글쓴이가 답합니다. 끝나면 각 담당이 받은 반응을 복기해 \'배운 것\'으로 남깁니다.</div>'+
-    '<div id="board">불러오는 중…</div>';
+    '<div id="board"><div class="empty loading">불러오는 중…</div></div>';
   fillBoardList();
   clearInterval(pollTimer);
   pollTimer = setInterval(fillBoardList, 5000);
@@ -592,7 +622,7 @@ async function startSession(){
   const minutes = parseInt((document.getElementById('bs-min')||{}).value||'30',10);
   const b = document.getElementById('btn-start'); if(b){ b.disabled=true; b.textContent='시작하는 중…'; }
   const r = await postJ('/api/board/session', {minutes});
-  if(!r.ok){ appAlert('토론을 시작하지 못함', r.error||'알 수 없는 오류'); if(b){ b.disabled=false; b.textContent='토론 시작'; } }
+  if(!r.ok){ appAlert('토론을 시작하지 못함', errMsg(r)); if(b){ b.disabled=false; b.textContent='토론 시작'; } }
   SESSION = null; fillBoardList();
 }
 async function stopSession(){
@@ -600,14 +630,14 @@ async function stopSession(){
     body:'지금 돌고 있는 담당의 호출은 끝까지 가고, 새 호출만 멈춥니다. 끝난 뒤 복기는 하지 않습니다.'});
   if(!ok) return;
   const r = await postJ('/api/board/session/stop');
-  if(!r.ok) appAlert('중지 실패', r.error||'알 수 없는 오류');
+  if(!r.ok) appAlert('중지 실패', errMsg(r));
   SESSION = null; fillBoardList();
 }
 
 // ── 글 상세 ───────────────────────────────────────────
 function renderPost(id){
   setHeader('게시판', {});
-  document.getElementById('view').innerHTML = '<div id="post">불러오는 중…</div>';
+  document.getElementById('view').innerHTML = '<div id="post"><div class="empty loading">불러오는 중…</div></div>';
   clearInterval(pollTimer);
   fillPost(id);
 }
@@ -667,9 +697,9 @@ let WEEKLY = [], WEEKLY_IDX = 0, WEEKLY_SEL = -1;   // WEEKLY_SEL: -1 = 전체 �
 function renderWeekly(){
   setHeader('주간보고', {buttons:[{id:'btn-weekly', label:'주간보고 실행', onclick:'runWeekly()'}]});
   document.getElementById('view').innerHTML =
-    '<div class="wk-wrap"><div class="datebar" id="w-datebar">불러오는 중…</div>'+
+    '<div class="wk-wrap"><div class="datebar" id="w-datebar"><span class="loading">불러오는 중…</span></div>'+
     '<div class="wk-body"><div class="wk-nav" id="w-nav"></div>'+
-    '<div class="wk-main" id="w-main"><div class="chat-empty">불러오는 중…</div></div>'+
+    '<div class="wk-main" id="w-main"><div class="chat-empty loading">불러오는 중…</div></div>'+
     '<div class="wk-side" id="w-side"></div></div></div>';
   clearInterval(pollTimer); clearInterval(tickTimer);
   fillWeekly();
@@ -709,7 +739,7 @@ async function openWeekly(i){
   document.querySelectorAll('#w-nav .wk-item').forEach((el,k)=>el.classList.toggle('active', k===i+1));
   const d = WEEKLY[WEEKLY_IDX]; if(!d) return;
   const main = document.getElementById('w-main'); if(!main) return;
-  main.innerHTML = '<div class="chat-empty">불러오는 중…</div>';
+  main.innerHTML = '<div class="chat-empty loading">불러오는 중…</div>';
   if(i < 0){
     const msgs = await getJ('/api/messages?room='+encodeURIComponent(d.overall_room)).catch(()=>[]);
     main.innerHTML = `<div class="wk-h">전체 요약 · ${esc(d.date)}</div><div class="wk-scroll"><div class="md">${md(msgs.length ? msgs[msgs.length-1].body : '(보고 본문 없음)')}</div></div>`;
@@ -722,7 +752,7 @@ async function openWeekly(i){
   const who = a => a==='pm' ? 'PM' : a==='agent' ? esc(p.name)+' 담당' : '이번 주 몫';
   const bubbles = msgs.length ? msgs.map(m=>`<div class="msg ${m.author==='pm'?'pm':m.author==='agent'?'agent':'final'}"><div class="who">${who(m.author)}</div>`+
       `<div class="md">${md(m.body)}</div><div class="ts">${esc(fmtTs(m.created_at))}</div></div>`).join('')
-    : '<div class="chat-empty">대화 없음</div>';
+    : '<div class="chat-empty">이번 주 점검 대화 기록이 없습니다.<br>커밋이 없던 프로젝트는 점검 대화를 건너뜁니다.</div>';
   main.innerHTML = `<div class="wk-h">${esc(p.name)} · ${esc(d.date)} <span class="wk-meta">${p.written?'<span class="tbadge green">ohmypm/weekly.md 기록</span>':'<span class="tbadge gray">미설치 — 파일 기록 안 함</span>'}</span></div>`+
     `<div class="wk-scroll stream-col">${bubbles}</div>`;
   document.getElementById('w-side').innerHTML = `<div class="side-h">${esc(p.name)} 담당과 대화</div>`+chatMarkup('보고 내용을 담당에게 바로 물어보거나 시키세요');
@@ -731,7 +761,7 @@ async function openWeekly(i){
 async function runWeekly(){
   const b = document.getElementById('btn-weekly'); if(b){ b.disabled=true; b.textContent='작성 중…'; }
   const r = await postJ('/api/weekly/run');
-  if(!r.ok){ appAlert('실행 실패', r.error||'알 수 없는 오류'); if(b){ b.disabled=false; b.textContent='주간보고 실행'; } }
+  if(!r.ok){ appAlert('실행 실패', errMsg(r)); if(b){ b.disabled=false; b.textContent='주간보고 실행'; } }
   pollWeeklyJob();
 }
 
@@ -747,8 +777,8 @@ function renderLab(){
   setHeader('랩실', {buttons:[{id:'btn-lab', label:'새 조사 실행', onclick:'runLab()', ghost:true}]});
   document.getElementById('view').innerHTML =
     '<div class="lab-intro">모아 둔 자료를 읽고, 프로젝트에 쓸 만한 아이디어를 살펴보세요.</div>'+
-    '<div id="lab-top">불러오는 중…</div><nav class="lab-tabs" id="lab-tabs" aria-label="랩실 자료"></nav>'+
-    '<div class="lab-content" id="lab-content">불러오는 중…</div>';
+    '<div id="lab-top"><div class="empty loading">불러오는 중…</div></div><nav class="lab-tabs" id="lab-tabs" aria-label="랩실 자료"></nav>'+
+    '<div class="lab-content" id="lab-content"><div class="empty loading">불러오는 중…</div></div>';
   clearInterval(pollTimer);
   loadLab();
 }
@@ -788,7 +818,7 @@ async function loadLab(){
     const sub = tabs.length>1 ? `<div class="etabs">${tabs.map((t,i)=>`<button class="etab${i===LAB_SUB?' on':''}" onclick="LAB_SUB=${i};loadLab()">${esc(t.title)}</button>`).join('')}</div>` : '';
     const text = tabs.length ? tabs[LAB_SUB].wiki : '';
     const html = '<div class="wiki"><div class="lab-label">날짜별 조사 기록</div>'+sub+
-      (text ? `<div class="md wiki-body">${md(text)}</div>` : '<div class="empty">아직 조사 기록이 없습니다.</div>')+'</div>';
+      (text ? `<div class="md wiki-body">${md(text)}</div>` : '<div class="empty">아직 조사 기록이 없습니다.<br>오른쪽 위 새 조사 실행을 누르거나, 주 1회 자동 조사를 기다리면 여기에 쌓입니다.</div>')+'</div>';
     if(content.dataset.source!==html){ content.innerHTML=html; content.dataset.source=html; }
   }else if(LAB_PANEL==='proposals'){
     if(!document.getElementById('lab-props')) content.innerHTML='<div class="props" id="lab-props"></div>';
@@ -838,7 +868,7 @@ async function sendLabRequest(rid){
   const b = document.getElementById('lab-req-btn'); if(b) b.disabled = true;
   const r = await postJ('/api/lab/'+encodeURIComponent(rid)+'/requests', {topic, detail:(d.value||'').trim()||null});
   if(b) b.disabled = false;
-  if(!r.ok){ appAlert('요청 실패', r.error||'알 수 없는 오류'); return; }
+  if(!r.ok){ appAlert('요청 실패', errMsg(r)); return; }
   t.value = ''; d.value = '';
   fillLabRequests(rid);
 }
@@ -908,7 +938,7 @@ async function runLab(){
   const r = LAB[LAB_IDX]; if(!r) return;
   const b = document.getElementById('btn-lab'); if(b){ b.disabled=true; b.textContent='조사 중…'; }
   const res = await postJ('/api/lab/'+r.id+'/run');
-  if(!res.ok){ appAlert('조사를 시작하지 못함', res.error||'알 수 없는 오류'); if(b){ b.disabled=false; b.textContent='조사 실행'; } }
+  if(!res.ok){ appAlert('조사를 시작하지 못함', errMsg(res)); if(b){ b.disabled=false; b.textContent='조사 실행'; } }
   loadLab();
 }
 
@@ -918,7 +948,7 @@ function renderAgents(){
   setHeader('에이전트', {});
   document.getElementById('view').innerHTML =
     '<div class="note-line" style="padding-bottom:12px">담당 에이전트별 누적 점수(글 좋아요·조회 − 싫어요 + 댓글 좋아요 − 싫어요)와 토론 끝에 복기한 \'배운 것\'. 행을 누르면 회차별 이력이 아래에 펼쳐집니다. 모델 열에서 이 담당의 headless 모델을 바꿀 수 있습니다.</div>'+
-    '<div id="agents">불러오는 중…</div><div id="agent-hist"></div>';
+    '<div id="agents"><div class="empty loading">불러오는 중…</div></div><div id="agent-hist"></div>';
   clearInterval(pollTimer);
   fillAgents();
 }
@@ -926,7 +956,7 @@ async function fillAgents(){
   let list = [];
   try{ list = await getJ('/api/agents'); }catch(e){ return; }
   const box = document.getElementById('agents'); if(!box) return;
-  if(!list.length){ box.innerHTML = '<div class="empty">담당 없음</div>'; return; }
+  if(!list.length){ box.innerHTML = '<div class="empty">아직 담당이 없습니다.<br>대시보드에서 스캔(설치)을 누르면 프로젝트마다 담당이 생깁니다.</div>'; return; }
   AGENT_LIST = list;
   const MODELS = [['','기본(sonnet)'],['opus','opus'],['sonnet','sonnet'],['haiku','haiku']];
   box.innerHTML = '<table class="ptable"><thead><tr><th>#</th><th>담당(프로젝트)</th><th>누적 점수</th><th>최근 회차</th><th>배운 것(최근)</th><th>모델</th></tr></thead><tbody>'+
@@ -942,7 +972,7 @@ async function showAgentHist(i){
   const a = AGENT_LIST[i]; if(!a) return;
   AGENT_SEL = a.project; fillAgents();
   const box = document.getElementById('agent-hist'); if(!box) return;
-  box.innerHTML = '<div class="note-line">불러오는 중…</div>';
+  box.innerHTML = '<div class="note-line loading" style="justify-content:flex-start">불러오는 중…</div>';
   const rows = await getJ('/api/scores?project='+encodeURIComponent(a.project)).catch(()=>[]);
   box.innerHTML = `<section style="margin-top:18px"><h2>${esc(a.name)} 회차 이력</h2>`+scoreTable(rows)+`</section>`;
 }
@@ -956,7 +986,7 @@ function scoreTable(rows){
 async function setAgentModel(idx, model){
   const project = (AGENT_LIST[idx]||{}).project; if(!project) return;
   const r = await postJ('/api/agents/model', {project, model});
-  if(!r.ok) appAlert('모델 변경 실패', r.error||'알 수 없는 오류');
+  if(!r.ok) appAlert('모델 변경 실패', errMsg(r));
   fillAgents();
 }
 
@@ -966,7 +996,7 @@ function renderPorts(){
   const opts = PROJECTS.map(p=>`<option value="${escAttr(p.path)}">${esc(p.name)}</option>`).join('');
   document.getElementById('view').innerHTML =
     '<div class="note-line" style="padding-bottom:12px">지금 열려 있는 포트를 전부 보여주고, 프로세스 명령줄의 경로로 어느 프로젝트 것인지 맞춥니다. 등록하면 떠 있는지·충돌 여부를 보고, 실행 명령을 함께 등록하면 여기서 켜고 끌 수 있습니다.</div>'+
-    '<div id="ports">불러오는 중…</div>'+
+    '<div id="ports"><div class="empty loading">불러오는 중…</div></div>'+
     `<div class="pform"><div class="pform-h">직접 등록</div><select id="pf-proj">${opts}</select>`+
       `<input id="pf-port" type="number" placeholder="포트(예: 8000)" style="width:150px">`+
       `<input id="pf-label" placeholder="용도(예: 웹 대시보드)" style="width:180px">`+
@@ -1052,7 +1082,7 @@ function renderRoom(path){
   const name = p ? p.name : path;
   setHeader(name, {});
   document.getElementById('view').innerHTML =
-    `<div class="room-layout"><div class="room-main" id="room-main"><div class="empty">불러오는 중…</div></div>`+
+    `<div class="room-layout"><div class="room-main" id="room-main"><div class="empty loading">불러오는 중…</div></div>`+
     `<div class="room-side"><div class="side-h">${esc(name)} 담당 에이전트</div>${chatMarkup('담당에게 물어보거나 시키세요')}</div></div>`;
   fillRoomMain(path);
   bindChat(path, true);
@@ -1135,7 +1165,7 @@ async function addCard(enc){
   const t = document.getElementById('kadd-title'); const title = (t.value||'').trim(); if(!title) return;
   const r = await postJ('/api/cards', {project:path, title, status:document.getElementById('kadd-status').value,
     due:document.getElementById('kadd-due').value||null});
-  if(!r.ok){ appAlert('카드 추가 실패', r.error||'알 수 없는 오류'); return; }
+  if(!r.ok){ appAlert('카드 추가 실패', errMsg(r)); return; }
   fillKanban(path);
 }
 async function moveCard(id, status){ await postJ('/api/cards/'+id, {status}); fillKanban(CUR_ROOM); }
@@ -1148,7 +1178,7 @@ async function delCard(id){
 async function installProject(enc){
   const path = decodeURIComponent(enc);
   const r = await postJ('/api/projects/install', {path});
-  if(!r.ok){ appAlert('설치 실패', r.error||'알 수 없는 오류'); return; }
+  if(!r.ok){ appAlert('설치 실패', errMsg(r)); return; }
   await loadData(); fillRoomMain(path);
 }
 async function uninstallProject(enc){
@@ -1157,7 +1187,7 @@ async function uninstallProject(enc){
     body:'ohmypm/ 폴더를 통째로 지우고(안에 든 주간보고·제안·상태 메모 포함), CLAUDE.md·AGENTS.md의 ohmyPM 블록을 뗍니다.\n프로젝트의 다른 파일은 건드리지 않습니다.'});
   if(!ok) return;
   const r = await postJ('/api/projects/uninstall', {path});
-  if(!r.ok){ appAlert('제거 실패', r.error||'알 수 없는 오류'); return; }
+  if(!r.ok){ appAlert('제거 실패', errMsg(r)); return; }
   await loadData(); fillRoomMain(path);
 }
 
@@ -1185,12 +1215,31 @@ document.addEventListener('click', e=>{
   const el = e.target.closest('[data-room]');
   if(el) go('#/room/'+encodeURIComponent(el.getAttribute('data-room')));
 });
+
+// ── 키보드로도 누를 수 있게 ─────────────────────────────────
+// 메뉴·프로젝트 목록·칸반 화살표처럼 '버튼이 아닌 칸에 클릭만 단 것'은 Tab 키로 닿지 않았다.
+// 화면이 다시 그려질 때마다 그런 칸을 찾아 Tab 순서에 넣고(tabindex), 화면 읽기 프로그램에는
+// '버튼'이라고 알린다. Enter나 스페이스를 누르면 클릭한 것과 똑같이 동작한다.
+const CLICKABLE = '[onclick]:not(button):not(a[href]):not(input):not(textarea):not(select),[data-room],[data-exclude],[data-reg-port]';
+function markClickable(root){
+  root.querySelectorAll(CLICKABLE).forEach(el=>{
+    if(el.hasAttribute('tabindex')) return;
+    el.tabIndex = 0;
+    if(!el.hasAttribute('role') && el.tagName !== 'TR') el.setAttribute('role','button');
+  });
+}
+new MutationObserver(()=>markClickable(document.body)).observe(document.body, {childList:true, subtree:true});
+document.addEventListener('keydown', e=>{
+  if((e.key==='Enter' || e.key===' ') && e.target.matches && e.target.matches(CLICKABLE)){
+    e.preventDefault(); e.target.click();
+  }
+});
 async function excludeProject(path){
   const ok = await appConfirm({title:`'${nameOfPath(path)}' 관리 제외`, okText:'제외', danger:true,
     body:'프로젝트 폴더는 그대로 둡니다(설치된 ohmypm/ 폴더도 남습니다 — 먼저 룸에서 설치 제거를 하세요).\nohmyPM의 게시판 글/댓글·대화 기록은 삭제됩니다.\n재스캔해도 다시 올라오지 않습니다.'});
   if(!ok) return;
   const r = await postJ('/api/projects/remove', {path});
-  if(!r.ok){ appAlert('제외 실패', r.error||'알 수 없는 오류'); return; }
+  if(!r.ok){ appAlert('제외 실패', errMsg(r)); return; }
   await loadData(); go('#/');
 }
 
