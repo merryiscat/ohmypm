@@ -365,7 +365,10 @@ function md(src){
   };
   const out=[]; let list=false; let rows=[];
   // 표 — '| 가 | 나 |' 줄이 이어지면 모았다가 한 번에 <table>로. 둘째 줄이 '|---|'면 첫 줄이 머리글.
-  const cells = r => r.trim().replace(/^\|/,'').replace(/\|$/,'').split('|').map(c=>inl(c.trim()));
+  // 칸 안의 '\|'와 `코드` 속 '|'는 칸 나눔이 아니다 — 잠시 \u0001로 숨겼다가 나눈 뒤 되돌린다.
+  const cells = r => r.trim().replace(/^\|/,'').replace(/\|$/,'')
+    .replace(/\\\|/g,'\u0001').replace(/`[^`]*`/g, c=>c.replace(/\|/g,'\u0001'))
+    .split('|').map(c=>inl(c.trim().replace(/\u0001/g,'|')));
   const flushTable = ()=>{
     if(!rows.length) return;
     let head = null;
@@ -378,7 +381,8 @@ function md(src){
   const close=()=>{ if(list){ out.push('</ul>'); list=false; } };
   for(const raw of (src||'').split('\n')){
     const line = raw.replace(/\s+$/,''); let m;
-    if(/^\s*\|.*\|$/.test(line)){ close(); rows.push(line); continue; }
+    // 표 시작은 '|'로 열고 닫힌 줄만. 이미 표 안이면 끝 '|'를 빠뜨린 줄도 같은 표로 받는다.
+    if(/^\s*\|.*\|$/.test(line) || (rows.length && /^\s*\|/.test(line))){ close(); rows.push(line); continue; }
     flushTable();
     if(m = line.match(/^(#{1,6})\s+(.*)$/)){ close(); out.push(`<div class="mh">${inl(m[2])}</div>`); }
     else if(m = line.match(/^\s*[-*]\s+(.*)$/)){ if(!list){ out.push('<ul>'); list=true; } out.push(`<li>${inl(m[1])}</li>`); }
@@ -399,9 +403,20 @@ const fmtCost = c => {
   if(s < 1){ const pct = s*100; return `1세션의 ${pct < 10 ? pct.toFixed(1) : Math.round(pct)}%`; }
   return `${s.toFixed(1)}세션` + (s >= 4 ? ` (약 ${(s/4).toFixed(1)}일)` : '');
 };
+// 주기적으로 다시 그리는 목록은 내용이 바뀔 때만 갈아 끼운다 — 매번 갈면 Tab으로 옮겨 둔 위치(포커스)와
+// 스크롤이 날아간다. 바꿨으면 true.
+const setHTML = (el, html) => {
+  if(el.dataset.source === html) return false;
+  el.innerHTML = html; el.dataset.source = html; return true;
+};
 const getJ = (url) => fetch(url).then(r=>{ if(!r.ok) throw new Error('HTTP '+r.status); return r.json(); });   // 404 등은 예외 → 호출부 catch가 빈 값으로 처리
 const postJ = (url, body) => fetch(url,{method:'POST',headers:{'Content-Type':'application/json'},
-  body: body===undefined ? undefined : JSON.stringify(body)}).then(r=>r.json()).catch(()=>({ok:false,error:'서버에 연결하지 못했습니다'}));
+  body: body===undefined ? undefined : JSON.stringify(body)}).then(async r=>{
+    // 서버가 죽어 'Internal Server Error' 같은 글자를 주면 JSON이 아니다 — 연결 실패와 구별해 HTTP 번호로 알린다.
+    let j; try{ j = await r.json(); }catch(e){ j = {}; }
+    if(!r.ok){ j.ok = false; j.status = r.status; j.error = j.error || j.detail || `서버 오류 (HTTP ${r.status})`; }
+    return j;
+  }).catch(()=>({ok:false, offline:true, error:'서버에 연결하지 못했습니다'}));
 
 // ── 확인/알림 모달 ──────────────────────────────────────
 function appModal({title, body, okText='확인', cancel=true, danger=false}){
@@ -428,7 +443,7 @@ const appAlert = (title, body) => appModal({title, body, cancel:false});
 // 실패 알림의 본문 — 서버가 준 이유 + '그럼 뭘 하면 되나' 한 줄을 붙인다.
 const errMsg = r => {
   const why = (r && r.error) || '서버가 이유를 알려 주지 않았습니다.';
-  const next = why === '서버에 연결하지 못했습니다'
+  const next = r && r.offline
     ? 'ohmyPM 서버가 꺼져 있을 수 있습니다. scripts 폴더의 run_ohmypm.cmd로 다시 켠 뒤 이 화면을 새로고침해 주세요.'
     : '잠시 후 다시 시도해 주세요. 계속되면 logs 폴더의 server_console.log에 자세한 이유가 남습니다.';
   return why + '\n\n' + next;
@@ -555,8 +570,7 @@ async function loadMessages(room, silent, agentRoom){
   }).join('') : '<div class="chat-empty">아직 대화가 없습니다. 첫 메시지를 남겨보세요.</div>';
   if(agentRoom && msgs.length && msgs[msgs.length-1].author === 'user')
     html += pendingMarkup(room, msgs[msgs.length-1], '에이전트');
-  stream.innerHTML = html;
-  if(!silent || atBottom) stream.scrollTop = stream.scrollHeight;
+  if(setHTML(stream, html) && (!silent || atBottom)) stream.scrollTop = stream.scrollHeight;
 }
 async function sendMsg(room, agentRoom){
   const input = document.getElementById('msg-input');
@@ -629,13 +643,13 @@ async function fillBoardList(){
   if(isLive && !document.getElementById('btn-stop')) document.getElementById('hdr-actions').innerHTML = boardButtons(s).map(b=>`<button id="${b.id}" class="danger"${b.disabled?' disabled':''} onclick="${b.onclick}">${esc(b.label)}</button>`).join('');
   setStatus(statusLine(s));
   clearInterval(tickTimer); if(isLive){ tickLeft(); tickTimer = setInterval(tickLeft, 1000); }
-  if(!posts.length){ box.innerHTML = '<div class="empty">아직 글이 없습니다 — 토론 시작을 누르면 담당들이 글을 올립니다</div>'; return; }
-  box.innerHTML = posts.map(p=>{
+  if(!posts.length){ setHTML(box, '<div class="empty">아직 글이 없습니다 — 토론 시작을 누르면 담당들이 글을 올립니다</div>'); return; }
+  setHTML(box, posts.map(p=>{
     const n = (p.comments||[]).length;
     const day = (p.day || p.created_at || '').slice(0,10);
     return `<div class="prow" onclick="go('#/post/${p.id}')"><span class="prow-t">${esc(p.title)}</span>`+
       `<span class="prow-meta">${esc(day)} · ${esc(p.author)} · 조회 ${p.views||0} · 좋아요 ${p.likes||0}${(p.dislikes||0)?' · 싫어요 '+p.dislikes:''} · 댓글 <span class="c">${n}</span></span></div>`;
-  }).join('');
+  }).join(''));
 }
 async function startSession(){
   const minutes = parseInt((document.getElementById('bs-min')||{}).value||'30',10);
@@ -1053,10 +1067,11 @@ async function fillPorts(){
         `<td class="reg-cell">${x.project?`<span class="reg" data-reg-port="${x.port}" data-reg-proj="${escAttr(x.project)}">＋ ${esc(x.project_name)}으로 등록</span>`:`<span class="reg" onclick="inlineReg(${x.port}, this)">＋ 등록</span>`}</td></tr>`).join('')+
       '</tbody></table>';
   }
-  box.innerHTML = html;
+  setHTML(box, html);
 }
 function inlineReg(port, el){
   portEditing = true;
+  delete document.getElementById('ports').dataset.source;   // 칸을 직접 바꾸므로, 편집이 끝나면 목록을 반드시 다시 그리게
   const td = el.closest('td');
   const opts = PROJECTS.map(p=>`<option value="${escAttr(p.path)}">${esc(p.name)}</option>`).join('');
   td.innerHTML = `<select class="ireg-proj">${opts}</select><input class="ireg-label" placeholder="용도(선택)"><input class="ireg-cmd" placeholder="실행 명령(선택)">`+
