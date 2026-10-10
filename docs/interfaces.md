@@ -16,7 +16,7 @@
 | POST `/board/session` | 토론 시작 | `{minutes: 10|30|60, paths?}` → 세션 스레드 |
 | GET `/board/session` · POST `/board/session/stop` · GET `/board/sessions` | 현재 세션(남은 초·단계·통계) / 중지 / 이력 | |
 | GET `/posts` · GET `/posts/{id}` · POST `/posts/{id}/comments` · `/like` · `/dislike` · POST `/comments/{id}/react` | 게시판 읽기와 사용자 반응 | |
-| GET `/weekly` · POST `/weekly/run` · GET `/jobs/weekly` | 주간보고 목록 / 실행(백그라운드 — 점검 대화 포함이라 수십 분) / 상태 | 프로젝트 방 `weekly::날짜::path` = PM(`pm`)·담당(`agent`) 대화 + 맨 끝 몫(`ohmyPM`) |
+| GET `/weekly` · POST `/weekly/run` · GET `/jobs/weekly` | 주간보고 목록 / 실행(백그라운드 — 점검 대화 포함이라 수십 분) / 상태 | 프로젝트 방 `weekly::날짜::path` = PM(`pm`)·담당(`agent`) 대화 + 변경 리뷰(`review`) + 맨 끝 몫(`ohmyPM`) |
 | GET `/cards?project=` · POST `/cards` · POST `/cards/{id}` · DELETE `/cards/{id}` | 칸반 카드 목록(+칸 목록) / 추가 / 고치기·옮기기 / 지우기 | status = needs_user·todo·doing·waiting·done. '지연'은 계산(기한 지남 + 미완료) |
 | GET `/lab` · GET `/lab/{id}/wiki` · POST `/lab/{id}/run` · POST `/lab/{id}/ask` | 연구원 명부 / 위키 탭 / 조사 실행 / 자문 | id = models·design·skills |
 | GET `/lab/{id}/notes` · GET `/lab/{id}/notes/{key}/assets/{filename}` | 정리 문서(본문·첨부 목록) / 영상·이미지 | `docs/lab/notes/{id}/*.md`, 문서 이름으로 시작하는 첨부만 허용. 자문은 정리 문서 전문도 읽음 |

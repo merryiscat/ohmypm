@@ -4,6 +4,9 @@
   ① 점검 대화 — 활동이 있는 프로젝트마다 PM이 담당에게 묻고 담당이 자기 폴더를 읽어 답한다
      (옛 일간보고 방식, 2026-10-10 사용자 요청). 방 `weekly::{날짜}::{path}`에 author 'pm'·'agent'로 쌓인다.
      조용한 프로젝트는 물을 게 없으니 대화하지 않는다.
+  ①-2 변경 리뷰 — 커밋이 있는 프로젝트마다 이번 주 diff를 Ponytail 리뷰(/ponytail-review)로 본다
+     (2026-10-11 사용자 결정). 플러그인은 설치하지 않고 그 호출에만 --plugin-dir로 싣는다. 읽기 전용.
+     같은 방에 author 'review'로 남고, 종합에도 넘겨 '꼭 고칠 것'이 요약에 오르게 한다.
   ② 종합 — 팩트 + 대화를 근거로 LLM 1콜(JSON). 코드가 JSON을 프로젝트별로 나눠 저장한다:
      - 전체 보고 → messages 방 `weekly::{날짜}` (author 'ohmyPM')
      - 프로젝트별 몫 → 같은 방 `weekly::{날짜}::{path}` 맨 끝(author 'ohmyPM')
@@ -24,7 +27,7 @@ from src.cc.client import run_headless_ex
 from src.cc.common import is_self_project, neutral_cwd, parse_json_object, tool_commit
 from src.cc.permissions import NEVER_ALLOW, tools_for
 from src.cc.prompts import load, render
-from src.config.settings import ensure_env
+from src.config.settings import ensure_env, settings
 from src.db import agents as agents_db
 from src.db import messages as messages_db
 from src.install import OHMYPM_DIR, is_installed
@@ -40,6 +43,9 @@ MAX_ROUNDS = 3        # 점검 대화에서 PM이 담당에게 묻는 최대 횟
 AGENT_TIMEOUT = 240   # 담당 답 제한 시간(초) — 폴더를 읽고 답하므로 여유 있게
 CONVO_WORKERS = 3     # 점검 대화를 동시에 돌릴 프로젝트 수
 CONVO_LIMIT = 1500    # 종합 프롬프트에 넣을 프로젝트별 대화 길이(자)
+REVIEW_TIMEOUT = 420  # 변경 리뷰 제한 시간(초) — 주변 코드까지 읽으므로 넉넉히
+DIFF_LIMIT = 60000    # 리뷰에 넘길 이번 주 diff 길이(자). 넘으면 자르고 나머지는 리뷰가 파일을 직접 읽는다
+REVIEW_LIMIT = 1500   # 종합 프롬프트에 넣을 프로젝트별 리뷰 길이(자)
 
 
 def _room(date: str, path: str | None = None) -> str:
@@ -101,16 +107,76 @@ def _project_facts(p: dict) -> str:
     return "\n".join(lines)
 
 
-def _facts_text(collected: list[dict], convos: dict[str, str] | None = None) -> str:
-    """종합 프롬프트용 — 프로젝트별 팩트, 점검 대화가 있으면 그 아래에 붙인다."""
+def _facts_text(collected: list[dict], convos: dict[str, str] | None = None,
+                reviews: dict[str, str] | None = None) -> str:
+    """종합 프롬프트용 — 프로젝트별 팩트, 점검 대화·변경 리뷰가 있으면 그 아래에 붙인다."""
     lines: list[str] = []
     for p in collected:
         lines += [f"### {p['name']}", _project_facts(p)]
         convo = (convos or {}).get(p["path"])
         if convo:
             lines += ["[PM과 담당의 점검 대화]", convo[:CONVO_LIMIT]]
+        review = (reviews or {}).get(p["path"])
+        if review:
+            lines += ["[이번 주 변경 리뷰]", review[:REVIEW_LIMIT]]
         lines.append("")
     return "\n".join(lines)
+
+
+def _ponytail_dir() -> str | None:
+    """Ponytail 플러그인 폴더(.claude-plugin/plugin.json이 있는 곳). 없으면 None — 리뷰를 건너뛴다."""
+    d = Path(settings.ponytail_dir) if settings.ponytail_dir else \
+        Path.home() / ".claude" / "plugins" / "marketplaces" / "ponytail"
+    return str(d) if (d / ".claude-plugin" / "plugin.json").exists() else None
+
+
+EMPTY_TREE = "4b825dc642cb6eb9a060e54bf8d69288fbee4904"   # git의 '빈 폴더' — 7일보다 젊은 저장소의 기준점
+
+
+def _git(path: str, *args: str) -> str:
+    r = subprocess.run(["git", *args], cwd=path, capture_output=True, text=True, timeout=GIT_TIMEOUT,
+                       encoding="utf-8", errors="replace", creationflags=NO_WINDOW)
+    return (r.stdout or "").strip() if r.returncode == 0 else ""
+
+
+def _week_diff(path: str, days: int) -> str:
+    """최근 N일 동안의 '합친' 변경 — 일주일 전 시점과 지금의 차이(git diff) + 커밋 제목 목록.
+    커밋별로 늘어놓으면 같은 곳을 여러 번 고친 주에 금방 길어져 앞 커밋만 실린다(2026-10-11 실측:
+    22개 중 7개). ohmypm/ 폴더(도구가 쓰는 곳)는 뺀다. 길면 자른다."""
+    base = _git(path, "rev-list", "-1", f"--before={days} days ago", "HEAD") or EMPTY_TREE
+    log = _git(path, "log", f"{base}..HEAD" if base != EMPTY_TREE else "HEAD", "--no-merges",
+               "--pretty=format:- %h %ad %s", "--date=format:%m-%d")
+    body = _git(path, "diff", "--no-color", base, "HEAD", "--", ".", f":(exclude){OHMYPM_DIR}")
+    if not body:
+        return ""
+    diff = f"[커밋 목록]\n{log}\n\n[일주일 동안 바뀐 내용 — 합친 diff]\n{body}"
+    if len(diff) > DIFF_LIMIT:
+        diff = diff[:DIFF_LIMIT] + f"\n\n(잘림 — 전체 {len(diff):,}자 중 앞 {DIFF_LIMIT:,}자만 실었다)"
+    return diff
+
+
+def review(p: dict, date: str, days: int = DAYS) -> str:
+    """이번 주 커밋을 Ponytail 리뷰로 본다(읽기 전용). 방에 남기고 리뷰 본문을 돌려준다.
+    커밋이 없거나, 플러그인이 없거나, 변경이 ohmypm/뿐이면 빈 문자열(조용히 건너뜀)."""
+    if not p["commits"]:
+        return ""
+    plugin = _ponytail_dir()
+    if not plugin:
+        logger.warning("[주간보고] Ponytail 플러그인 폴더가 없어 변경 리뷰를 건너뜀 (.env PONYTAIL_DIR)")
+        return ""
+    diff = _week_diff(p["path"], days)
+    if not diff:
+        return ""
+    prompt = render("weekly_review", project_name=p["name"], project_path=p["path"], days=str(days), diff=diff)
+    allowed, disallowed = tools_for("weekly_review")     # 미등록 태스크 → 읽기 전용 기본(Read·Grep·Glob)
+    meta = run_headless_ex(
+        prompt, cwd=neutral_cwd(), allowed_tools=allowed, disallowed_tools=disallowed,
+        timeout=REVIEW_TIMEOUT, add_dirs=[p["path"]], plugin_dirs=[plugin], task="weekly_review",
+    )
+    text = (meta.get("result") or "").strip()
+    messages_db.add_message(_room(date, p["path"]), "review",
+                            text or "(변경 리뷰 호출이 실패했다 — 이번 주는 리뷰 없이 넘어간다)")
+    return text
 
 
 def _transcript(turns: list[tuple[str, str]]) -> str:
@@ -175,22 +241,28 @@ def converse(p: dict, date: str, days: int = DAYS) -> str:
     return (_transcript(turns) + (f"\nPM 정리: {summary}" if summary else "")).strip()
 
 
-def _converse_all(collected: list[dict], date: str, days: int) -> dict[str, str]:
-    """활동이 있는 프로젝트만 점검 대화를 돌린다(동시 CONVO_WORKERS개). {path: 대화록}."""
+def _converse_all(collected: list[dict], date: str, days: int) -> tuple[dict[str, str], dict[str, str]]:
+    """활동이 있는 프로젝트만 점검 대화 → 변경 리뷰를 돌린다(동시 CONVO_WORKERS개).
+    반환: ({path: 대화록}, {path: 리뷰}). 둘 다 실패해도 나머지 프로젝트는 간다."""
     active = [p for p in collected if p["commits"] or p["state"]]
 
-    def work(p: dict) -> tuple[str, str]:
+    def work(p: dict) -> tuple[str, str, str]:
+        convo = rev = ""
         try:
-            return p["path"], converse(p, date, days)
+            convo = converse(p, date, days)
         except Exception as e:                       # 한 프로젝트가 실패해도 나머지는 간다
             logger.warning(f"[주간보고] {p['name']} 점검 대화 실패: {e}")
             messages_db.add_message(_room(date, p["path"]), "pm", f"(점검 대화 중 오류: {e})")
-            return p["path"], ""
+        try:
+            rev = review(p, date, days)
+        except Exception as e:
+            logger.warning(f"[주간보고] {p['name']} 변경 리뷰 실패: {e}")
+        return p["path"], convo, rev
 
     with ThreadPoolExecutor(max_workers=CONVO_WORKERS) as ex:
-        out = dict(ex.map(work, active))
-    logger.info(f"[주간보고] 점검 대화 {len(active)}개 프로젝트 완료")
-    return out
+        results = list(ex.map(work, active))
+    logger.info(f"[주간보고] 점검 대화·변경 리뷰 {len(active)}개 프로젝트 완료")
+    return {path: c for path, c, _ in results}, {path: r for path, _, r in results if r}
 
 
 def _render_report(date: str, data: dict) -> str:
@@ -254,8 +326,8 @@ def run_weekly_report(days: int = DAYS, paths: list[str] | None = None, date: st
         collected = [p for p in collected if p["path"] in set(paths)]
     total = sum(len(x["commits"]) for x in collected)
     today = date or datetime.now().strftime("%Y-%m-%d")
-    convos = _converse_all(collected, today, days)
-    prompt = render("weekly_report", days=str(days), today=today, facts=_facts_text(collected, convos))
+    convos, reviews = _converse_all(collected, today, days)
+    prompt = render("weekly_report", days=str(days), today=today, facts=_facts_text(collected, convos, reviews))
     meta = run_headless_ex(
         prompt, cwd=neutral_cwd(), allowed_tools=[], disallowed_tools=NEVER_ALLOW,
         timeout=LLM_TIMEOUT, append_system_prompt=load("weekly_system"), task="weekly_report",
@@ -332,7 +404,7 @@ def latest_conversation(path: str) -> str:
     if not rooms:
         return ""
     room = max(rooms)                                   # weekly::YYYY-MM-DD::path — 문자열순 = 날짜순
-    who = {"pm": "PM", "agent": "나(담당)", "ohmyPM": "주간보고 몫"}
+    who = {"pm": "PM", "agent": "나(담당)", "review": "변경 리뷰", "ohmyPM": "주간보고 몫"}
     lines = [f"- {who.get(m['author'], m['author'])}: {(m['body'] or '')[:600]}"
              for m in messages_db.list_messages(room, limit=40)]
     return f"[{room.split('::')[1]} 주간보고]\n" + "\n".join(lines)

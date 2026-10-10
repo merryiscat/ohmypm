@@ -782,8 +782,8 @@ async function openWeekly(i){
   }
   const p = d.projects[i];
   const msgs = await getJ('/api/messages?room='+encodeURIComponent(p.room)).catch(()=>[]);
-  const who = a => a==='pm' ? 'PM' : a==='agent' ? esc(p.name)+' 담당' : '이번 주 몫';
-  const bubbles = msgs.length ? msgs.map(m=>`<div class="msg ${m.author==='pm'?'pm':m.author==='agent'?'agent':'final'}"><div class="who">${who(m.author)}</div>`+
+  const who = a => a==='pm' ? 'PM' : a==='agent' ? esc(p.name)+' 담당' : a==='review' ? '이번 주 변경 리뷰 (Ponytail)' : '이번 주 몫';
+  const bubbles = msgs.length ? msgs.map(m=>`<div class="msg ${m.author==='pm'?'pm':m.author==='agent'||m.author==='review'?'agent':'final'}"><div class="who">${who(m.author)}</div>`+
       `<div class="md">${md(m.body)}</div><div class="ts">${esc(fmtTs(m.created_at))}</div></div>`).join('')
     : '<div class="chat-empty">이번 주 점검 대화 기록이 없습니다.<br>커밋이 없던 프로젝트는 점검 대화를 건너뜁니다.</div>';
   main.innerHTML = `<div class="wk-h">${esc(p.name)} · ${esc(d.date)} <span class="wk-meta">${p.written?'<span class="tbadge green">ohmypm/weekly.md 기록</span>':'<span class="tbadge gray">미설치 — 파일 기록 안 함</span>'}</span></div>`+

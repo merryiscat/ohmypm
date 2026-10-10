@@ -30,6 +30,7 @@ TASK_TIER: dict[str, str] = {
     "weekly_report": "heavy",
     "weekly_pm": "standard",          # 주간 점검 — PM이 담당에게 묻는 질문·중간 요약(JSON)
     "weekly_agent": "standard",       # 주간 점검 — 담당이 자기 폴더를 읽고 답(담당별 지정 모델 우선)
+    "weekly_review": "standard",      # 주간 변경 리뷰 — 이번 주 커밋을 Ponytail 리뷰로(읽기 전용)
     # 랩실(연구소)
     "expert_consult": "standard",     # 연구원 자문
     "lab_research": "standard",       # 웹 조사형 연구원(디자인·스킬)의 수집·제안
@@ -51,6 +52,7 @@ TASK_EFFORT: dict[str, str] = {
     "weekly_report": "high",          # 주간 종합 — 전 프로젝트 대화를 한 장으로
     "weekly_pm": "medium",
     "weekly_agent": "medium",
+    "weekly_review": "medium",
     "expert_consult": "medium",
     "lab_research": "medium",
     "lab_proposal": "medium",

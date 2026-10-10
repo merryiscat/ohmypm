@@ -127,6 +127,7 @@ def run_headless_ex(
     model: str | None = None,
     *,
     task: str,
+    plugin_dirs: list[str] | None = None,
 ) -> dict:
     """claude -p 실행 → {"result": 텍스트|None, "model": 실제 쓴 모델, "cost_usd", "output_tokens"}.
 
@@ -169,6 +170,9 @@ def run_headless_ex(
         cmd += ["--append-system-prompt", " ".join(append_system_prompt.split())]
     for d in add_dirs or []:
         cmd += ["--add-dir", d]
+    # 플러그인을 설치하지 않고 이 호출에만 싣는다(주간 변경 리뷰의 Ponytail) — 다른 호출에는 안 실린다.
+    for d in plugin_dirs or []:
+        cmd += ["--plugin-dir", d]
     if allowed_tools:
         cmd += ["--allowedTools", " ".join(allowed_tools)]
     else:

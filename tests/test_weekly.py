@@ -151,3 +151,39 @@ def test_weekly_partial_run_merges_into_existing_report(env, monkeypatch):
 def test_merge_report_drops_quiet_line_when_empty():
     out = wr._merge_report("# t\n\n**조용했던 프로젝트** — alpha\n", [("alpha", "몫")])
     assert "조용했던" not in out and "## alpha\n몫" in out
+
+
+def test_weekly_review_stored_and_fed(env, monkeypatch):
+    """커밋 있는 프로젝트만 이번 주 diff를 Ponytail 리뷰로 — 플러그인은 그 호출에만, 방엔 'review', 종합에도 실린다."""
+    data = {"headline": "h", "projects": [{"name": "alpha", "summary": "몫"}], "quiet": ["beta"]}
+    seen = {"review_calls": []}
+    fake = _fake(json.dumps(data, ensure_ascii=False))
+
+    def spy(*args, **kw):
+        if kw.get("task") == "weekly_review":
+            seen["review_calls"].append(kw)
+            return {"result": "이번 주 변경: 화면 추가.\n꼭 고칠 것\n1. **포커스가 튕김** `app.js:10`",
+                    "model": "sonnet", "cost_usd": 0.1, "output_tokens": 10, "task": "weekly_review"}
+        if kw.get("task") == "weekly_report":
+            seen["prompt"] = args[0]
+        return fake(*args, **kw)
+    monkeypatch.setattr(wr, "run_headless_ex", spy)
+    monkeypatch.setattr(wr, "_ponytail_dir", lambda: "/plugins/ponytail")
+    monkeypatch.setattr(wr, "_week_diff", lambda path, days: "=== 커밋 abc 10-05 화면 추가\n+x")
+    r = wr.run_weekly_report()
+    assert len(seen["review_calls"]) == 1                                   # beta는 커밋이 없어 리뷰 없음
+    call = seen["review_calls"][0]
+    assert call["plugin_dirs"] == ["/plugins/ponytail"] and call["add_dirs"] == [str(env["a"])]
+    assert set(call["allowed_tools"]) == {"Read", "Grep", "Glob"}          # 읽기 전용
+    authors = [m["author"] for m in messages_db.list_messages(wr._room(r["date"], str(env["a"])))]
+    assert authors == ["pm", "agent", "pm", "review", "ohmyPM"]
+    assert "[이번 주 변경 리뷰]" in seen["prompt"] and "포커스가 튕김" in seen["prompt"]
+
+
+def test_weekly_review_skipped_without_plugin(env, monkeypatch):
+    data = {"headline": "h", "projects": [{"name": "alpha", "summary": "몫"}], "quiet": []}
+    monkeypatch.setattr(wr, "run_headless_ex", _fake(json.dumps(data, ensure_ascii=False)))
+    monkeypatch.setattr(wr, "_ponytail_dir", lambda: None)
+    r = wr.run_weekly_report()
+    authors = [m["author"] for m in messages_db.list_messages(wr._room(r["date"], str(env["a"])))]
+    assert "review" not in authors and r["ok"]
