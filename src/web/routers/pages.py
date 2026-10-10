@@ -169,7 +169,7 @@ _HTML = r"""<!doctype html>
   .pdet-h{font-size:11.5px;color:var(--muted);font-weight:700;margin:18px 0 6px;text-transform:uppercase;letter-spacing:.02em}
   .ptable .reg{color:var(--green);cursor:pointer;font-size:12px;font-weight:700;white-space:nowrap}
   .tbadge{display:inline-block;background:#eef1fb;color:#3a52a8;border-radius:20px;padding:1px 8px;font-size:11px;margin-right:4px;font-weight:700}
-  .tbadge.gold{background:#fdf3d6;color:#9a7b1e} .tbadge.green{background:#e7f3ec;color:#1f7a44} .tbadge.gray{background:#f1f3f6;color:var(--muted)}
+  .tbadge.gold{background:#fdf3d6;color:#9a7b1e} .tbadge.green{background:#e7f3ec;color:#1f7a44} .tbadge.gray{background:#f1f3f6;color:var(--muted)} .tbadge.red{background:#fdecec;color:#b33a3a}
   .ptable .reg-cell select,.ptable .reg-cell input,.ptable .reg-cell button{font-size:12px;padding:5px 8px;border:1px solid var(--line);border-radius:6px;font-family:inherit;margin-right:5px}
   .ptable .reg-cell .ireg-label{width:120px}
   .ptable .reg-cell button{background:var(--green);color:#fff;border:none;cursor:pointer}
@@ -230,6 +230,14 @@ _HTML = r"""<!doctype html>
   .lab-tabs a{padding:0 2px 11px;color:#626975;font-size:14px;border-bottom:2px solid transparent}
   .lab-tabs a[aria-current="page"]{border-color:var(--green);color:#17633e;font-weight:700}
   .lab-content{flex:1;min-height:0;overflow-y:auto}
+  .lab-req{max-width:760px;display:flex;flex-direction:column;gap:8px}
+  .lab-req input,.lab-req textarea{padding:9px 12px;border:1px solid var(--line);border-radius:8px;font:inherit;font-size:13.5px;background:#fff;resize:vertical}
+  .lab-req-row{display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+  .lab-req-item{max-width:760px;background:var(--card);border:1px solid var(--line);border-radius:8px;padding:10px 14px;margin-bottom:8px;font-size:13px;line-height:1.6}
+  .lab-req-item .tbadge{margin-right:8px}
+  .lab-req-meta{color:var(--muted);font-size:11.5px}
+  .lab-req-detail{color:#555b64;font-size:12.5px;white-space:pre-wrap;margin-top:4px}
+  .lab-req-err{color:var(--red);font-size:12px;margin-top:4px}
   .lab-reading{display:grid;grid-template-columns:200px minmax(0,1fr);gap:28px;align-items:start}
   .lab-index{position:sticky;top:0;padding:8px 0;max-height:100%;overflow-y:auto}
   .lab-label{font-size:11px;letter-spacing:.06em;color:#626975;font-weight:700;margin:0 0 12px}
@@ -733,7 +741,7 @@ const labLink = (rid, panel='notes', key='') => '#/lab/'+encodeURIComponent(rid)
 function renderLab(){
   const parts = location.hash.split('/').slice(2).map(decodeURIComponent);
   LAB_IDX = Math.max(0, ['models','design','skills'].indexOf(parts[0]||'skills'));
-  LAB_PANEL = ['notes','wiki','proposals','ask'].includes(parts[1]) ? parts[1] : 'notes';
+  LAB_PANEL = ['notes','request','wiki','proposals','ask'].includes(parts[1]) ? parts[1] : 'notes';
   LAB_NOTE = parts[2]||'';
   LAB_SUB = 0;
   setHeader('랩실', {buttons:[{id:'btn-lab', label:'새 조사 실행', onclick:'runLab()', ghost:true}]});
@@ -755,7 +763,7 @@ async function loadLab(){
   const r = LAB[LAB_IDX];
   top.innerHTML = `<div class="lab-researchers" aria-label="연구 분야">${LAB.map((x,i)=>`<button aria-pressed="${i===LAB_IDX}" onclick="go('${labLink(x.id)}')">${esc(x.name)}</button>`).join('')}</div>`+
     `<div class="lab-meta">${esc(r.topic)}<br>마지막 조사 ${esc(r.last_run?r.last_run.slice(0,16):'없음')}</div>`;
-  document.getElementById('lab-tabs').innerHTML = [['notes','정리 문서'],['wiki','조사 기록'],['proposals','제안서'],['ask','연구원에게 질문']].map(([key,label])=>
+  document.getElementById('lab-tabs').innerHTML = [['notes','정리 문서'],['request','조사 요청'],['wiki','조사 기록'],['proposals','제안서'],['ask','연구원에게 질문']].map(([key,label])=>
     `<a href="${labLink(r.id,key)}"${LAB_PANEL===key?' aria-current="page"':''}>${label}</a>`).join('');
   const b = document.getElementById('btn-lab');
   if(b){ b.disabled = !!r.running; b.textContent = r.running ? '조사 중…' : '새 조사 실행'; }
@@ -768,6 +776,10 @@ async function loadLab(){
       renderLabNotes(content, r.id, notes);
       content.dataset.loaded = 'true';
     }catch(e){ content.innerHTML = '<div class="empty">정리 문서를 불러오지 못했습니다. 잠시 후 다시 열어 주세요.</div>'; }
+  }else if(LAB_PANEL==='request'){
+    if(!document.getElementById('lab-req-topic')) content.innerHTML = labRequestForm(r);
+    await fillLabRequests(r.id);
+    if(version!==LAB_LOAD || !content.isConnected) return;
   }else if(LAB_PANEL==='wiki'){
     const w = await getJ('/api/lab/'+r.id+'/wiki').catch(()=>({tabs:[]}));
     if(version!==LAB_LOAD || !content.isConnected) return;
@@ -791,7 +803,44 @@ async function loadLab(){
   }
   if(version!==LAB_LOAD || !content.isConnected) return;
   clearInterval(pollTimer);
-  pollTimer = setInterval(()=>{ if(LAB_PANEL==='ask') loadMessages(labRoom(r.id), true, true); if(r.running) loadLab(); }, 4000);
+  pollTimer = setInterval(()=>{ if(LAB_PANEL==='ask') loadMessages(labRoom(r.id), true, true);
+    if(LAB_PANEL==='request' && LAB_REQ_BUSY) fillLabRequests(r.id);
+    if(r.running) loadLab(); }, 4000);
+}
+// ── 조사 요청 — 주제를 주면 이 연구원이 웹을 조사해 정리 문서 한 편을 쓴다(백그라운드, 한 건에 수 분~15분)
+let LAB_REQ_BUSY = false;   // 대기·조사 중인 요청이 있으면 4초마다 목록을 다시 읽는다
+const LAB_REQ_STATUS = {queued:'대기', running:'조사 중', done:'완료', failed:'실패'};
+function labRequestForm(r){
+  return `<div class="lab-req"><div class="lab-label">${esc(r.name)}에게 조사 요청</div>`+
+    `<input id="lab-req-topic" maxlength="200" placeholder="주제 — 예: 모델별 하네스 엔지니어링" aria-label="조사 주제">`+
+    `<textarea id="lab-req-detail" rows="3" maxlength="2000" placeholder="궁금한 점(선택) — 무엇을 알고 싶은지, 어디에 쓰려는지" aria-label="궁금한 점"></textarea>`+
+    `<div class="lab-req-row"><button id="lab-req-btn" onclick="sendLabRequest('${escAttr(r.id)}')">조사 요청</button>`+
+    `<span class="note-line">웹을 여러 번 찾아보고 길게 써서 한 건에 수 분~15분 걸립니다. 끝나면 정리 문서에 올라갑니다.</span></div></div>`+
+    `<div class="lab-label" style="margin-top:22px">요청 기록</div><div id="lab-req-list"></div>`;
+}
+async function fillLabRequests(rid){
+  const list = await getJ('/api/lab/'+encodeURIComponent(rid)+'/requests').catch(()=>[]);
+  const box = document.getElementById('lab-req-list'); if(!box) return;
+  LAB_REQ_BUSY = list.some(x=>x.status==='queued'||x.status==='running');
+  box.innerHTML = list.length ? list.map(x=>{
+    const st = `<span class="tbadge ${x.status==='done'?'green':x.status==='failed'?'red':'gray'}">${LAB_REQ_STATUS[x.status]||esc(x.status)}</span>`;
+    const link = x.status==='done' && x.note_key ? ` <a href="${escAttr(labLink(rid,'notes',x.note_key))}">정리 문서 열기 →</a>` : '';
+    const err = x.status==='failed' && x.error ? `<div class="lab-req-err">${esc(x.error)}</div>` : '';
+    const cost = x.cost_usd!=null ? ` · 비용 ${fmtCost(x.cost_usd)}` : '';
+    return `<div class="lab-req-item">${st}<b>${esc(x.topic)}</b>${link}`+
+      `<div class="lab-req-meta">${esc(fmtTs(x.created_at))} 요청${x.finished_at?' · '+esc(fmtTs(x.finished_at))+' 끝':''}${cost}</div>`+
+      (x.detail?`<div class="lab-req-detail">${esc(x.detail)}</div>`:'')+err+`</div>`;
+  }).join('') : '<div class="note-line">아직 요청이 없습니다</div>';
+}
+async function sendLabRequest(rid){
+  const t = document.getElementById('lab-req-topic'), d = document.getElementById('lab-req-detail');
+  const topic = (t.value||'').trim(); if(!topic){ t.focus(); return; }
+  const b = document.getElementById('lab-req-btn'); if(b) b.disabled = true;
+  const r = await postJ('/api/lab/'+encodeURIComponent(rid)+'/requests', {topic, detail:(d.value||'').trim()||null});
+  if(b) b.disabled = false;
+  if(!r.ok){ appAlert('요청 실패', r.error||'알 수 없는 오류'); return; }
+  t.value = ''; d.value = '';
+  fillLabRequests(rid);
 }
 function renderLabNotes(content, rid, notes){
   if(!notes.length){

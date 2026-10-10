@@ -117,3 +117,59 @@ def test_notes_assets_and_consult_keep_full_document(env, monkeypatch):
     monkeypatch.setattr(lab, "run_headless_ex", answer)
     assert lab.consult("skills", "시험 결과 알려줘") == "답변"
     assert "최근 위키" in prompts[0] and body in prompts[0]
+
+
+NOTE = "# 테스트 주제\n\n2026-10-10 기준\n\n## 핵심 요약\n**결론.**\n\n## 우리 쪽 적용\n제안일 뿐.\n"
+
+
+def test_request_note_queues_and_writes_note(env, monkeypatch):
+    """요청 → 대기열 → 처리하면 정리 문서 파일과 완료 상태. 코드 펜스로 감싸 와도 벗긴다."""
+    from src import jobs
+
+    calls = []
+    monkeypatch.setattr(jobs, "start", lambda name, target, *a, **k: calls.append(name) or True)
+    monkeypatch.setattr(lab, "run_headless_ex",
+                        lambda *a, **k: {"result": "```markdown\n" + NOTE + "```", "cost_usd": 1.5, "task": k.get("task")})
+    r = lab.request_note("skills", "  CLAUDE.md 설정법!  ", "어디에 무엇을")
+    assert r["ok"] and r["request"]["status"] == "queued" and calls == [lab.NOTE_JOB]
+    assert lab.request_note("skills", "  ", None)["ok"] is False
+    assert lab.request_note("nobody", "x", None)["ok"] is False
+    out = lab.process_requests()
+    assert out == {"done": 1, "failed": 0}
+    row = lab_db.list_requests("skills")[0]
+    assert row["status"] == "done" and row["cost_usd"] == 1.5
+    f = env["tmp"] / "lab" / "notes" / "skills" / f"{row['note_key']}.md"
+    assert f.read_text(encoding="utf-8") == NOTE
+    assert row["note_key"].endswith("claude-md-설정법")
+    assert [n["key"] for n in lab.research_notes("skills")] == [row["note_key"]]
+
+
+def test_request_note_bad_output_fails_and_keeps_raw(env, monkeypatch):
+    from src import jobs
+
+    monkeypatch.setattr(jobs, "start", lambda *a, **k: True)
+    monkeypatch.setattr(lab, "run_headless_ex", lambda *a, **k: {"result": "그냥 답변(제목 없음)", "cost_usd": 0.1})
+    lab.request_note("design", "주제", None)
+    assert lab.process_requests() == {"done": 0, "failed": 1}
+    row = lab_db.list_requests("design")[0]
+    assert row["status"] == "failed" and "형식" in row["error"]
+    assert list((env["tmp"] / "state").glob("design.note-failed-*.txt"))
+
+
+def test_requeue_running_on_restart(env, monkeypatch):
+    from src import jobs
+
+    started = []
+    monkeypatch.setattr(jobs, "start", lambda name, *a, **k: started.append(name) or True)
+    lab_db.add_request("models", "끊긴 요청", None)
+    assert lab_db.next_queued()["status"] == "running"
+    lab.resume_requests()
+    assert lab_db.list_requests("models")[0]["status"] == "queued" and started == [lab.NOTE_JOB]
+
+
+def test_note_key_avoids_existing_files(env):
+    d = env["tmp"] / "lab" / "notes" / "models"
+    d.mkdir(parents=True)
+    (d / "2026-10-10-주제.md").write_text("x", encoding="utf-8")
+    assert lab._note_key("2026-10-10", "주제") == "2026-10-10-주제-2"
+    assert lab._note_key("2026-10-10", "///") == "2026-10-10-note"

@@ -52,3 +52,55 @@ def list_proposals(researcher: str | None = None, project: str | None = None, li
           " ORDER BY CASE status WHEN 'open' THEN 0 ELSE 1 END, id DESC LIMIT ?"
     params.append(limit)
     return [dict(r) for r in db.execute(sql, params)]
+
+
+# ── 조사 요청(lab_requests) ───────────────────────────────────────────────────
+def add_request(researcher: str, topic: str, detail: str | None) -> dict:
+    db = get_db()
+    cur = db.execute("INSERT INTO lab_requests (researcher, topic, detail) VALUES (?, ?, ?)",
+                     (researcher, topic, detail or None))
+    db.commit()
+    return dict(db.execute("SELECT * FROM lab_requests WHERE id = ?", (cur.lastrowid,)).fetchone())
+
+
+def list_requests(researcher: str | None = None, limit: int = 30) -> list[dict]:
+    """요청 목록(최신 먼저)."""
+    db = get_db()
+    if researcher:
+        rows = db.execute("SELECT * FROM lab_requests WHERE researcher = ? ORDER BY id DESC LIMIT ?",
+                          (researcher, limit))
+    else:
+        rows = db.execute("SELECT * FROM lab_requests ORDER BY id DESC LIMIT ?", (limit,))
+    return [dict(r) for r in rows]
+
+
+def next_queued() -> dict | None:
+    """가장 오래된 대기 요청 하나를 '조사 중'으로 바꿔 돌려준다(없으면 None)."""
+    db = get_db()
+    row = db.execute("SELECT * FROM lab_requests WHERE status = 'queued' ORDER BY id LIMIT 1").fetchone()
+    if not row:
+        return None
+    db.execute("UPDATE lab_requests SET status = 'running' WHERE id = ?", (row["id"],))
+    db.commit()
+    return dict(row) | {"status": "running"}
+
+
+def finish_request(req_id: int, ok: bool, note_key: str | None = None, error: str | None = None,
+                   cost_usd: float | None = None) -> None:
+    db = get_db()
+    db.execute("UPDATE lab_requests SET status = ?, note_key = ?, error = ?, cost_usd = ?, "
+               "finished_at = datetime('now','localtime') WHERE id = ?",
+               ("done" if ok else "failed", note_key, error, cost_usd, req_id))
+    db.commit()
+
+
+def requeue_running() -> int:
+    """서버가 꺼지며 끊긴 '조사 중' 요청을 다시 대기로 — 기동 때 한 번. 되돌린 건수."""
+    db = get_db()
+    cur = db.execute("UPDATE lab_requests SET status = 'queued' WHERE status = 'running'")
+    db.commit()
+    return cur.rowcount
+
+
+def has_queued() -> bool:
+    return get_db().execute("SELECT 1 FROM lab_requests WHERE status = 'queued' LIMIT 1").fetchone() is not None

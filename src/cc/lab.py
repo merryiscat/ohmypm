@@ -32,6 +32,8 @@ from src.install import OHMYPM_DIR, is_installed
 LAB_DIR = REPO_ROOT / "docs" / "lab"            # 위키(런타임 산출물, git 미추적)
 STATE_DIR = REPO_ROOT / "data" / "lab"          # 연구원별 마지막 실행 상태·실패 원문
 RESEARCH_TIMEOUT = 420
+NOTE_TIMEOUT = 900          # 조사 요청 → 정리 문서(웹을 여러 번 보고 길게 쓴다)
+NOTE_JOB = "lab-note"       # 조사 요청 처리 작업 이름(한 번에 하나, 대기열을 차례로)
 WIKI_RECENT_CHARS = 3000
 
 RESEARCHERS: dict[str, dict] = {
@@ -326,3 +328,109 @@ def ask(rid: str, question: str) -> None:
     answer = consult(rid, question)
     messages_db.add_message(lab_room(rid), RESEARCHERS.get(rid, {}).get("name", rid),
                             answer or "(답변을 만들지 못했어)")
+
+
+# ── 조사 요청 → 정리 문서 ────────────────────────────────────────────────────
+# 사용자가 화면에서 주제를 주면 연구원이 웹을 조사해 정리 문서 한 편을 쓴다(2026-10-10 신설).
+# 요청은 DB(lab_requests)에 줄을 서고, 작업 하나(NOTE_JOB)가 대기열이 빌 때까지 차례로 처리한다.
+# 연구원은 읽기+웹만 — 문서 저장은 코드가 한다(형식 검사 후 docs/lab/notes/<연구원>/<key>.md).
+
+def _note_key(date: str, topic: str) -> str:
+    """파일 이름 — 날짜 + 주제(글자·숫자만 남기고 나머지는 '-'). 어느 연구원 폴더에든 같은 이름이 있으면 -2, -3."""
+    import re
+
+    slug = re.sub(r"[^\w]+", "-", topic.lower()).strip("-_")[:40].strip("-_") or "note"
+    key, n = f"{date}-{slug}", 2
+    while any((LAB_DIR / "notes" / rid / f"{key}.md").exists() for rid in RESEARCHERS):
+        key, n = f"{date}-{slug}-{n}", n + 1
+    return key
+
+
+def _clean_note(text: str | None) -> str | None:
+    """응답에서 문서만 꺼낸다 — 코드 펜스를 벗기고 첫 '# 제목' 줄부터. '## 핵심 요약'이 있어야 통과."""
+    t = (text or "").strip()
+    if t.startswith("```"):
+        t = t.split("\n", 1)[1] if "\n" in t else ""
+        t = t.rsplit("```", 1)[0].strip()
+    lines = t.splitlines()
+    first = next((i for i, ln in enumerate(lines) if ln.startswith("# ")), None)
+    if first is None:
+        return None
+    t = "\n".join(lines[first:]).strip()
+    if "\n## 핵심 요약" not in t:
+        return None
+    return t + "\n"
+
+
+def request_note(rid: str, topic: str, detail: str | None) -> dict:
+    """조사 요청을 대기열에 넣고 처리 작업을 깨운다. 반환 {ok, request} 또는 {ok: False, error}."""
+    from src import jobs
+
+    if rid not in RESEARCHERS:
+        return {"ok": False, "error": "없는 연구원"}
+    topic = (topic or "").strip()
+    if not topic:
+        return {"ok": False, "error": "주제가 비었습니다"}
+    row = lab_db.add_request(rid, topic[:200], (detail or "").strip()[:2000] or None)
+    jobs.start(NOTE_JOB, process_requests)     # 이미 돌고 있으면 그 작업이 대기열에서 이어서 집어 간다
+    return {"ok": True, "request": row}
+
+
+def _write_note(rid: str, req: dict) -> dict:
+    """요청 하나를 조사해 문서를 쓴다. 반환 {key, cost_usd}. 실패는 예외."""
+    from src.config.settings import settings
+
+    today = datetime.now().strftime("%Y-%m-%d")
+    projects_text, _ = _projects_text()
+    existing = "\n".join(f"- {n['title']}" for n in research_notes(rid)) or "(아직 없음)"
+    r = RESEARCHERS[rid]
+    prompt = render("lab_note", researcher=r["name"], topic=r["topic"], today=today,
+                    request_topic=req["topic"],
+                    request_detail=req.get("detail") or "(따로 적지 않음 — 주제 전반)",
+                    projects=projects_text, existing=existing)
+    allowed, disallowed = tools_for("expert")
+    # 프로젝트 폴더는 읽기만 열어 준다 — '우리 쪽 적용'을 쓸 때 실제 코드·문서를 근거로 삼게
+    roots = [settings.projects_root] if settings.projects_root else []
+    meta = run_headless_ex(prompt, cwd=neutral_cwd(), allowed_tools=allowed, disallowed_tools=disallowed,
+                           timeout=NOTE_TIMEOUT, append_system_prompt=load("lab_note_system"),
+                           add_dirs=roots, task="lab_note")
+    body = _clean_note(meta.get("result"))
+    if not body:
+        STATE_DIR.mkdir(parents=True, exist_ok=True)
+        fail = STATE_DIR / f"{rid}.note-failed-{req['id']}.txt"
+        fail.write_text(meta.get("result") or "(응답 없음 — 시간 초과나 사용량 한도일 수 있음)", encoding="utf-8")
+        raise RuntimeError(f"문서 형식이 맞지 않거나 응답이 없음 — data/lab/{fail.name} 참조")
+    key = _note_key(today, req["topic"])
+    folder = LAB_DIR / "notes" / rid
+    folder.mkdir(parents=True, exist_ok=True)
+    model_catalog._atomic_write(folder / f"{key}.md", body)
+    return {"key": key, "cost_usd": meta.get("cost_usd")}
+
+
+def process_requests() -> dict:
+    """대기 요청이 빌 때까지 차례로 처리한다(NOTE_JOB 작업 본체). 한 건 실패가 나머지를 막지 않는다."""
+    done = failed = 0
+    while True:
+        req = lab_db.next_queued()
+        if not req:
+            break
+        try:
+            out = _write_note(req["researcher"], req)
+            lab_db.finish_request(req["id"], True, note_key=out["key"], cost_usd=out.get("cost_usd"))
+            done += 1
+            logger.info(f"[랩실] 조사 요청 #{req['id']} 완료 — {req['topic']} → {out['key']}")
+        except Exception as e:
+            lab_db.finish_request(req["id"], False, error=str(e)[:300])
+            failed += 1
+            logger.warning(f"[랩실] 조사 요청 #{req['id']} 실패: {e}")
+    return {"done": done, "failed": failed}
+
+
+def resume_requests() -> None:
+    """서버 기동 때 — 서버가 꺼지며 끊긴 요청을 대기로 돌리고, 대기가 있으면 처리 작업을 깨운다."""
+    from src import jobs
+
+    n = lab_db.requeue_running()
+    if lab_db.has_queued():
+        jobs.start(NOTE_JOB, process_requests)
+        logger.info(f"[랩실] 조사 요청 처리 재개 (끊겼던 것 {n}건 포함)")

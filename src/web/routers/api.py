@@ -191,6 +191,27 @@ def run_lab(rid: str) -> dict:
     return {"ok": True, "started": True}
 
 
+class LabRequest(BaseModel):
+    topic: str
+    detail: str | None = None
+
+
+@router.get("/lab/{rid}/requests")
+def get_lab_requests(rid: str) -> list[dict]:
+    """조사 요청 목록(최신 먼저) — status: queued·running·done(note_key)·failed(error)."""
+    from src.db import lab as lab_db
+
+    return lab_db.list_requests(rid)
+
+
+@router.post("/lab/{rid}/requests")
+def add_lab_request(rid: str, req: LabRequest) -> dict:
+    """조사 요청 — 대기열에 넣고 백그라운드로 처리한다(한 건에 수 분~15분). 결과는 정리 문서."""
+    from src.cc import lab
+
+    return lab.request_note(rid, req.topic, req.detail)
+
+
 class LabQ(BaseModel):
     question: str
 

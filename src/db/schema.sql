@@ -163,3 +163,18 @@ CREATE TABLE IF NOT EXISTS cards (
     done_at    TEXT
 );
 CREATE INDEX IF NOT EXISTS idx_cards_project ON cards(project, status);
+
+-- 12) 랩실 조사 요청 — 사용자가 주제를 주면 연구원이 조사해 정리 문서(docs/lab/notes/<연구원>/<key>.md)를 쓴다.
+--     status: queued(대기) | running(조사 중) | done(완료, note_key에 문서) | failed(실패, error에 이유)
+CREATE TABLE IF NOT EXISTS lab_requests (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    researcher  TEXT NOT NULL,          -- models | design | skills
+    topic       TEXT NOT NULL,          -- 조사 주제(한 줄)
+    detail      TEXT,                   -- 궁금한 점(여러 줄 가능)
+    status      TEXT NOT NULL DEFAULT 'queued',
+    note_key    TEXT,                   -- 완성된 정리 문서 파일 이름(확장자 뺀 것)
+    error       TEXT,
+    cost_usd    REAL,
+    created_at  TEXT DEFAULT (datetime('now','localtime')),
+    finished_at TEXT
+);

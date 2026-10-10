@@ -42,6 +42,10 @@ async def lifespan(app: FastAPI):
     from src.cc.board_session import recover_on_startup
 
     recover_on_startup()
+    # 랩실 조사 요청 — 서버가 꺼지며 끊긴 것을 대기로 돌리고 이어서 처리한다(요청은 사용자가 직접 넣은 것)
+    from src.cc.lab import resume_requests
+
+    resume_requests()
     yield
     # 종료: 스케줄러 정리
     stop_scheduler()

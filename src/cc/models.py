@@ -34,6 +34,7 @@ TASK_TIER: dict[str, str] = {
     "expert_consult": "standard",     # 연구원 자문
     "lab_research": "standard",       # 웹 조사형 연구원(디자인·스킬)의 수집·제안
     "lab_proposal": "standard",       # 모델 연구원의 제안서
+    "lab_note": "heavy",              # 조사 요청 → 정리 문서 한 편(웹 조사 + 종합 글쓰기)
     "model_catalog_extract": "standard",   # 공식 문서 diff → 정형 JSON 추출
     "model_catalog_profile": "heavy",      # 모델별 상세 프로필 종합
 }
@@ -53,6 +54,7 @@ TASK_EFFORT: dict[str, str] = {
     "expert_consult": "medium",
     "lab_research": "medium",
     "lab_proposal": "medium",
+    "lab_note": "medium",
     "model_catalog_extract": "medium",     # 정확도가 중요한 추출 — low는 비교 확인 뒤에만
     "model_catalog_profile": "high",
 }

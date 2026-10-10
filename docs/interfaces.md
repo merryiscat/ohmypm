@@ -21,6 +21,8 @@
 | GET `/lab` · GET `/lab/{id}/wiki` · POST `/lab/{id}/run` · POST `/lab/{id}/ask` | 연구원 명부 / 위키 탭 / 조사 실행 / 자문 | id = models·design·skills |
 | GET `/lab/{id}/notes` · GET `/lab/{id}/notes/{key}/assets/{filename}` | 정리 문서(본문·첨부 목록) / 영상·이미지 | `docs/lab/notes/{id}/*.md`, 문서 이름으로 시작하는 첨부만 허용. 자문은 정리 문서 전문도 읽음 |
 | GET `/lab/proposals?researcher=&project=` · POST `/lab/proposals/{id}/status` | 제안서 목록 / 상태(open·done·dismissed) | |
+| GET `/lab/{id}/notes` · GET `/lab/{id}/notes/{key}/assets/{file}` | 정리 문서(주제별 문서 + 첨부) / 첨부 파일 | `docs/lab/notes/<id>/<key>.md` |
+| GET `/lab/{id}/requests` · POST `/lab/{id}/requests` | 조사 요청 목록 / 요청 `{topic, detail?}` | 대기열을 작업 하나(`lab-note`)가 차례로 처리 → 정리 문서. status = queued·running·done·failed |
 | GET `/ports` · POST `/ports` · DELETE `/ports/{id}` · POST `/ports/{id}/start` · `/stop` | 포트 등록·감지(명령줄로 프로젝트 매칭)·켜기·끄기 | |
 
 ## 쓰는 외부 것
