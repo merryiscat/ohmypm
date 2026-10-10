@@ -238,6 +238,8 @@ _HTML = r"""<!doctype html>
   .lab-toc{margin-top:28px;border-top:1px solid var(--line);padding-top:18px}
   .lab-toc button{display:block;text-align:left;width:100%;background:none;color:#626975;padding:7px 12px;font-size:12px;line-height:1.5}
   .lab-toc button:hover,.lab-toc button:focus-visible{background:#e7f3ec;color:#17633e}
+  .lab-toc button.read{color:#17633e}
+  .lab-toc button.on{background:#e7f3ec;color:#17633e;font-weight:700;box-shadow:inset 3px 0 0 var(--green)}
   .lab-article{background:#fff;border:1px solid var(--line);border-radius:14px;padding:32px 40px;min-width:0;max-width:920px}
   .lab-article h1{font-size:28px;line-height:1.4;letter-spacing:-.04em;margin:8px 0 16px;word-break:keep-all;overflow-wrap:anywhere}
   .lab-article h2{font-size:19px;line-height:1.5;margin:0 0 16px;letter-spacing:-.02em;color:var(--ink)}
@@ -804,10 +806,30 @@ function renderLabNotes(content, rid, notes){
   const media = note.assets.map(a=>`<figure class="lab-media">${a.kind==='video'?`<video controls playsinline preload="metadata" aria-label="${escAttr(note.title)} 시험 영상" src="${escAttr(a.url)}"></video>`:`<img loading="lazy" src="${escAttr(a.url)}" alt="${escAttr(a.name)}">`}<figcaption>${a.kind==='video'?'직접 만든 시험 영상 · 재생해서 결과를 확인하세요':'첨부 이미지'} · <a href="${escAttr(a.url)}" target="_blank" rel="noopener">파일 열기 ↗</a></figcaption></figure>`).join('');
   content.innerHTML = `<div class="lab-reading"><nav class="lab-index" aria-label="정리 문서와 목차"><div class="lab-label">정리 문서 · ${notes.length}</div>`+
     notes.map(n=>`<a href="${escAttr(labLink(rid,'notes',n.key))}"${n.key===note.key?' aria-current="page"':''}>${esc(n.title)}</a>`).join('')+
-    `<div class="lab-toc"><div class="lab-label">이 문서의 내용</div>${sections.map((s,i)=>`<button onclick="document.getElementById('lab-section-${i}').scrollIntoView({block:'start'})">${esc(s.title)}</button>`).join('')}</div></nav>`+
+    `<div class="lab-toc"><div class="lab-label">이 문서의 내용</div>${sections.map((s,i)=>`<button data-sec="${i}" onclick="document.getElementById('lab-section-${i}').scrollIntoView({block:'start'})">${esc(s.title)}</button>`).join('')}</div></nav>`+
     `<article class="lab-article"><a class="back" href="${labLink(rid,'wiki')}">← 연구 위키로</a><div class="lab-label">연구 노트</div><h1>${esc(note.title)}</h1><div class="md">${md(intro)}</div>`+
     (sections.length?'':media)+sections.map((s,i)=>`<section id="lab-section-${i}" class="lab-section${i===0?' summary-section':''}"><h2>${esc(s.title)}</h2><div class="md">${md(s.body)}</div></section>${i===0?media:''}`).join('')+'</article></div>';
+  labTocSpy();
 }
+// 목차 읽음 표시 — 스크롤하면 지금 읽는 절은 강조(on), 이미 지나온 절은 읽음(read)으로 자동 표시.
+// 스크롤 이벤트는 위로 전달되지 않아서 문서에 '잡기 단계'로 한 번만 걸어 어느 상자가 스크롤돼도 받는다.
+const LAB_TOC_LINE = 140;   // 화면 위에서 이 높이(px)를 넘어선 절을 '읽는 중'으로 본다
+function labTocSpy(){
+  const btns = document.querySelectorAll('.lab-toc button[data-sec]'); if(!btns.length) return;
+  let cur = 0;
+  btns.forEach((b,i)=>{ const sec = document.getElementById('lab-section-'+i);
+    if(sec && sec.getBoundingClientRect().top <= LAB_TOC_LINE) cur = i; });
+  const last = document.getElementById('lab-section-'+(btns.length-1));
+  // 맨 끝까지 내리면 마지막 절이 짧아도 '읽는 중'으로 — 실제로 스크롤되는 상자(지금은 #lab-content)를 찾는다
+  let box = last && last.parentElement;
+  while(box && !(box.scrollHeight > box.clientHeight && /(auto|scroll)/.test(getComputedStyle(box).overflowY))) box = box.parentElement;
+  if(box && box.scrollTop > 0 && box.scrollTop + box.clientHeight >= box.scrollHeight - 4) cur = btns.length-1;
+  btns.forEach((b,i)=>{ b.classList.toggle('on', i===cur); b.classList.toggle('read', i<cur);
+    if(i===cur) b.setAttribute('aria-current','location'); else b.removeAttribute('aria-current'); });
+}
+let labTocTick = false;
+document.addEventListener('scroll', ()=>{ if(labTocTick) return; labTocTick = true;
+  requestAnimationFrame(()=>{ labTocTick = false; labTocSpy(); }); }, true);
 function proposalHtml(p, showResearcher){
   return `<div class="prop${p.status!=='open'?' done':''}"><div class="pt">${esc(p.title)}`+
     (showResearcher?`<span class="tbadge">${esc(p.researcher_name||p.researcher)}</span>`:'')+
